@@ -24,6 +24,12 @@ def wipe_and_init(ctx: dict) -> list[str]:
     run_write("MATCH (n) DETACH DELETE n")
     logs.append("PASS  Database cleared")
 
+    run_write(
+        "CREATE CONSTRAINT n10s_unique_uri IF NOT EXISTS "
+        "FOR (r:Resource) REQUIRE r.uri IS UNIQUE"
+    )
+    logs.append("PASS  n10s Resource(uri) uniqueness constraint ensured")
+
     # Init n10s graph config
     run_write("""
         CALL n10s.graphconfig.init({

@@ -1,0 +1,413 @@
+@prefix kf-mfg: <http://knowledgefabric.tcs.com/ontology/manufacturing#> .
+@prefix kf:     <http://knowledgefabric.tcs.com/ontology/core#> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms:<http://purl.org/dc/terms/> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ontology declaration
+# ─────────────────────────────────────────────────────────────────────────────
+<http://knowledgefabric.tcs.com/ontology/manufacturing>
+    a owl:Ontology ;
+    dcterms:title       "KF Manufacturing Maintenance Ontology" ;
+    dcterms:description "OWL2 ontology defining the WorkOrder knowledge graph domain for manufacturing maintenance operations." ;
+    dcterms:creator     "TCS Knowledge Fabric Team" ;
+    owl:versionInfo     "1.0.0" .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Classes
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:WorkOrder
+    a owl:Class ;
+    rdfs:label       "WorkOrder" ;
+    skos:definition  "A maintenance job raised against a physical equipment asset. May be preventive, corrective, or inspection type." ;
+    rdfs:comment     "Canonical entity after Entity Resolution. SAP-PM is the master source system." .
+
+kf-mfg:Equipment
+    a owl:Class ;
+    rdfs:label       "Equipment" ;
+    skos:definition  "A physical asset in the manufacturing plant that is subject to maintenance work orders." .
+
+kf-mfg:ProductionLine
+    a owl:Class ;
+    rdfs:label       "ProductionLine" ;
+    skos:definition  "A manufacturing production line that owns one or more equipment assets." .
+
+kf-mfg:CompliancePolicy
+    a owl:Class ;
+    rdfs:label       "CompliancePolicy" ;
+    skos:definition  "A regulatory or standards compliance policy that governs certain work orders (e.g. OSHA, ISO 55000)." .
+
+kf-mfg:Technician
+    a owl:Class ;
+    rdfs:label       "Technician" ;
+    skos:definition  "A maintenance operative who can be assigned to carry out work orders." .
+
+kf-mfg:IngestionAdapter
+    a owl:Class ;
+    rdfs:label       "IngestionAdapter" ;
+    skos:definition  "A source system connector that ingests work order data into the knowledge graph (e.g. SAP-PM via OData, MES-PROD via REST)." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Object Properties (Relationships)
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:assignedToEquipment
+    a owl:ObjectProperty ;
+    rdfs:label   "assignedToEquipment" ;
+    rdfs:domain  kf-mfg:WorkOrder ;
+    rdfs:range   kf-mfg:Equipment ;
+    skos:definition "Links a WorkOrder to the Equipment asset that requires the maintenance work." ;
+    owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+kf-mfg:onProductionLine
+    a owl:ObjectProperty ;
+    rdfs:label   "onProductionLine" ;
+    rdfs:domain  kf-mfg:Equipment ;
+    rdfs:range   kf-mfg:ProductionLine ;
+    skos:definition "Links an Equipment asset to the ProductionLine it belongs to." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+kf-mfg:assignedToTechnician
+    a owl:ObjectProperty ;
+    rdfs:label   "assignedToTechnician" ;
+    rdfs:domain  kf-mfg:WorkOrder ;
+    rdfs:range   kf-mfg:Technician ;
+    skos:definition "Links a WorkOrder to the Technician responsible for carrying it out." ;
+    owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+kf-mfg:governedBy
+    a owl:ObjectProperty ;
+    rdfs:label   "governedBy" ;
+    rdfs:domain  kf-mfg:WorkOrder ;
+    rdfs:range   kf-mfg:CompliancePolicy ;
+    skos:definition "Links a WorkOrder to the CompliancePolicy it must satisfy." ;
+    owl:maxCardinality "1"^^xsd:nonNegativeInteger .
+
+kf-mfg:sourcedFrom
+    a owl:ObjectProperty ;
+    rdfs:label   "sourcedFrom" ;
+    rdfs:domain  kf-mfg:WorkOrder ;
+    rdfs:range   kf-mfg:IngestionAdapter ;
+    skos:definition "Links a WorkOrder to the IngestionAdapter that loaded it into the knowledge graph. Provides full provenance." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+kf-mfg:mergedInto
+    a owl:ObjectProperty ;
+    rdfs:label   "mergedInto" ;
+    rdfs:domain  kf-mfg:WorkOrder ;
+    rdfs:range   kf-mfg:WorkOrder ;
+    skos:definition "Links a duplicate WorkOrder to the canonical master record it was merged into during Entity Resolution." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — WorkOrder
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:workOrderId
+    a owl:DatatypeProperty ;
+    rdfs:label  "workOrderId" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Unique identifier for the work order. Primary key." .
+
+kf-mfg:woType
+    a owl:DatatypeProperty ;
+    rdfs:label  "woType" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Type of work order: PREVENTIVE, CORRECTIVE, or INSPECTION." .
+
+kf-mfg:woStatus
+    a owl:DatatypeProperty ;
+    rdfs:label  "woStatus" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Current status: OPEN, IN_PROGRESS, SCHEDULED, or COMPLETED." .
+
+kf-mfg:woPriority
+    a owl:DatatypeProperty ;
+    rdfs:label  "woPriority" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Priority level: URGENT, HIGH, MEDIUM, or LOW." .
+
+kf-mfg:sourceSystem
+    a owl:DatatypeProperty ;
+    rdfs:label  "sourceSystem" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Source system that originated this record: SAP-PM or MES-PROD." .
+
+kf-mfg:scheduledStart
+    a owl:DatatypeProperty ;
+    rdfs:label  "scheduledStart" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Scheduled start date for the work order (ISO 8601 date string)." .
+
+kf-mfg:description
+    a owl:DatatypeProperty ;
+    rdfs:label  "description" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Free-text description of the maintenance task." .
+
+kf-mfg:eqId
+    a owl:DatatypeProperty ;
+    rdfs:label  "eqId" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Foreign key reference to the Equipment asset ID." .
+
+kf-mfg:techId
+    a owl:DatatypeProperty ;
+    rdfs:label  "techId" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Foreign key reference to the Technician ID. Optional." .
+
+kf-mfg:policyId
+    a owl:DatatypeProperty ;
+    rdfs:label  "policyId" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Foreign key reference to the CompliancePolicy ID. Optional." .
+
+kf-mfg:crossRefId
+    a owl:DatatypeProperty ;
+    rdfs:label  "crossRefId" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "Cross-reference identifier used by Entity Resolution Rule ER-002." .
+
+kf-mfg:mergedFrom
+    a owl:DatatypeProperty ;
+    rdfs:label  "mergedFrom" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "The work order ID of the duplicate that was merged into this canonical record." .
+
+kf-mfg:mergeMethod
+    a owl:DatatypeProperty ;
+    rdfs:label  "mergeMethod" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:string ;
+    skos:definition "The Entity Resolution rule used to perform the merge (e.g. ER-001, ER-002, ER-003)." .
+
+kf-mfg:mergeConfidence
+    a owl:DatatypeProperty ;
+    rdfs:label  "mergeConfidence" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:decimal ;
+    skos:definition "Confidence score (0.0–1.0) of the Entity Resolution merge decision." .
+
+kf-mfg:hrqPending
+    a owl:DatatypeProperty ;
+    rdfs:label  "hrqPending" ;
+    rdfs:domain kf-mfg:WorkOrder ;
+    rdfs:range  xsd:boolean ;
+    skos:definition "True if this work order has been queued for human review during Entity Resolution." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — Equipment
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:equipmentId
+    a owl:DatatypeProperty ;
+    rdfs:label  "equipmentId" ;
+    rdfs:domain kf-mfg:Equipment ;
+    rdfs:range  xsd:string ;
+    skos:definition "Unique identifier for the equipment asset." .
+
+kf-mfg:name
+    a owl:DatatypeProperty ;
+    rdfs:label  "name" ;
+    rdfs:range  xsd:string ;
+    skos:definition "Human-readable display name." .
+
+kf-mfg:tag
+    a owl:DatatypeProperty ;
+    rdfs:label  "tag" ;
+    rdfs:domain kf-mfg:Equipment ;
+    rdfs:range  xsd:string ;
+    skos:definition "Plant asset tag identifier." .
+
+kf-mfg:location
+    a owl:DatatypeProperty ;
+    rdfs:label  "location" ;
+    rdfs:domain kf-mfg:Equipment ;
+    rdfs:range  xsd:string ;
+    skos:definition "Physical location of the equipment within the plant." .
+
+kf-mfg:status
+    a owl:DatatypeProperty ;
+    rdfs:label  "status" ;
+    rdfs:range  xsd:string ;
+    skos:definition "Current operational status of the entity." .
+
+kf-mfg:lastPM
+    a owl:DatatypeProperty ;
+    rdfs:label  "lastPM" ;
+    rdfs:domain kf-mfg:Equipment ;
+    rdfs:range  xsd:string ;
+    skos:definition "Date of last preventive maintenance (ISO 8601)." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — ProductionLine
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:lineId
+    a owl:DatatypeProperty ;
+    rdfs:label  "lineId" ;
+    rdfs:domain kf-mfg:ProductionLine ;
+    rdfs:range  xsd:string ;
+    skos:definition "Unique identifier for the production line." .
+
+kf-mfg:plant
+    a owl:DatatypeProperty ;
+    rdfs:label  "plant" ;
+    rdfs:domain kf-mfg:ProductionLine ;
+    rdfs:range  xsd:string ;
+    skos:definition "Plant identifier that this production line belongs to." .
+
+kf-mfg:capacity
+    a owl:DatatypeProperty ;
+    rdfs:label  "capacity" ;
+    rdfs:domain kf-mfg:ProductionLine ;
+    rdfs:range  xsd:string ;
+    skos:definition "Rated production capacity (e.g. 120 units/hr)." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — CompliancePolicy
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:policyIdKey
+    a owl:DatatypeProperty ;
+    rdfs:label  "policyId" ;
+    rdfs:domain kf-mfg:CompliancePolicy ;
+    rdfs:range  xsd:string ;
+    skos:definition "Unique identifier for the compliance policy." .
+
+kf-mfg:regBody
+    a owl:DatatypeProperty ;
+    rdfs:label  "regBody" ;
+    rdfs:domain kf-mfg:CompliancePolicy ;
+    rdfs:range  xsd:string ;
+    skos:definition "Regulatory body that issued the policy (e.g. OSHA, ISO)." .
+
+kf-mfg:standard
+    a owl:DatatypeProperty ;
+    rdfs:label  "standard" ;
+    rdfs:domain kf-mfg:CompliancePolicy ;
+    rdfs:range  xsd:string ;
+    skos:definition "The specific standard number (e.g. 29 CFR 1910, ISO 55000:2014)." .
+
+kf-mfg:mandatory
+    a owl:DatatypeProperty ;
+    rdfs:label  "mandatory" ;
+    rdfs:domain kf-mfg:CompliancePolicy ;
+    rdfs:range  xsd:boolean ;
+    skos:definition "True if compliance with this policy is legally mandatory." .
+
+kf-mfg:reviewCycle
+    a owl:DatatypeProperty ;
+    rdfs:label  "reviewCycle" ;
+    rdfs:domain kf-mfg:CompliancePolicy ;
+    rdfs:range  xsd:string ;
+    skos:definition "How frequently compliance must be reviewed: Annual, Biennial, etc." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — Technician
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:technicianId
+    a owl:DatatypeProperty ;
+    rdfs:label  "technicianId" ;
+    rdfs:domain kf-mfg:Technician ;
+    rdfs:range  xsd:string ;
+    skos:definition "Unique identifier for the technician." .
+
+kf-mfg:grade
+    a owl:DatatypeProperty ;
+    rdfs:label  "grade" ;
+    rdfs:domain kf-mfg:Technician ;
+    rdfs:range  xsd:string ;
+    skos:definition "Technician grade: Senior, Mid, or Junior." .
+
+kf-mfg:cert
+    a owl:DatatypeProperty ;
+    rdfs:label  "cert" ;
+    rdfs:domain kf-mfg:Technician ;
+    rdfs:range  xsd:string ;
+    skos:definition "Professional certification held: CMRT (Certified Maintenance and Reliability Technician), CMRP (Certified Maintenance and Reliability Professional)." .
+
+kf-mfg:specialisation
+    a owl:DatatypeProperty ;
+    rdfs:label  "specialisation" ;
+    rdfs:domain kf-mfg:Technician ;
+    rdfs:range  xsd:string ;
+    skos:definition "Domain specialisation: Hydraulics, Electrical, Robotics, General." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — IngestionAdapter
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:adapterId
+    a owl:DatatypeProperty ;
+    rdfs:label  "adapterId" ;
+    rdfs:domain kf-mfg:IngestionAdapter ;
+    rdfs:range  xsd:string ;
+    skos:definition "Unique identifier for the ingestion adapter." .
+
+kf-mfg:protocol
+    a owl:DatatypeProperty ;
+    rdfs:label  "protocol" ;
+    rdfs:domain kf-mfg:IngestionAdapter ;
+    rdfs:range  xsd:string ;
+    skos:definition "API protocol used by this adapter: OData-v4, REST-JSON." .
+
+kf-mfg:syncMode
+    a owl:DatatypeProperty ;
+    rdfs:label  "syncMode" ;
+    rdfs:domain kf-mfg:IngestionAdapter ;
+    rdfs:range  xsd:string ;
+    skos:definition "Synchronisation mode: INCREMENTAL or FULL." .
+
+kf-mfg:registered
+    a owl:DatatypeProperty ;
+    rdfs:label  "registered" ;
+    rdfs:domain kf-mfg:IngestionAdapter ;
+    rdfs:range  xsd:string ;
+    skos:definition "Date the adapter was registered in the knowledge graph (ISO 8601)." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OWL2 Restrictions (enforced as Neo4j constraints via n10s in Stage 2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+kf-mfg:WorkOrder
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty    kf-mfg:woStatus ;
+        owl:cardinality   "1"^^xsd:nonNegativeInteger
+    ] ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty    kf-mfg:woType ;
+        owl:cardinality   "1"^^xsd:nonNegativeInteger
+    ] ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty    kf-mfg:woPriority ;
+        owl:cardinality   "1"^^xsd:nonNegativeInteger
+    ] .
+
+kf-mfg:Equipment
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty    kf-mfg:onProductionLine ;
+        owl:cardinality   "1"^^xsd:nonNegativeInteger
+    ] .
