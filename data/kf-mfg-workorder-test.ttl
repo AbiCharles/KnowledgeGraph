@@ -1,0 +1,434 @@
+@prefix kf-mfg: <http://knowledgefabric.tcs.com/ontology/manufacturing#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Production Lines (3)
+# ─────────────────────────────────────────────────────────────────────────────
+
+<http://knowledgefabric.tcs.com/data/manufacturing/PL-001>
+    a kf-mfg:ProductionLine ;
+    kf-mfg:lineId    "PL-001" ;
+    kf-mfg:name      "Assembly Line Alpha" ;
+    kf-mfg:plant     "MFG-PLANT-01" ;
+    kf-mfg:capacity  "120 units/hr" ;
+    kf-mfg:status    "ACTIVE" .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/PL-002>
+    a kf-mfg:ProductionLine ;
+    kf-mfg:lineId    "PL-002" ;
+    kf-mfg:name      "Fabrication Line Beta" ;
+    kf-mfg:plant     "MFG-PLANT-01" ;
+    kf-mfg:capacity  "85 units/hr" ;
+    kf-mfg:status    "ACTIVE" .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/PL-003>
+    a kf-mfg:ProductionLine ;
+    kf-mfg:lineId    "PL-003" ;
+    kf-mfg:name      "Finishing Line Gamma" ;
+    kf-mfg:plant     "MFG-PLANT-02" ;
+    kf-mfg:capacity  "60 units/hr" ;
+    kf-mfg:status    "MAINTENANCE" .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Equipment (5)
+# ─────────────────────────────────────────────────────────────────────────────
+
+<http://knowledgefabric.tcs.com/data/manufacturing/EQ-001>
+    a kf-mfg:Equipment ;
+    kf-mfg:equipmentId  "EQ-001" ;
+    kf-mfg:name         "CNC Milling Machine" ;
+    kf-mfg:tag          "EQ-CNC-001" ;
+    kf-mfg:location     "PLANT01-AREA-A" ;
+    kf-mfg:status       "OPERATIONAL" ;
+    kf-mfg:lastPM       "2025-01-15" ;
+    kf-mfg:onProductionLine <http://knowledgefabric.tcs.com/data/manufacturing/PL-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/EQ-002>
+    a kf-mfg:Equipment ;
+    kf-mfg:equipmentId  "EQ-002" ;
+    kf-mfg:name         "Hydraulic Press Unit" ;
+    kf-mfg:tag          "EQ-HYDR-002" ;
+    kf-mfg:location     "PLANT01-AREA-B" ;
+    kf-mfg:status       "OPERATIONAL" ;
+    kf-mfg:lastPM       "2025-02-20" ;
+    kf-mfg:onProductionLine <http://knowledgefabric.tcs.com/data/manufacturing/PL-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/EQ-003>
+    a kf-mfg:Equipment ;
+    kf-mfg:equipmentId  "EQ-003" ;
+    kf-mfg:name         "Conveyor System C" ;
+    kf-mfg:tag          "EQ-CONV-003" ;
+    kf-mfg:location     "PLANT01-AREA-C" ;
+    kf-mfg:status       "UNDER_MAINTENANCE" ;
+    kf-mfg:lastPM       "2024-12-10" ;
+    kf-mfg:onProductionLine <http://knowledgefabric.tcs.com/data/manufacturing/PL-002> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/EQ-004>
+    a kf-mfg:Equipment ;
+    kf-mfg:equipmentId  "EQ-004" ;
+    kf-mfg:name         "Robotic Arm D4" ;
+    kf-mfg:tag          "EQ-ROBO-004" ;
+    kf-mfg:location     "PLANT02-AREA-A" ;
+    kf-mfg:status       "OPERATIONAL" ;
+    kf-mfg:lastPM       "2025-03-01" ;
+    kf-mfg:onProductionLine <http://knowledgefabric.tcs.com/data/manufacturing/PL-002> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/EQ-005>
+    a kf-mfg:Equipment ;
+    kf-mfg:equipmentId  "EQ-005" ;
+    kf-mfg:name         "Laser Cutter E" ;
+    kf-mfg:tag          "EQ-LASR-005" ;
+    kf-mfg:location     "PLANT02-AREA-B" ;
+    kf-mfg:status       "OPERATIONAL" ;
+    kf-mfg:lastPM       "2025-01-28" ;
+    kf-mfg:onProductionLine <http://knowledgefabric.tcs.com/data/manufacturing/PL-003> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Compliance Policies (2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+<http://knowledgefabric.tcs.com/data/manufacturing/CP-OSHA-001>
+    a kf-mfg:CompliancePolicy ;
+    kf-mfg:policyId     "CP-OSHA-001" ;
+    kf-mfg:name         "OSHA Safety Standard" ;
+    kf-mfg:regBody      "OSHA" ;
+    kf-mfg:standard     "29 CFR 1910" ;
+    kf-mfg:mandatory    "true"^^xsd:boolean ;
+    kf-mfg:reviewCycle  "Annual" .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/CP-ISO-002>
+    a kf-mfg:CompliancePolicy ;
+    kf-mfg:policyId     "CP-ISO-002" ;
+    kf-mfg:name         "ISO 55000 Asset Mgmt" ;
+    kf-mfg:regBody      "ISO" ;
+    kf-mfg:standard     "ISO 55000:2014" ;
+    kf-mfg:mandatory    "true"^^xsd:boolean ;
+    kf-mfg:reviewCycle  "Biennial" .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Technicians (4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+<http://knowledgefabric.tcs.com/data/manufacturing/TECH-001>
+    a kf-mfg:Technician ;
+    kf-mfg:technicianId   "TECH-001" ;
+    kf-mfg:name           "J. Rivera" ;
+    kf-mfg:grade          "Senior" ;
+    kf-mfg:cert           "CMRT" ;
+    kf-mfg:specialisation "Hydraulics" .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/TECH-002>
+    a kf-mfg:Technician ;
+    kf-mfg:technicianId   "TECH-002" ;
+    kf-mfg:name           "A. Okafor" ;
+    kf-mfg:grade          "Mid" ;
+    kf-mfg:cert           "CMRP" ;
+    kf-mfg:specialisation "Electrical" .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/TECH-003>
+    a kf-mfg:Technician ;
+    kf-mfg:technicianId   "TECH-003" ;
+    kf-mfg:name           "S. Kim" ;
+    kf-mfg:grade          "Senior" ;
+    kf-mfg:cert           "CMRT" ;
+    kf-mfg:specialisation "Robotics" .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/TECH-004>
+    a kf-mfg:Technician ;
+    kf-mfg:technicianId   "TECH-004" ;
+    kf-mfg:name           "P. Mensah" ;
+    kf-mfg:grade          "Junior" ;
+    kf-mfg:cert           "None" ;
+    kf-mfg:specialisation "General" .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Work Orders — SAP-PM source (15 records, 5 are masters from ER merge)
+# ─────────────────────────────────────────────────────────────────────────────
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10001>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10001" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "HIGH" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-25" ;
+    kf-mfg:description    "CNC milling machine annual PM inspection" ;
+    kf-mfg:eqId           "EQ-001" ;
+    kf-mfg:techId         "TECH-001" ;
+    kf-mfg:mergedFrom     "WO-20001" ;
+    kf-mfg:mergeMethod    "ER-001" ;
+    kf-mfg:mergeConfidence "1.0"^^xsd:decimal ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-001> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10002>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10002" ;
+    kf-mfg:woType         "CORRECTIVE" ;
+    kf-mfg:woStatus       "IN_PROGRESS" ;
+    kf-mfg:woPriority     "URGENT" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-22" ;
+    kf-mfg:description    "Hydraulic press seal replacement emergency" ;
+    kf-mfg:eqId           "EQ-002" ;
+    kf-mfg:techId         "TECH-001" ;
+    kf-mfg:policyId       "CP-OSHA-001" ;
+    kf-mfg:mergedFrom     "WO-20002" ;
+    kf-mfg:mergeMethod    "ER-001" ;
+    kf-mfg:mergeConfidence "1.0"^^xsd:decimal ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-002> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-001> ;
+    kf-mfg:governedBy <http://knowledgefabric.tcs.com/data/manufacturing/CP-OSHA-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10003>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10003" ;
+    kf-mfg:woType         "INSPECTION" ;
+    kf-mfg:woStatus       "COMPLETED" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-18" ;
+    kf-mfg:description    "Conveyor belt tension and alignment check" ;
+    kf-mfg:eqId           "EQ-003" ;
+    kf-mfg:policyId       "CP-ISO-002" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-003> ;
+    kf-mfg:governedBy <http://knowledgefabric.tcs.com/data/manufacturing/CP-ISO-002> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10004>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10004" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-28" ;
+    kf-mfg:description    "Robotic arm D4 lubrication and calibration" ;
+    kf-mfg:eqId           "EQ-004" ;
+    kf-mfg:techId         "TECH-003" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-004> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-003> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10005>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10005" ;
+    kf-mfg:woType         "CORRECTIVE" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "HIGH" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-23" ;
+    kf-mfg:description    "Laser cutter E optics alignment drift" ;
+    kf-mfg:eqId           "EQ-005" ;
+    kf-mfg:techId         "TECH-002" ;
+    kf-mfg:mergedFrom     "WO-20003" ;
+    kf-mfg:mergeMethod    "ER-002" ;
+    kf-mfg:mergeConfidence "0.99"^^xsd:decimal ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-005> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-002> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10006>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10006" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "SCHEDULED" ;
+    kf-mfg:woPriority     "LOW" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-05-02" ;
+    kf-mfg:description    "CNC milling spindle bearing replacement" ;
+    kf-mfg:eqId           "EQ-001" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10007>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10007" ;
+    kf-mfg:woType         "INSPECTION" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-26" ;
+    kf-mfg:description    "Hydraulic press annual safety valve inspection" ;
+    kf-mfg:eqId           "EQ-002" ;
+    kf-mfg:policyId       "CP-OSHA-001" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-002> ;
+    kf-mfg:governedBy <http://knowledgefabric.tcs.com/data/manufacturing/CP-OSHA-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10008>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10008" ;
+    kf-mfg:woType         "CORRECTIVE" ;
+    kf-mfg:woStatus       "IN_PROGRESS" ;
+    kf-mfg:woPriority     "HIGH" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-21" ;
+    kf-mfg:description    "Conveyor belt section C3 replacement" ;
+    kf-mfg:eqId           "EQ-003" ;
+    kf-mfg:techId         "TECH-004" ;
+    kf-mfg:mergedFrom     "WO-20004" ;
+    kf-mfg:mergeMethod    "ER-003" ;
+    kf-mfg:mergeConfidence "0.91"^^xsd:decimal ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-003> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-004> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10009>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10009" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "SCHEDULED" ;
+    kf-mfg:woPriority     "LOW" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-05-05" ;
+    kf-mfg:description    "Robotic arm wrist motor quarterly service" ;
+    kf-mfg:eqId           "EQ-004" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-004> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10010>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10010" ;
+    kf-mfg:woType         "INSPECTION" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-30" ;
+    kf-mfg:description    "Laser cutter E cooling system flush" ;
+    kf-mfg:eqId           "EQ-005" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-005> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10011>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10011" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "HIGH" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-24" ;
+    kf-mfg:description    "CNC milling machine tool change batch 4" ;
+    kf-mfg:eqId           "EQ-001" ;
+    kf-mfg:techId         "TECH-001" ;
+    kf-mfg:mergedFrom     "WO-20005" ;
+    kf-mfg:mergeMethod    "ER-001" ;
+    kf-mfg:mergeConfidence "1.0"^^xsd:decimal ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-001> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10012>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10012" ;
+    kf-mfg:woType         "CORRECTIVE" ;
+    kf-mfg:woStatus       "SCHEDULED" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-05-08" ;
+    kf-mfg:description    "Hydraulic reservoir fluid contamination" ;
+    kf-mfg:eqId           "EQ-002" ;
+    kf-mfg:policyId       "CP-OSHA-001" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-002> ;
+    kf-mfg:governedBy <http://knowledgefabric.tcs.com/data/manufacturing/CP-OSHA-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10013>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10013" ;
+    kf-mfg:woType         "INSPECTION" ;
+    kf-mfg:woStatus       "COMPLETED" ;
+    kf-mfg:woPriority     "LOW" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-15" ;
+    kf-mfg:description    "Conveyor system monthly safety check" ;
+    kf-mfg:eqId           "EQ-003" ;
+    kf-mfg:policyId       "CP-ISO-002" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-003> ;
+    kf-mfg:governedBy <http://knowledgefabric.tcs.com/data/manufacturing/CP-ISO-002> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10014>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10014" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-05-01" ;
+    kf-mfg:description    "Robotic arm D4 vision sensor calibration" ;
+    kf-mfg:eqId           "EQ-004" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-004> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-10015>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-10015" ;
+    kf-mfg:woType         "CORRECTIVE" ;
+    kf-mfg:woStatus       "IN_PROGRESS" ;
+    kf-mfg:woPriority     "URGENT" ;
+    kf-mfg:sourceSystem   "SAP-PM" ;
+    kf-mfg:scheduledStart "2025-04-22" ;
+    kf-mfg:description    "Laser cutter E power supply fault" ;
+    kf-mfg:eqId           "EQ-005" ;
+    kf-mfg:techId         "TECH-002" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-005> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-002> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Work Orders — MES-PROD source (5 unique records, not duplicates)
+# ─────────────────────────────────────────────────────────────────────────────
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-20006>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-20006" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "SCHEDULED" ;
+    kf-mfg:woPriority     "LOW" ;
+    kf-mfg:sourceSystem   "MES-PROD" ;
+    kf-mfg:scheduledStart "2025-05-10" ;
+    kf-mfg:description    "Assembly line sensor array calibration" ;
+    kf-mfg:eqId           "EQ-001" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-20007>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-20007" ;
+    kf-mfg:woType         "INSPECTION" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "MES-PROD" ;
+    kf-mfg:scheduledStart "2025-04-29" ;
+    kf-mfg:description    "Fabrication line safety harness inspection" ;
+    kf-mfg:eqId           "EQ-002" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-002> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-20008>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-20008" ;
+    kf-mfg:woType         "CORRECTIVE" ;
+    kf-mfg:woStatus       "IN_PROGRESS" ;
+    kf-mfg:woPriority     "HIGH" ;
+    kf-mfg:sourceSystem   "MES-PROD" ;
+    kf-mfg:scheduledStart "2025-04-22" ;
+    kf-mfg:description    "Finishing line conveyor motor overheat" ;
+    kf-mfg:eqId           "EQ-003" ;
+    kf-mfg:techId         "TECH-003" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-003> ;
+    kf-mfg:assignedToTechnician <http://knowledgefabric.tcs.com/data/manufacturing/TECH-003> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-20009>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-20009" ;
+    kf-mfg:woType         "PREVENTIVE" ;
+    kf-mfg:woStatus       "OPEN" ;
+    kf-mfg:woPriority     "MEDIUM" ;
+    kf-mfg:sourceSystem   "MES-PROD" ;
+    kf-mfg:scheduledStart "2025-04-27" ;
+    kf-mfg:description    "CNC control panel firmware update" ;
+    kf-mfg:eqId           "EQ-001" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-001> .
+
+<http://knowledgefabric.tcs.com/data/manufacturing/WO-20010>
+    a kf-mfg:WorkOrder ;
+    kf-mfg:workOrderId    "WO-20010" ;
+    kf-mfg:woType         "INSPECTION" ;
+    kf-mfg:woStatus       "COMPLETED" ;
+    kf-mfg:woPriority     "LOW" ;
+    kf-mfg:sourceSystem   "MES-PROD" ;
+    kf-mfg:scheduledStart "2025-04-17" ;
+    kf-mfg:description    "Hydraulic press OSHA compliance check" ;
+    kf-mfg:eqId           "EQ-002" ;
+    kf-mfg:policyId       "CP-OSHA-001" ;
+    kf-mfg:assignedToEquipment <http://knowledgefabric.tcs.com/data/manufacturing/EQ-002> ;
+    kf-mfg:governedBy <http://knowledgefabric.tcs.com/data/manufacturing/CP-OSHA-001> .

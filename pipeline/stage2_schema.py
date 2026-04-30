@@ -1,6 +1,5 @@
 """Stage 2 — OWL2 Schema Load: import ontology TTL and create constraints/indexes."""
 
-import os
 from db import run_write, run_query
 
 
@@ -22,12 +21,13 @@ INDEXES = [
 def load_schema(ctx: dict) -> list[str]:
     logs = []
     s = ctx["settings"]
-    ttl_path = os.path.abspath(s.ontology_ttl_path)
 
-    # Import ontology
+    with open(s.ontology_ttl_path, "r", encoding="utf-8") as f:
+        payload = f.read()
+
     result = run_query(
-        "CALL n10s.onto.import.fetch($url, 'Turtle') YIELD triplesLoaded RETURN triplesLoaded",
-        {"url": f"file:///{ttl_path}"},
+        "CALL n10s.onto.import.inline($payload, 'Turtle') YIELD triplesLoaded RETURN triplesLoaded",
+        {"payload": payload},
     )
     triples = result[0]["triplesLoaded"] if result else 0
     logs.append(f"PASS  Ontology loaded — {triples} triples")
