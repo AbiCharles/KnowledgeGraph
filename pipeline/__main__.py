@@ -3,11 +3,14 @@ from __future__ import annotations
 import sys
 
 from .run import run_pipeline
+from .use_case_registry import get_active
 
 
 def main() -> int:
     failed = False
-    for result in run_pipeline():
+    use_case = get_active()
+    print(f"Active use case: {use_case.manifest.name} ({use_case.slug})\n")
+    for result in run_pipeline(use_case):
         if result.status == "running":
             print(f"[ {result.stage} ] {result.name} ... ", end="", flush=True)
             continue

@@ -1,0 +1,372 @@
+@prefix sc:  <http://knowledgefabric.tcs.com/ontology/supplychain#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Suppliers (4)
+# ─────────────────────────────────────────────────────────────────────────────
+<http://kf.tcs.com/data/sc/SUP-001>
+    a sc:Supplier ;
+    sc:supplierId "SUP-001" ;
+    sc:name       "ASML Holding NV" ;
+    sc:country    "Netherlands" ;
+    sc:category   "Electronics" ;
+    sc:reliabilityScore "0.94"^^xsd:decimal .
+
+<http://kf.tcs.com/data/sc/SUP-002>
+    a sc:Supplier ;
+    sc:supplierId "SUP-002" ;
+    sc:name       "Foxconn Industrial" ;
+    sc:country    "Taiwan" ;
+    sc:category   "Electronics" ;
+    sc:reliabilityScore "0.88"^^xsd:decimal .
+
+<http://kf.tcs.com/data/sc/SUP-003>
+    a sc:Supplier ;
+    sc:supplierId "SUP-003" ;
+    sc:name       "Maersk Materials" ;
+    sc:country    "Denmark" ;
+    sc:category   "Raw Materials" ;
+    sc:reliabilityScore "0.91"^^xsd:decimal .
+
+<http://kf.tcs.com/data/sc/SUP-004>
+    a sc:Supplier ;
+    sc:supplierId "SUP-004" ;
+    sc:name       "Caterpillar Parts" ;
+    sc:country    "United States" ;
+    sc:category   "Industrial" ;
+    sc:reliabilityScore "0.86"^^xsd:decimal .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Products (5)
+# ─────────────────────────────────────────────────────────────────────────────
+<http://kf.tcs.com/data/sc/PROD-CHIP-A1>
+    a sc:Product ;
+    sc:productId "PROD-CHIP-A1" ; sc:sku "CHIP-A1-2024" ;
+    sc:name      "EUV Semiconductor Wafer" ;
+    sc:category  "Electronics" ;
+    sc:unitPriceUSD "12500.00"^^xsd:decimal ;
+    sc:leadTimeDays 45 ;
+    sc:suppliedBy <http://kf.tcs.com/data/sc/SUP-001> .
+
+<http://kf.tcs.com/data/sc/PROD-PCB-C3>
+    a sc:Product ;
+    sc:productId "PROD-PCB-C3" ; sc:sku "PCB-C3-MK4" ;
+    sc:name      "Multi-layer Circuit Board" ;
+    sc:category  "Electronics" ;
+    sc:unitPriceUSD "240.00"^^xsd:decimal ;
+    sc:leadTimeDays 21 ;
+    sc:suppliedBy <http://kf.tcs.com/data/sc/SUP-002> .
+
+<http://kf.tcs.com/data/sc/PROD-STEEL-B2>
+    a sc:Product ;
+    sc:productId "PROD-STEEL-B2" ; sc:sku "STEEL-B2-COIL" ;
+    sc:name      "Cold-rolled Steel Coil" ;
+    sc:category  "Raw Materials" ;
+    sc:unitPriceUSD "1850.00"^^xsd:decimal ;
+    sc:leadTimeDays 14 ;
+    sc:suppliedBy <http://kf.tcs.com/data/sc/SUP-003> .
+
+<http://kf.tcs.com/data/sc/PROD-PUMP-D4>
+    a sc:Product ;
+    sc:productId "PROD-PUMP-D4" ; sc:sku "PUMP-D4-HYDR" ;
+    sc:name      "Hydraulic Pump Assembly" ;
+    sc:category  "Industrial" ;
+    sc:unitPriceUSD "4200.00"^^xsd:decimal ;
+    sc:leadTimeDays 35 ;
+    sc:suppliedBy <http://kf.tcs.com/data/sc/SUP-004> .
+
+<http://kf.tcs.com/data/sc/PROD-CONT-E5>
+    a sc:Product ;
+    sc:productId "PROD-CONT-E5" ; sc:sku "CONT-E5-PLAS" ;
+    sc:name      "Industrial Plastic Container" ;
+    sc:category  "Packaging" ;
+    sc:unitPriceUSD "65.00"^^xsd:decimal ;
+    sc:leadTimeDays 7 ;
+    sc:suppliedBy <http://kf.tcs.com/data/sc/SUP-003> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Warehouses (3)
+# ─────────────────────────────────────────────────────────────────────────────
+<http://kf.tcs.com/data/sc/WH-EU-001>
+    a sc:Warehouse ;
+    sc:warehouseId "WH-EU-001" ;
+    sc:name        "Rotterdam Distribution Centre" ;
+    sc:region      "EMEA" ;
+    sc:capacityUnits 50000 ;
+    sc:utilisationPct 78 ;
+    sc:status        "ACTIVE" .
+
+<http://kf.tcs.com/data/sc/WH-US-001>
+    a sc:Warehouse ;
+    sc:warehouseId "WH-US-001" ;
+    sc:name        "Long Beach Logistics Hub" ;
+    sc:region      "AMERICAS" ;
+    sc:capacityUnits 75000 ;
+    sc:utilisationPct 92 ;
+    sc:status        "ACTIVE" .
+
+<http://kf.tcs.com/data/sc/WH-AS-001>
+    a sc:Warehouse ;
+    sc:warehouseId "WH-AS-001" ;
+    sc:name        "Singapore Cross-Dock" ;
+    sc:region      "APAC" ;
+    sc:capacityUnits 40000 ;
+    sc:utilisationPct 65 ;
+    sc:status        "ACTIVE" .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Carriers (3)
+# ─────────────────────────────────────────────────────────────────────────────
+<http://kf.tcs.com/data/sc/CAR-FEDEX>
+    a sc:Carrier ;
+    sc:carrierId "CAR-FEDEX" ;
+    sc:name      "FedEx Express" ;
+    sc:mode      "AIR" ;
+    sc:onTimePct 88 .
+
+<http://kf.tcs.com/data/sc/CAR-MAERSK>
+    a sc:Carrier ;
+    sc:carrierId "CAR-MAERSK" ;
+    sc:name      "Maersk Line" ;
+    sc:mode      "OCEAN" ;
+    sc:onTimePct 76 .
+
+<http://kf.tcs.com/data/sc/CAR-DHL>
+    a sc:Carrier ;
+    sc:carrierId "CAR-DHL" ;
+    sc:name      "DHL Global Forwarding" ;
+    sc:mode      "AIR" ;
+    sc:onTimePct 92 .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Purchase Orders — ERP-SAP source (10)
+# ─────────────────────────────────────────────────────────────────────────────
+<http://kf.tcs.com/data/sc/PO-30001>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30001" ; sc:poStatus "DELIVERED" ; sc:poPriority "HIGH" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-03-12" ; sc:requestedDelivery "2026-04-30" ;
+    sc:orderValueUSD "1250000.00"^^xsd:decimal ; sc:quantity 100 ;
+    sc:supplierId "SUP-001" ; sc:productId "PROD-CHIP-A1" ; sc:warehouseId "WH-EU-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-001> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-CHIP-A1> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/PO-30002>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30002" ; sc:poStatus "IN_TRANSIT" ; sc:poPriority "URGENT" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-04-02" ; sc:requestedDelivery "2026-04-25" ;
+    sc:orderValueUSD "84000.00"^^xsd:decimal ; sc:quantity 350 ;
+    sc:supplierId "SUP-002" ; sc:productId "PROD-PCB-C3" ; sc:warehouseId "WH-AS-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-002> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-PCB-C3> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-AS-001> .
+
+<http://kf.tcs.com/data/sc/PO-30003>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30003" ; sc:poStatus "PENDING" ; sc:poPriority "MEDIUM" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-04-15" ; sc:requestedDelivery "2026-05-10" ;
+    sc:orderValueUSD "37000.00"^^xsd:decimal ; sc:quantity 20 ;
+    sc:supplierId "SUP-003" ; sc:productId "PROD-STEEL-B2" ; sc:warehouseId "WH-US-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-003> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-STEEL-B2> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-US-001> .
+
+<http://kf.tcs.com/data/sc/PO-30004>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30004" ; sc:poStatus "DELIVERED" ; sc:poPriority "MEDIUM" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-02-20" ; sc:requestedDelivery "2026-03-30" ;
+    sc:orderValueUSD "210000.00"^^xsd:decimal ; sc:quantity 50 ;
+    sc:supplierId "SUP-004" ; sc:productId "PROD-PUMP-D4" ; sc:warehouseId "WH-US-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-004> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-PUMP-D4> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-US-001> .
+
+<http://kf.tcs.com/data/sc/PO-30005>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30005" ; sc:poStatus "IN_TRANSIT" ; sc:poPriority "HIGH" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-04-05" ; sc:requestedDelivery "2026-05-01" ;
+    sc:orderValueUSD "9750.00"^^xsd:decimal ; sc:quantity 150 ;
+    sc:supplierId "SUP-003" ; sc:productId "PROD-CONT-E5" ; sc:warehouseId "WH-EU-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-003> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-CONT-E5> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/PO-30006>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30006" ; sc:poStatus "PENDING" ; sc:poPriority "URGENT" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-04-22" ; sc:requestedDelivery "2026-05-05" ;
+    sc:orderValueUSD "625000.00"^^xsd:decimal ; sc:quantity 50 ;
+    sc:supplierId "SUP-001" ; sc:productId "PROD-CHIP-A1" ; sc:warehouseId "WH-AS-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-001> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-CHIP-A1> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-AS-001> .
+
+<http://kf.tcs.com/data/sc/PO-30007>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30007" ; sc:poStatus "DELIVERED" ; sc:poPriority "LOW" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-02-10" ; sc:requestedDelivery "2026-03-20" ;
+    sc:orderValueUSD "55500.00"^^xsd:decimal ; sc:quantity 30 ;
+    sc:supplierId "SUP-003" ; sc:productId "PROD-STEEL-B2" ; sc:warehouseId "WH-EU-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-003> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-STEEL-B2> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/PO-30008>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30008" ; sc:poStatus "IN_TRANSIT" ; sc:poPriority "MEDIUM" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-04-08" ; sc:requestedDelivery "2026-05-15" ;
+    sc:orderValueUSD "168000.00"^^xsd:decimal ; sc:quantity 40 ;
+    sc:supplierId "SUP-004" ; sc:productId "PROD-PUMP-D4" ; sc:warehouseId "WH-AS-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-004> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-PUMP-D4> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-AS-001> .
+
+<http://kf.tcs.com/data/sc/PO-30009>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30009" ; sc:poStatus "PENDING" ; sc:poPriority "HIGH" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-04-25" ; sc:requestedDelivery "2026-05-12" ;
+    sc:orderValueUSD "120000.00"^^xsd:decimal ; sc:quantity 500 ;
+    sc:supplierId "SUP-002" ; sc:productId "PROD-PCB-C3" ; sc:warehouseId "WH-US-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-002> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-PCB-C3> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-US-001> ;
+    sc:crossRefId "OSCM-XR-991" .
+
+<http://kf.tcs.com/data/sc/PO-30010>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-30010" ; sc:poStatus "DELIVERED" ; sc:poPriority "MEDIUM" ;
+    sc:sourceSystem "ERP-SAP" ; sc:placedDate "2026-03-01" ; sc:requestedDelivery "2026-04-01" ;
+    sc:orderValueUSD "13000.00"^^xsd:decimal ; sc:quantity 200 ;
+    sc:supplierId "SUP-003" ; sc:productId "PROD-CONT-E5" ; sc:warehouseId "WH-AS-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-003> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-CONT-E5> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-AS-001> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Purchase Orders — OracleSCM source (4)
+# One has crossRefId OSCM-XR-991 matching PO-30009 (ER-002 should merge)
+# ─────────────────────────────────────────────────────────────────────────────
+<http://kf.tcs.com/data/sc/PO-90001>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-90001" ; sc:poStatus "PENDING" ; sc:poPriority "HIGH" ;
+    sc:sourceSystem "OracleSCM" ; sc:placedDate "2026-04-25" ; sc:requestedDelivery "2026-05-12" ;
+    sc:orderValueUSD "120000.00"^^xsd:decimal ; sc:quantity 500 ;
+    sc:supplierId "SUP-002" ; sc:productId "PROD-PCB-C3" ; sc:warehouseId "WH-US-001" ;
+    sc:crossRefId "OSCM-XR-991" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-002> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-PCB-C3> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-US-001> .
+
+<http://kf.tcs.com/data/sc/PO-90002>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-90002" ; sc:poStatus "IN_TRANSIT" ; sc:poPriority "MEDIUM" ;
+    sc:sourceSystem "OracleSCM" ; sc:placedDate "2026-04-10" ; sc:requestedDelivery "2026-05-03" ;
+    sc:orderValueUSD "47500.00"^^xsd:decimal ; sc:quantity 25 ;
+    sc:supplierId "SUP-003" ; sc:productId "PROD-STEEL-B2" ; sc:warehouseId "WH-EU-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-003> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-STEEL-B2> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/PO-90003>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-90003" ; sc:poStatus "DELIVERED" ; sc:poPriority "LOW" ;
+    sc:sourceSystem "OracleSCM" ; sc:placedDate "2026-02-25" ; sc:requestedDelivery "2026-04-05" ;
+    sc:orderValueUSD "8400.00"^^xsd:decimal ; sc:quantity 35 ;
+    sc:supplierId "SUP-002" ; sc:productId "PROD-PCB-C3" ; sc:warehouseId "WH-EU-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-002> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-PCB-C3> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/PO-90004>
+    a sc:PurchaseOrder ;
+    sc:poId "PO-90004" ; sc:poStatus "PENDING" ; sc:poPriority "URGENT" ;
+    sc:sourceSystem "OracleSCM" ; sc:placedDate "2026-04-28" ; sc:requestedDelivery "2026-05-08" ;
+    sc:orderValueUSD "375000.00"^^xsd:decimal ; sc:quantity 30 ;
+    sc:supplierId "SUP-001" ; sc:productId "PROD-CHIP-A1" ; sc:warehouseId "WH-US-001" ;
+    sc:placedWith <http://kf.tcs.com/data/sc/SUP-001> ;
+    sc:contains   <http://kf.tcs.com/data/sc/PROD-CHIP-A1> ;
+    sc:shipsTo    <http://kf.tcs.com/data/sc/WH-US-001> .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shipments (10) — one per in-transit/delivered PO (PENDING POs have no shipment yet)
+# ─────────────────────────────────────────────────────────────────────────────
+<http://kf.tcs.com/data/sc/SH-50001>
+    a sc:Shipment ; sc:shipmentId "SH-50001" ; sc:shipmentStatus "DELIVERED" ;
+    sc:trackingNumber "FX-PO30001-EU" ; sc:dispatchedDate "2026-03-25" ; sc:eta "2026-04-25" ;
+    sc:isLate false ; sc:carrierId "CAR-FEDEX" ; sc:poRef "PO-30001" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30001> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-FEDEX> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/SH-50002>
+    a sc:Shipment ; sc:shipmentId "SH-50002" ; sc:shipmentStatus "IN_TRANSIT" ;
+    sc:trackingNumber "DH-PO30002-AS" ; sc:dispatchedDate "2026-04-12" ; sc:eta "2026-04-26" ;
+    sc:isLate false ; sc:carrierId "CAR-DHL" ; sc:poRef "PO-30002" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30002> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-DHL> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-AS-001> .
+
+<http://kf.tcs.com/data/sc/SH-50003>
+    a sc:Shipment ; sc:shipmentId "SH-50003" ; sc:shipmentStatus "DELIVERED" ;
+    sc:trackingNumber "MK-PO30004-US" ; sc:dispatchedDate "2026-03-05" ; sc:eta "2026-03-30" ;
+    sc:isLate false ; sc:carrierId "CAR-MAERSK" ; sc:poRef "PO-30004" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30004> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-MAERSK> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-US-001> .
+
+<http://kf.tcs.com/data/sc/SH-50004>
+    a sc:Shipment ; sc:shipmentId "SH-50004" ; sc:shipmentStatus "IN_TRANSIT" ;
+    sc:trackingNumber "MK-PO30005-EU" ; sc:dispatchedDate "2026-04-15" ; sc:eta "2026-05-05" ;
+    sc:isLate true ; sc:carrierId "CAR-MAERSK" ; sc:poRef "PO-30005" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30005> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-MAERSK> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/SH-50005>
+    a sc:Shipment ; sc:shipmentId "SH-50005" ; sc:shipmentStatus "DELIVERED" ;
+    sc:trackingNumber "FX-PO30007-EU" ; sc:dispatchedDate "2026-02-20" ; sc:eta "2026-03-18" ;
+    sc:isLate false ; sc:carrierId "CAR-FEDEX" ; sc:poRef "PO-30007" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30007> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-FEDEX> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/SH-50006>
+    a sc:Shipment ; sc:shipmentId "SH-50006" ; sc:shipmentStatus "IN_TRANSIT" ;
+    sc:trackingNumber "MK-PO30008-AS" ; sc:dispatchedDate "2026-04-18" ; sc:eta "2026-05-18" ;
+    sc:isLate false ; sc:carrierId "CAR-MAERSK" ; sc:poRef "PO-30008" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30008> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-MAERSK> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-AS-001> .
+
+<http://kf.tcs.com/data/sc/SH-50007>
+    a sc:Shipment ; sc:shipmentId "SH-50007" ; sc:shipmentStatus "DELIVERED" ;
+    sc:trackingNumber "DH-PO30010-AS" ; sc:dispatchedDate "2026-03-12" ; sc:eta "2026-03-30" ;
+    sc:isLate false ; sc:carrierId "CAR-DHL" ; sc:poRef "PO-30010" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30010> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-DHL> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-AS-001> .
+
+<http://kf.tcs.com/data/sc/SH-50008>
+    a sc:Shipment ; sc:shipmentId "SH-50008" ; sc:shipmentStatus "IN_TRANSIT" ;
+    sc:trackingNumber "MK-PO90002-EU" ; sc:dispatchedDate "2026-04-20" ; sc:eta "2026-05-04" ;
+    sc:isLate true ; sc:carrierId "CAR-MAERSK" ; sc:poRef "PO-90002" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-90002> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-MAERSK> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/SH-50009>
+    a sc:Shipment ; sc:shipmentId "SH-50009" ; sc:shipmentStatus "DELIVERED" ;
+    sc:trackingNumber "DH-PO90003-EU" ; sc:dispatchedDate "2026-03-15" ; sc:eta "2026-04-04" ;
+    sc:isLate false ; sc:carrierId "CAR-DHL" ; sc:poRef "PO-90003" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-90003> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-DHL> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-EU-001> .
+
+<http://kf.tcs.com/data/sc/SH-50010>
+    a sc:Shipment ; sc:shipmentId "SH-50010" ; sc:shipmentStatus "DELAYED" ;
+    sc:trackingNumber "FX-PO30002-AS-RECOV" ; sc:dispatchedDate "2026-04-14" ; sc:eta "2026-04-28" ;
+    sc:isLate true ; sc:carrierId "CAR-FEDEX" ; sc:poRef "PO-30006" ;
+    sc:transports <http://kf.tcs.com/data/sc/PO-30006> ;
+    sc:assignedTo <http://kf.tcs.com/data/sc/CAR-FEDEX> ;
+    sc:arrivesAt  <http://kf.tcs.com/data/sc/WH-AS-001> .

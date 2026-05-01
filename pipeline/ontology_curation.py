@@ -1,33 +1,23 @@
 """
 Ontology curation pipeline.
 
-Six-step generator that inspects the hand-authored OWL2 TTL at
-ontology/kf-mfg-workorder.ttl and surfaces real metrics for each step
-(class/property/axiom counts via rdflib, plus a SHACL validation pass
-against the test data graph). Mirrors pipeline.run's StageResult shape so
-the API and frontend can reuse the same renderer.
+Six-step generator that inspects a use-case's hand-authored OWL2 TTL with
+rdflib and surfaces real metrics for each step (class/property/axiom counts,
+file size, round-trip parse, plus a SHACL validation pass against the bundle's
+test data graph). Mirrors pipeline.run's StageResult shape so the API and
+frontend can reuse the same renderer.
 """
 from __future__ import annotations
 import time
-from pathlib import Path
 from typing import Generator
 
-from rdflib import Graph, Namespace, OWL, RDF, RDFS, URIRef
-from rdflib.namespace import XSD
+from rdflib import Graph, OWL, RDF, RDFS, URIRef
 
 from pipeline.run import StageResult
+from pipeline.use_case import UseCase
 
 
-KF_MFG = Namespace("http://knowledgefabric.tcs.com/ontology/manufacturing#")
-SH = Namespace("http://www.w3.org/ns/shacl#")
-
-IN_SCOPE_CLASSES = {
-    "WorkOrder", "Equipment", "ProductionLine",
-    "Technician", "CompliancePolicy", "IngestionAdapter",
-}
-
-ONTOLOGY_PATH = Path(__file__).resolve().parent.parent / "ontology" / "kf-mfg-workorder.ttl"
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "kf-mfg-workorder-test.ttl"
+SH_NS = "http://www.w3.org/ns/shacl#"
 
 
 def _local(uri: URIRef) -> str:
@@ -38,17 +28,17 @@ def _local(uri: URIRef) -> str:
     return s
 
 
-def _step_domain_scoping(g: Graph) -> list[str]:
+def _step_domain_scoping(g: Graph, use_case: UseCase) -> list[str]:
+    in_scope = set(use_case.manifest.in_scope_classes)
     logs = [f"INFO  Parsed TTL graph: {len(g)} triples"]
-    ns_uri = str(KF_MFG)
-    logs.append(f"INFO  kf-mfg namespace = {ns_uri}")
+    logs.append(f"INFO  {use_case.manifest.prefix} namespace = {use_case.manifest.namespace}")
 
     declared = {_local(c) for c in g.subjects(RDF.type, OWL.Class) if isinstance(c, URIRef)}
-    in_scope = declared & IN_SCOPE_CLASSES
-    out = sorted(declared - IN_SCOPE_CLASSES)
-    missing = sorted(IN_SCOPE_CLASSES - declared)
+    matched = declared & in_scope
+    out = sorted(declared - in_scope)
+    missing = sorted(in_scope - declared)
 
-    logs.append(f"PASS  In-scope classes declared: {len(in_scope)}/{len(IN_SCOPE_CLASSES)} ({', '.join(sorted(in_scope))})")
+    logs.append(f"PASS  In-scope classes declared: {len(matched)}/{len(in_scope)} ({', '.join(sorted(matched))})")
     if missing:
         raise RuntimeError(f"Missing in-scope classes: {missing}")
     if out:
@@ -57,7 +47,7 @@ def _step_domain_scoping(g: Graph) -> list[str]:
     return logs
 
 
-def _step_entity_modelling(g: Graph) -> list[str]:
+def _step_entity_modelling(g: Graph, use_case: UseCase) -> list[str]:
     classes = sorted(_local(c) for c in g.subjects(RDF.type, OWL.Class) if isinstance(c, URIRef))
     obj_props = [p for p in g.subjects(RDF.type, OWL.ObjectProperty) if isinstance(p, URIRef)]
 
@@ -73,7 +63,7 @@ def _step_entity_modelling(g: Graph) -> list[str]:
     return logs
 
 
-def _step_axioms(g: Graph) -> list[str]:
+def _step_axioms(g: Graph, use_case: UseCase) -> list[str]:
     restrictions = list(g.subjects(RDF.type, OWL.Restriction))
     logs = [f"PASS  OWL restriction axioms found: {len(restrictions)}"]
 
@@ -106,7 +96,7 @@ def _step_axioms(g: Graph) -> list[str]:
     return logs
 
 
-def _step_datatype_properties(g: Graph) -> list[str]:
+def _step_datatype_properties(g: Graph, use_case: UseCase) -> list[str]:
     props = list(g.subjects(RDF.type, OWL.DatatypeProperty))
     logs = [f"PASS  Datatype properties declared: {len(props)}"]
 
@@ -125,26 +115,27 @@ def _step_datatype_properties(g: Graph) -> list[str]:
     return logs
 
 
-def _step_serialisation(g: Graph) -> list[str]:
-    if not ONTOLOGY_PATH.exists():
-        raise RuntimeError(f"Ontology TTL not found at {ONTOLOGY_PATH}")
-    size_kb = ONTOLOGY_PATH.stat().st_size / 1024
-    logs = [f"PASS  TTL artefact: {ONTOLOGY_PATH.name} ({size_kb:.1f} KB)"]
+def _step_serialisation(g: Graph, use_case: UseCase) -> list[str]:
+    path = use_case.ontology_path
+    if not path.exists():
+        raise RuntimeError(f"Ontology TTL not found at {path}")
+    size_kb = path.stat().st_size / 1024
+    logs = [f"PASS  TTL artefact: {path.name} ({size_kb:.1f} KB)"]
 
     roundtrip = Graph()
     roundtrip.parse(data=g.serialize(format="turtle"), format="turtle")
     logs.append(f"PASS  Round-trip serialisation OK ({len(roundtrip)} triples)")
-    logs.append(f"PASS  Turtle syntax validated")
+    logs.append("PASS  Turtle syntax validated")
     return logs
 
 
 def _build_shacl_shapes(g: Graph) -> Graph:
     """Generate SHACL shapes from OWL cardinality restrictions in the ontology."""
+    from rdflib import BNode, Literal, Namespace
+
+    SH = Namespace(SH_NS)
     shapes = Graph()
     shapes.bind("sh", SH)
-    shapes.bind("kf-mfg", KF_MFG)
-
-    from rdflib import BNode, Literal
 
     for cls in g.subjects(RDF.type, OWL.Class):
         if not isinstance(cls, URIRef):
@@ -181,21 +172,24 @@ def _build_shacl_shapes(g: Graph) -> Graph:
     return shapes
 
 
-def _step_shacl_validation(g: Graph) -> list[str]:
+def _step_shacl_validation(g: Graph, use_case: UseCase) -> list[str]:
     from pyshacl import validate as shacl_validate
+    from rdflib import Namespace
 
+    SH = Namespace(SH_NS)
     shapes = _build_shacl_shapes(g)
     shape_count = len(list(shapes.subjects(RDF.type, SH.NodeShape)))
     property_shape_count = len(list(shapes.subjects(SH.path, None)))
     logs = [f"PASS  SHACL shapes generated from OWL axioms: {shape_count} NodeShape, {property_shape_count} PropertyShape"]
 
-    if not DATA_PATH.exists():
-        logs.append(f"INFO  Test data graph not found at {DATA_PATH} — running shape consistency check only")
+    data_path = use_case.data_path
+    if not data_path.exists():
+        logs.append(f"INFO  Data graph not found at {data_path} — running shape consistency check only")
         data_graph = Graph()
     else:
         data_graph = Graph()
-        data_graph.parse(str(DATA_PATH), format="turtle")
-        logs.append(f"INFO  Validating against test data: {len(data_graph)} triples")
+        data_graph.parse(str(data_path), format="turtle")
+        logs.append(f"INFO  Validating against data graph: {len(data_graph)} triples")
 
     conforms, _, report_text = shacl_validate(
         data_graph=data_graph,
@@ -213,24 +207,24 @@ def _step_shacl_validation(g: Graph) -> list[str]:
         violations = report_text.count("Result")
         logs.append(f"WARN  SHACL validation reported {violations} violation(s) — see report")
 
-    logs.append("PASS  Ontology curation complete — kf-mfg-workorder.ttl ready for hydration pipeline")
+    logs.append(f"PASS  Ontology curation complete — {use_case.ontology_path.name} ready for hydration pipeline")
     return logs
 
 
 STEPS = [
-    (1, "Domain Scoping",                 _step_domain_scoping),
+    (1, "Domain Scoping",                  _step_domain_scoping),
     (2, "Entity & Relationship Modelling", _step_entity_modelling),
-    (3, "OWL2 Axiom Authoring",           _step_axioms),
-    (4, "Property Definitions",           _step_datatype_properties),
-    (5, "TTL Serialisation",              _step_serialisation),
-    (6, "SHACL Validation",               _step_shacl_validation),
+    (3, "OWL2 Axiom Authoring",            _step_axioms),
+    (4, "Property Definitions",            _step_datatype_properties),
+    (5, "TTL Serialisation",               _step_serialisation),
+    (6, "SHACL Validation",                _step_shacl_validation),
 ]
 
 
-def run_curation() -> Generator[StageResult, None, None]:
-    """Yield a StageResult per curation step. Mirrors pipeline.run.run_pipeline shape."""
+def run_curation(use_case: UseCase) -> Generator[StageResult, None, None]:
+    """Yield a StageResult per curation step against the active use case."""
     g = Graph()
-    g.parse(str(ONTOLOGY_PATH), format="turtle")
+    g.parse(str(use_case.ontology_path), format="turtle")
 
     for n, name, fn in STEPS:
         result = StageResult(stage=n, name=name, status="running")
@@ -238,7 +232,7 @@ def run_curation() -> Generator[StageResult, None, None]:
 
         t0 = time.time()
         try:
-            logs = fn(g)
+            logs = fn(g, use_case)
             result.logs = logs or []
             result.status = "pass"
         except Exception as exc:

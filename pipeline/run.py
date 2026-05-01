@@ -10,8 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Generator
 
-from config import get_settings
-from db import get_driver, run_write, run_query
+from pipeline.use_case import UseCase
 
 from .stage0_preflight import preflight
 from .stage1_init import wipe_and_init
@@ -36,21 +35,20 @@ STAGES = [
     (0, "Preflight Check",       preflight),
     (1, "Wipe + n10s Init",      wipe_and_init),
     (2, "OWL2 Schema Load",      load_schema),
-    (3, "Test Data Load",        load_data),
+    (3, "Data Load",             load_data),
     (4, "Live Data Ingestion",   register_adapters),
     (5, "Entity Resolution",     run_entity_resolution),
     (6, "Validation",            validate),
 ]
 
 
-def run_pipeline() -> Generator[StageResult, None, None]:
-    """Yield a StageResult for each stage as it completes."""
-    settings = get_settings()
-    context: dict = {"settings": settings}
+def run_pipeline(use_case: UseCase) -> Generator[StageResult, None, None]:
+    """Yield a StageResult for each stage of the active use case as it completes."""
+    context: dict = {"use_case": use_case}
 
     for n, name, fn in STAGES:
         result = StageResult(stage=n, name=name, status="running")
-        yield result          # signal "running" to caller
+        yield result
 
         t0 = time.time()
         try:
@@ -63,6 +61,6 @@ def run_pipeline() -> Generator[StageResult, None, None]:
         finally:
             result.duration_ms = int((time.time() - t0) * 1000)
 
-        yield result          # signal "pass" or "fail" with logs
+        yield result
         if result.status == "fail":
             break

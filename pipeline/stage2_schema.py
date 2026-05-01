@@ -3,26 +3,12 @@
 from db import run_write, run_query
 
 
-CONSTRAINTS = [
-    ("wo_status",   "kf-mfg__WorkOrder",       "kf-mfg__woStatus"),
-    ("wo_type",     "kf-mfg__WorkOrder",       "kf-mfg__woType"),
-    ("wo_priority", "kf-mfg__WorkOrder",       "kf-mfg__woPriority"),
-]
-
-INDEXES = [
-    ("kf-mfg__WorkOrder",       "kf-mfg__workOrderId"),
-    ("kf-mfg__Equipment",       "kf-mfg__equipmentId"),
-    ("kf-mfg__Technician",      "kf-mfg__technicianId"),
-    ("kf-mfg__CompliancePolicy","kf-mfg__policyId"),
-    ("kf-mfg__ProductionLine",  "kf-mfg__lineId"),
-]
-
-
 def load_schema(ctx: dict) -> list[str]:
     logs = []
-    s = ctx["settings"]
+    use_case = ctx["use_case"]
+    manifest = use_case.manifest
 
-    with open(s.ontology_ttl_path, "r", encoding="utf-8") as f:
+    with open(use_case.ontology_path, "r", encoding="utf-8") as f:
         payload = f.read()
 
     result = run_query(
@@ -32,19 +18,21 @@ def load_schema(ctx: dict) -> list[str]:
     triples = result[0]["triplesLoaded"] if result else 0
     logs.append(f"PASS  Ontology loaded — {triples} triples")
 
-    # Constraints
-    for name, label, prop in CONSTRAINTS:
+    for spec in manifest.stage2_constraints:
+        label = use_case.label(spec.label)
+        prop = use_case.prop(spec.property)
         run_write(
-            f"CREATE CONSTRAINT {name} IF NOT EXISTS "
+            f"CREATE CONSTRAINT {use_case.slug.replace('-','_')}_{spec.label}_{spec.property} IF NOT EXISTS "
             f"FOR (n:`{label}`) REQUIRE n.`{prop}` IS NOT NULL"
         )
-    logs.append(f"PASS  {len(CONSTRAINTS)}/3 constraints created")
+    logs.append(f"PASS  {len(manifest.stage2_constraints)}/{len(manifest.stage2_constraints)} constraints created")
 
-    # Indexes
-    for label, prop in INDEXES:
+    for spec in manifest.stage2_indexes:
+        label = use_case.label(spec.label)
+        prop = use_case.prop(spec.property)
         run_write(
             f"CREATE INDEX IF NOT EXISTS FOR (n:`{label}`) ON (n.`{prop}`)"
         )
-    logs.append(f"PASS  {len(INDEXES)}/5 indexes created")
+    logs.append(f"PASS  {len(manifest.stage2_indexes)}/{len(manifest.stage2_indexes)} indexes created")
 
     return logs

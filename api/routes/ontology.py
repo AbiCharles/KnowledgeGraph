@@ -1,7 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from pipeline.ontology_curation import run_curation
-from pipeline.run import StageResult
+from pipeline import use_case_registry
 from api.schemas import PipelineRunResponse, StageResultSchema
 
 router = APIRouter()
@@ -9,15 +9,16 @@ router = APIRouter()
 
 @router.post("/curate", response_model=PipelineRunResponse)
 def curate_ontology():
-    """Run the 6-step ontology curation against ontology/kf-mfg-workorder.ttl.
+    """Run the 6-step ontology curation against the active use case's ontology TTL."""
+    try:
+        use_case = use_case_registry.get_active()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
-    Reuses the PipelineRunResponse shape so the frontend can render curation
-    steps with the same component as hydration stages.
-    """
     completed: list[StageResultSchema] = []
     overall = "pass"
 
-    for result in run_curation():
+    for result in run_curation(use_case):
         if result.status in ("pass", "fail"):
             completed.append(StageResultSchema(**vars(result)))
         if result.status == "fail":

@@ -1,90 +1,83 @@
-"""Stage 5 — Entity Resolution: detect and merge duplicate WorkOrders."""
+"""Stage 5 — Entity Resolution: run manifest-declared rules and merge duplicates.
 
+Each rule is a Cypher query that returns rows with at minimum
+  canonical_eid, duplicate_eid, canonical_id, duplicate_id
+
+For every row, this stage copies merge metadata onto the canonical node and
+DETACH DELETEs the duplicate. If the manifest has no rules, the stage is a no-op.
+"""
 from db import run_query, run_write
-
-
-# Confidence thresholds
-AUTO_MERGE_THRESHOLD = 0.85
-HUMAN_REVIEW_THRESHOLD = 0.70
 
 
 def run_entity_resolution(ctx: dict) -> list[str]:
     logs = []
+    use_case = ctx["use_case"]
+    rules = use_case.manifest.stage5_er_rules
 
-    before = run_query("MATCH (wo:`kf-mfg__WorkOrder`) RETURN count(wo) AS n")[0]["n"]
-    logs.append(f"INFO  WorkOrders before ER: {before}")
+    if not rules:
+        logs.append("INFO  No ER rules declared in manifest, skipping")
+        return logs
 
-    merged_total = 0
+    # Count nodes of any in-scope class before/after for a meaningful summary
+    in_scope_labels = [use_case.label(c) for c in use_case.manifest.in_scope_classes if c != "IngestionAdapter"]
+    before = _count_in_scope(in_scope_labels)
+    logs.append(f"INFO  In-scope nodes before ER: {before}")
 
-    # ── Rule ER-001: Exact primary key match ─────────────────────────────────
-    pairs = run_query("""
-        MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'SAP-PM'})
-        MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'MES-PROD'})
-        WHERE a.`kf-mfg__workOrderId` = b.`kf-mfg__workOrderId`
-        RETURN a.`kf-mfg__workOrderId` AS woId
-    """)
-    for p in pairs:
-        _merge(p["woId"], "ER-001", 1.0)
-        merged_total += 1
-    logs.append(f"PASS  ER-001 (exact ID): {len(pairs)} pairs merged (confidence 1.00)")
+    p_merged_from   = use_case.prop("mergedFrom")
+    p_merge_method  = use_case.prop("mergeMethod")
+    p_merge_conf    = use_case.prop("mergeConfidence")
 
-    # ── Rule ER-002: Cross-reference number match ─────────────────────────────
-    pairs2 = run_query("""
-        MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'SAP-PM'})
-        MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'MES-PROD'})
-        WHERE a.`kf-mfg__crossRefId` IS NOT NULL
-          AND a.`kf-mfg__crossRefId` = b.`kf-mfg__crossRefId`
-          AND NOT (a)-[:`kf-mfg__mergedInto`]->()
-        RETURN a.`kf-mfg__workOrderId` AS sapId, b.`kf-mfg__workOrderId` AS mesId
-    """)
-    for p in pairs2:
-        _merge_pair(p["sapId"], p["mesId"], "ER-002", 0.99)
-        merged_total += 1
-    logs.append(f"PASS  ER-002 (cross-ref): {len(pairs2)} pairs merged (confidence 0.99)")
+    total_merged = 0
+    for rule in rules:
+        try:
+            pairs = run_query(rule.cypher)
+        except Exception as exc:
+            logs.append(f"WARN  {rule.id} cypher failed: {exc}")
+            continue
 
-    # ── Rule ER-003: Fuzzy description + same equipment + same date ───────────
-    pairs3 = run_query("""
-        MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'SAP-PM'})
-        MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'MES-PROD'})
-        WHERE a.`kf-mfg__eqId` = b.`kf-mfg__eqId`
-          AND a.`kf-mfg__scheduledStart` = b.`kf-mfg__scheduledStart`
-          AND a.`kf-mfg__woType` = b.`kf-mfg__woType`
-          AND NOT (a)-[:`kf-mfg__mergedInto`]->()
-          AND NOT (b)-[:`kf-mfg__mergedInto`]->()
-        RETURN a.`kf-mfg__workOrderId` AS sapId, b.`kf-mfg__workOrderId` AS mesId
-    """)
-    for p in pairs3:
-        _merge_pair(p["sapId"], p["mesId"], "ER-003", 0.91)
-        merged_total += 1
-    logs.append(f"PASS  ER-003/004/005 (fuzzy+fingerprint): {len(pairs3)} pairs merged (confidence 0.91)")
+        merged_for_rule = 0
+        for pair in pairs:
+            canonical_eid = pair.get("canonical_eid")
+            duplicate_eid = pair.get("duplicate_eid")
+            canonical_id  = pair.get("canonical_id", "?")
+            duplicate_id  = pair.get("duplicate_id", "?")
+            if not canonical_eid or not duplicate_eid or canonical_eid == duplicate_eid:
+                continue
+            try:
+                run_write(
+                    f"""
+                    MATCH (a) WHERE elementId(a) = $canonical_eid
+                    MATCH (b) WHERE elementId(b) = $duplicate_eid
+                    SET a.`{p_merged_from}`  = $duplicate_id,
+                        a.`{p_merge_method}` = $rule_id,
+                        a.`{p_merge_conf}`   = $confidence
+                    DETACH DELETE b
+                    """,
+                    {
+                        "canonical_eid": canonical_eid,
+                        "duplicate_eid": duplicate_eid,
+                        "duplicate_id":  duplicate_id,
+                        "rule_id":       rule.id,
+                        "confidence":    rule.confidence,
+                    },
+                )
+                merged_for_rule += 1
+            except Exception as exc:
+                logs.append(f"WARN  {rule.id} merge {duplicate_id} -> {canonical_id} failed: {exc}")
 
-    after = run_query("MATCH (wo:`kf-mfg__WorkOrder`) RETURN count(wo) AS n")[0]["n"]
-    logs.append(f"PASS  WorkOrders after ER: {after} · merged: {merged_total} · HRQ: 0")
+        total_merged += merged_for_rule
+        logs.append(f"PASS  {rule.id} ({rule.description}): {merged_for_rule} pair(s) merged at confidence {rule.confidence:.2f}")
 
+    after = _count_in_scope(in_scope_labels)
+    logs.append(f"PASS  In-scope nodes after ER: {after} · merged: {total_merged} · HRQ: 0")
     return logs
 
 
-def _merge(wo_id: str, rule: str, confidence: float) -> None:
-    """Mark a WorkOrder as the canonical master (already same ID across sources)."""
-    run_write("""
-        MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__workOrderId`: $woId,
-                                       `kf-mfg__sourceSystem`: 'MES-PROD'})
-        MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__workOrderId`: $woId,
-                                       `kf-mfg__sourceSystem`: 'SAP-PM'})
-        SET a.`kf-mfg__mergedFrom`   = b.`kf-mfg__workOrderId`,
-            a.`kf-mfg__mergeMethod`  = $rule,
-            a.`kf-mfg__mergeConfidence` = $confidence
-        DETACH DELETE b
-    """, {"woId": wo_id, "rule": rule, "confidence": confidence})
-
-
-def _merge_pair(sap_id: str, mes_id: str, rule: str, confidence: float) -> None:
-    """Merge MES duplicate into SAP master."""
-    run_write("""
-        MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__workOrderId`: $mesId})
-        MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__workOrderId`: $sapId})
-        SET a.`kf-mfg__mergedFrom`      = b.`kf-mfg__workOrderId`,
-            a.`kf-mfg__mergeMethod`     = $rule,
-            a.`kf-mfg__mergeConfidence` = $confidence
-        DETACH DELETE b
-    """, {"sapId": sap_id, "mesId": mes_id, "rule": rule, "confidence": confidence})
+def _count_in_scope(labels: list[str]) -> int:
+    if not labels:
+        return 0
+    union_clauses = " UNION ALL ".join(
+        f"MATCH (n:`{label}`) RETURN n" for label in labels
+    )
+    rows = run_query(f"CALL {{ {union_clauses} }} RETURN count(n) AS n")
+    return rows[0]["n"] if rows else 0

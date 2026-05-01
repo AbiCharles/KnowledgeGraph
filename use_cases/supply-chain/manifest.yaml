@@ -1,0 +1,291 @@
+slug: supply-chain
+name: Global Supply Chain
+description: >-
+  Multi-region supply chain knowledge graph. Purchase orders flow from two
+  source systems (ERP-SAP via OData and OracleSCM via REST/JSON) through
+  suppliers, products, warehouses, shipments and carriers. Three agents
+  surface supplier risk, logistics performance, and inventory pressure.
+
+prefix: sc
+namespace: http://knowledgefabric.tcs.com/ontology/supplychain#
+extra_prefixes:
+  owl:     http://www.w3.org/2002/07/owl#
+  rdf:     http://www.w3.org/1999/02/22-rdf-syntax-ns#
+  rdfs:    http://www.w3.org/2000/01/rdf-schema#
+  xsd:     http://www.w3.org/2001/XMLSchema#
+  skos:    http://www.w3.org/2004/02/skos/core#
+  dcterms: http://purl.org/dc/terms/
+
+in_scope_classes:
+  - PurchaseOrder
+  - Supplier
+  - Product
+  - Warehouse
+  - Shipment
+  - Carrier
+  - IngestionAdapter
+
+visualization:
+  PurchaseOrder:    {color: "#1F6B8C", icon: O, size: 15}
+  Supplier:         {color: "#7A3B2E", icon: S, size: 19}
+  Product:          {color: "#5B4A8C", icon: P, size: 17}
+  Warehouse:        {color: "#0E7C7B", icon: W, size: 21}
+  Shipment:         {color: "#fbbf24", icon: H, size: 14}
+  Carrier:          {color: "#2A6B3C", icon: C, size: 16}
+  IngestionAdapter: {color: "#3a3f47", icon: A, size: 14}
+
+stage2_constraints:
+  - {label: PurchaseOrder, property: poStatus}
+  - {label: PurchaseOrder, property: poId}
+  - {label: Shipment,      property: shipmentStatus}
+
+stage2_indexes:
+  - {label: PurchaseOrder, property: poId}
+  - {label: Supplier,      property: supplierId}
+  - {label: Product,       property: productId}
+  - {label: Warehouse,     property: warehouseId}
+  - {label: Shipment,      property: shipmentId}
+  - {label: Carrier,       property: carrierId}
+
+stage4_adapters:
+  - adapter_id:    src-erp-sap
+    source_system: ERP-SAP
+    protocol:      OData-v4
+    sync_mode:     INCREMENTAL
+    target_class:  PurchaseOrder
+    match_property: sourceSystem
+  - adapter_id:    src-oracle-scm
+    source_system: OracleSCM
+    protocol:      REST-JSON
+    sync_mode:     INCREMENTAL
+    target_class:  PurchaseOrder
+    match_property: sourceSystem
+
+stage5_er_rules:
+  - id: ER-001
+    description: "Exact poId match across ERP-SAP and OracleSCM"
+    confidence: 1.00
+    cypher: |
+      MATCH (a:`sc__PurchaseOrder` {`sc__sourceSystem`: 'ERP-SAP'})
+      MATCH (b:`sc__PurchaseOrder` {`sc__sourceSystem`: 'OracleSCM'})
+      WHERE a.`sc__poId` = b.`sc__poId`
+      RETURN elementId(a) AS canonical_eid, elementId(b) AS duplicate_eid,
+             a.`sc__poId` AS canonical_id, b.`sc__poId` AS duplicate_id
+
+  - id: ER-002
+    description: "Cross-reference key match (different IDs, same crossRefId)"
+    confidence: 0.99
+    cypher: |
+      MATCH (a:`sc__PurchaseOrder` {`sc__sourceSystem`: 'ERP-SAP'})
+      MATCH (b:`sc__PurchaseOrder` {`sc__sourceSystem`: 'OracleSCM'})
+      WHERE a.`sc__crossRefId` IS NOT NULL
+        AND a.`sc__crossRefId` = b.`sc__crossRefId`
+      RETURN elementId(a) AS canonical_eid, elementId(b) AS duplicate_eid,
+             a.`sc__poId` AS canonical_id, b.`sc__poId` AS duplicate_id
+
+stage6_checks:
+  - {id: VC-C1, kind: count_at_least, severity: critical, label: PurchaseOrder, threshold: 10, description: "PurchaseOrder count >= 10"}
+  - {id: VC-C2, kind: count_at_least, severity: critical, label: Supplier,      threshold: 3,  description: "Supplier count >= 3"}
+  - {id: VC-C3, kind: count_at_least, severity: critical, label: Warehouse,     threshold: 2,  description: "Warehouse count >= 2"}
+  - {id: VC-C4, kind: no_duplicates,  severity: critical, label: PurchaseOrder, property: poId, description: "No duplicate poIds"}
+  - id: VC-W1
+    kind: cypher
+    severity: warning
+    description: "Every PO has a supplier link"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)
+      WHERE NOT (po)-[:`sc__placedWith`]->()
+      RETURN count(po) = 0 AS passed, count(po) AS unlinked
+  - id: VC-W2
+    kind: cypher
+    severity: warning
+    description: "Every PO has a destination warehouse"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)
+      WHERE NOT (po)-[:`sc__shipsTo`]->()
+      RETURN count(po) = 0 AS passed, count(po) AS unrouted
+  - id: VC-W3
+    kind: cypher
+    severity: warning
+    description: "All POs sourced to an adapter"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)
+      WHERE NOT (po)-[:`sc__sourcedFrom`]->()
+      RETURN count(po) = 0 AS passed, count(po) AS unsourced
+  - id: VC-W4
+    kind: cypher
+    severity: warning
+    description: "3-hop connectivity: PO -> Supplier and Shipment -> PO -> Warehouse reachable"
+    cypher: |
+      MATCH path = (s:`sc__Shipment`)-[:`sc__transports`]->(po:`sc__PurchaseOrder`)-[:`sc__shipsTo`]->(:`sc__Warehouse`)
+      RETURN count(path) > 0 AS passed, count(path) AS path_count
+
+examples:
+  - label: "Show me all purchase orders"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)
+      RETURN po.`sc__poId` AS id, po.`sc__poStatus` AS status, po.`sc__poPriority` AS priority, po.`sc__sourceSystem` AS source, po.`sc__orderValueUSD` AS valueUSD
+      ORDER BY id
+  - label: "Which orders go to which supplier?"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)-[:`sc__placedWith`]->(s:`sc__Supplier`)
+      RETURN po.`sc__poId` AS purchaseOrder, po.`sc__poStatus` AS status, s.`sc__supplierId` AS supplierId, s.`sc__name` AS supplier, s.`sc__country` AS country
+  - label: "Full chain: PO to supplier to product"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)-[:`sc__placedWith`]->(s:`sc__Supplier`)
+      MATCH (po)-[:`sc__contains`]->(p:`sc__Product`)
+      RETURN po.`sc__poId` AS purchaseOrder, s.`sc__name` AS supplier, p.`sc__sku` AS sku, p.`sc__name` AS product
+  - label: "Show me URGENT priority orders"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)
+      WHERE po.`sc__poPriority` = "URGENT"
+      RETURN po.`sc__poId` AS id, po.`sc__poStatus` AS status, po.`sc__sourceSystem` AS source, po.`sc__orderValueUSD` AS valueUSD, po.`sc__requestedDelivery` AS requestedDelivery
+  - label: "Which orders were merged duplicates?"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)
+      WHERE po.`sc__mergedFrom` IS NOT NULL
+      RETURN po.`sc__poId` AS canonical, po.`sc__mergedFrom` AS mergedFrom, po.`sc__mergeMethod` AS method, po.`sc__sourceSystem` AS source
+  - label: "Pending shipments (not yet delivered)"
+    cypher: |
+      MATCH (s:`sc__Shipment`)
+      WHERE s.`sc__shipmentStatus` <> "DELIVERED"
+      RETURN s.`sc__shipmentId` AS id, s.`sc__shipmentStatus` AS status, s.`sc__trackingNumber` AS tracking, s.`sc__eta` AS eta, s.`sc__isLate` AS late
+  - label: "Late shipments only"
+    cypher: |
+      MATCH (s:`sc__Shipment`)-[:`sc__transports`]->(po:`sc__PurchaseOrder`)
+      WHERE s.`sc__isLate` = true
+      RETURN s.`sc__shipmentId` AS shipment, po.`sc__poId` AS purchaseOrder, po.`sc__poPriority` AS priority, s.`sc__eta` AS eta
+  - label: "How many orders per supplier?"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)-[:`sc__placedWith`]->(s:`sc__Supplier`)
+      RETURN s.`sc__supplierId` AS supplierId, s.`sc__name` AS supplier, count(po) AS orderCount, sum(po.`sc__orderValueUSD`) AS totalValueUSD
+      ORDER BY orderCount DESC
+  - label: "Which warehouses receive the most?"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)-[:`sc__shipsTo`]->(w:`sc__Warehouse`)
+      RETURN w.`sc__warehouseId` AS warehouseId, w.`sc__name` AS warehouse, w.`sc__region` AS region, count(po) AS inboundOrders
+      ORDER BY inboundOrders DESC
+  - label: "Show me ERP-SAP orders only"
+    cypher: |
+      MATCH (po:`sc__PurchaseOrder`)
+      WHERE po.`sc__sourceSystem` = "ERP-SAP"
+      RETURN po.`sc__poId` AS id, po.`sc__poStatus` AS status, po.`sc__poPriority` AS priority, po.`sc__orderValueUSD` AS valueUSD
+  - label: "Carrier on-time performance"
+    cypher: |
+      MATCH (s:`sc__Shipment`)-[:`sc__assignedTo`]->(c:`sc__Carrier`)
+      RETURN c.`sc__name` AS carrier, c.`sc__mode` AS mode, c.`sc__onTimePct` AS publishedOnTimePct, count(s) AS shipmentCount, sum(CASE WHEN s.`sc__isLate` THEN 1 ELSE 0 END) AS lateCount
+      ORDER BY shipmentCount DESC
+
+nl_rules:
+  - {pattern: "urgent",                                 example_index: 3}
+  - {pattern: "merg|duplicate|er result",               example_index: 4}
+  - {pattern: "pending|in.?transit|not.?delivered",     example_index: 5}
+  - {pattern: "late|delay",                             example_index: 6}
+  - {pattern: "per supplier|how many.*supplier|by supplier", example_index: 7}
+  - {pattern: "warehouse.*receive|warehouse.*most|inbound", example_index: 8}
+  - {pattern: "erp.?sap|sap",                           example_index: 9}
+  - {pattern: "carrier|on.?time|fedex|dhl|maersk",      example_index: 10}
+  - {pattern: "chain|full.*chain|product.*supplier|supplier.*product", example_index: 2}
+  - {pattern: "supplier",                               example_index: 1}
+  - {pattern: "all.*order|list.*order|show.*order|purchase.*order", example_index: 0}
+
+agents:
+  - id: supply_risk_analyst
+    name: Supply Risk Analyst
+    icon: "&#9888;"
+    role: "Identifies single-source dependencies and supplier concentration risk"
+    task: |
+      Analyse supplier dependencies in the supply chain knowledge graph.
+      Identify products that are sourced from only one supplier (single-source risk),
+      suppliers carrying disproportionate share of order value, and any suppliers
+      with reliability scores below 0.90. Recommend mitigation actions.
+    cypher_hint: |
+      MATCH (p:`sc__Product`)-[:`sc__suppliedBy`]->(s:`sc__Supplier`)
+      WITH p, collect(s) AS suppliers
+      RETURN p.`sc__sku` AS sku, p.`sc__name` AS product, size(suppliers) AS supplierCount,
+             [s IN suppliers | s.`sc__name`] AS supplierNames
+      ORDER BY supplierCount
+    system_prompt: |
+      You are the Supply Risk Analyst agent for a global supply chain knowledge graph.
+
+      Your job is to:
+      1. Query for all Products and aggregate by their suppliedBy Supplier
+      2. Identify single-source products (only one supplier)
+      3. Compute total order value per supplier (sum of orderValueUSD across PurchaseOrders placedWith that supplier)
+      4. Flag any supplier carrying more than 30% of total order value (concentration risk)
+      5. Flag any supplier with reliabilityScore < 0.90
+      6. For each risk, recommend a mitigation: dual-sourcing candidates, supplier diversification,
+         buffer-stock increases, or contract renegotiation
+
+      Produce a structured response with:
+      - A table of single-source products with their sole supplier
+      - A supplier concentration table (supplier, total value, share %)
+      - A reliability flag list
+      - Concrete mitigation recommendations citing specific products and suppliers
+
+      Be specific and reference actual Product SKUs, Supplier IDs/names, and percentages
+      from the graph. Do not guess — query everything you need.
+
+  - id: logistics_optimizer
+    name: Logistics Optimizer
+    icon: "&#9881;"
+    role: "Ranks carriers by on-time performance and flags chronically-late lanes"
+    task: |
+      Analyse the carrier and shipment data. Rank carriers by their actual on-time
+      performance (computed from isLate field across shipments) versus their published
+      onTimePct. Identify any warehouse-region pairs that consistently receive late
+      shipments. Recommend carrier reallocations.
+    cypher_hint: |
+      MATCH (s:`sc__Shipment`)-[:`sc__assignedTo`]->(c:`sc__Carrier`)
+      RETURN c.`sc__name` AS carrier, c.`sc__mode` AS mode,
+             count(s) AS totalShipments,
+             sum(CASE WHEN s.`sc__isLate` THEN 1 ELSE 0 END) AS lateCount,
+             c.`sc__onTimePct` AS publishedOnTime
+    system_prompt: |
+      You are the Logistics Optimizer agent for a global supply chain knowledge graph.
+
+      Your job is to:
+      1. Query Shipments grouped by Carrier; compute actual on-time rate from isLate
+      2. Compare actual on-time rate to the carrier's publishedOnTimePct field
+      3. Identify carriers underperforming their published rate by more than 10 points
+      4. Find any Warehouse with > 1 late inbound shipment in the dataset
+      5. Recommend carrier reallocations: which late lanes to switch to better-performing carriers,
+         and which carriers should pick up shipments from underperformers
+
+      Produce a structured response with:
+      - A carrier scorecard table (carrier, mode, total shipments, late count, actual %, published %, gap)
+      - A warehouse-late-inbound table
+      - Reallocation recommendations citing specific carriers and lanes
+
+      Be specific and reference actual Carrier IDs/names, Warehouse IDs/names, and Shipment IDs.
+
+  - id: inventory_planner
+    name: Inventory Planner
+    icon: "&#9707;"
+    role: "Identifies warehouses with high inbound pressure relative to capacity"
+    task: |
+      Analyse inbound order pressure across warehouses. Compute total inbound order
+      value and unit quantity per warehouse. Compare against capacity and current
+      utilisation. Identify warehouses at risk of overflow and recommend rebalancing.
+    cypher_hint: |
+      MATCH (po:`sc__PurchaseOrder`)-[:`sc__shipsTo`]->(w:`sc__Warehouse`)
+      RETURN w.`sc__warehouseId` AS warehouseId, w.`sc__name` AS warehouse, w.`sc__region` AS region,
+             w.`sc__capacityUnits` AS capacity, w.`sc__utilisationPct` AS currentUtilPct,
+             count(po) AS inboundOrders, sum(po.`sc__quantity`) AS inboundUnits
+      ORDER BY inboundUnits DESC
+    system_prompt: |
+      You are the Inventory Planner agent for a global supply chain knowledge graph.
+
+      Your job is to:
+      1. For each Warehouse, compute total inbound units (sum of PurchaseOrder.quantity for POs shipsTo it)
+      2. Project post-arrival utilisation: currentUtilPct + (inboundUnits / capacityUnits * 100)
+      3. Flag any warehouse projected to exceed 95% utilisation
+      4. Identify which inbound POs (especially URGENT/HIGH priority) are heading to over-capacity warehouses
+      5. Recommend rebalancing: which orders could be redirected to under-utilised warehouses in the same region
+
+      Produce a structured response with:
+      - A warehouse capacity table (current util, inbound units, projected util, status)
+      - A list of URGENT/HIGH POs heading to over-capacity warehouses
+      - Concrete rebalancing recommendations citing specific PO IDs and warehouse IDs
+
+      Be specific. Use real warehouseId, poId, and numbers from the graph.

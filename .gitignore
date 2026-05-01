@@ -9,3 +9,6 @@ dist/
 build/
 *.egg-info/
 .DS_Store
+
+# Use-case registry runtime state (which bundle is currently active)
+use_cases/.active

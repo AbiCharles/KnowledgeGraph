@@ -1,0 +1,323 @@
+slug: kf-mfg-workorder
+name: Manufacturing Maintenance
+description: >-
+  Work orders, equipment, technicians, compliance policies and ingestion
+  adapters for a manufacturing maintenance operations knowledge graph.
+  Captures preventive, corrective, and inspection maintenance jobs from
+  two source systems (SAP-PM via OData and MES-PROD via REST).
+
+prefix: kf-mfg
+namespace: http://knowledgefabric.tcs.com/ontology/manufacturing#
+extra_prefixes:
+  kf:      http://knowledgefabric.tcs.com/ontology/core#
+  owl:     http://www.w3.org/2002/07/owl#
+  rdf:     http://www.w3.org/1999/02/22-rdf-syntax-ns#
+  rdfs:    http://www.w3.org/2000/01/rdf-schema#
+  xsd:     http://www.w3.org/2001/XMLSchema#
+  sh:      http://www.w3.org/ns/shacl#
+  skos:    http://www.w3.org/2004/02/skos/core#
+  dcterms: http://purl.org/dc/terms/
+  prov:    http://www.w3.org/ns/prov#
+
+in_scope_classes:
+  - WorkOrder
+  - Equipment
+  - ProductionLine
+  - Technician
+  - CompliancePolicy
+  - IngestionAdapter
+
+visualization:
+  WorkOrder:        {color: "#1F6B8C", icon: W, size: 15}
+  Equipment:        {color: "#5B4A8C", icon: E, size: 19}
+  ProductionLine:   {color: "#0E7C7B", icon: L, size: 21}
+  CompliancePolicy: {color: "#7A3B2E", icon: C, size: 17}
+  Technician:       {color: "#2A6B3C", icon: T, size: 14}
+  IngestionAdapter: {color: "#3a3f47", icon: A, size: 14}
+
+stage2_constraints:
+  - {label: WorkOrder, property: woStatus}
+  - {label: WorkOrder, property: woType}
+  - {label: WorkOrder, property: woPriority}
+
+stage2_indexes:
+  - {label: WorkOrder,        property: workOrderId}
+  - {label: Equipment,        property: equipmentId}
+  - {label: Technician,       property: technicianId}
+  - {label: CompliancePolicy, property: policyId}
+  - {label: ProductionLine,   property: lineId}
+
+stage4_adapters:
+  - adapter_id:    src-sap-pm
+    source_system: SAP-PM
+    protocol:      OData-v4
+    sync_mode:     INCREMENTAL
+  - adapter_id:    src-mes-prod
+    source_system: MES-PROD
+    protocol:      REST-JSON
+    sync_mode:     INCREMENTAL
+
+stage5_er_rules:
+  - id: ER-001
+    description: "Exact primary key match across SAP-PM and MES-PROD"
+    confidence: 1.00
+    cypher: |
+      MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'SAP-PM'})
+      MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'MES-PROD'})
+      WHERE a.`kf-mfg__workOrderId` = b.`kf-mfg__workOrderId`
+      RETURN elementId(a) AS canonical_eid, elementId(b) AS duplicate_eid,
+             a.`kf-mfg__workOrderId` AS canonical_id, b.`kf-mfg__workOrderId` AS duplicate_id
+
+  - id: ER-002
+    description: "Cross-reference number match (different IDs, same crossRefId)"
+    confidence: 0.99
+    cypher: |
+      MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'SAP-PM'})
+      MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'MES-PROD'})
+      WHERE a.`kf-mfg__crossRefId` IS NOT NULL
+        AND a.`kf-mfg__crossRefId` = b.`kf-mfg__crossRefId`
+      RETURN elementId(a) AS canonical_eid, elementId(b) AS duplicate_eid,
+             a.`kf-mfg__workOrderId` AS canonical_id, b.`kf-mfg__workOrderId` AS duplicate_id
+
+  - id: ER-003
+    description: "Fuzzy fingerprint match: same equipment, scheduledStart, woType"
+    confidence: 0.91
+    cypher: |
+      MATCH (a:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'SAP-PM'})
+      MATCH (b:`kf-mfg__WorkOrder` {`kf-mfg__sourceSystem`: 'MES-PROD'})
+      WHERE a.`kf-mfg__eqId` = b.`kf-mfg__eqId`
+        AND a.`kf-mfg__scheduledStart` = b.`kf-mfg__scheduledStart`
+        AND a.`kf-mfg__woType` = b.`kf-mfg__woType`
+      RETURN elementId(a) AS canonical_eid, elementId(b) AS duplicate_eid,
+             a.`kf-mfg__workOrderId` AS canonical_id, b.`kf-mfg__workOrderId` AS duplicate_id
+
+stage6_checks:
+  - {id: VC-C1, kind: count_at_least, severity: critical, label: WorkOrder, threshold: 20, description: "WorkOrder count >= 20"}
+  - {id: VC-C2, kind: count_equals,   severity: critical, label: Equipment, value: 5,     description: "Equipment count == 5"}
+  - {id: VC-C3, kind: no_duplicates,  severity: critical, label: WorkOrder, property: workOrderId, description: "No duplicate workOrderIds"}
+  - {id: VC-C4, kind: no_orphans,     severity: critical, label: WorkOrder, description: "No orphaned WorkOrder nodes"}
+  - id: VC-W1
+    kind: cypher
+    severity: warning
+    description: "No WorkOrders missing sourceSystem provenance"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__sourceSystem` IS NULL
+      RETURN count(wo) = 0 AS passed, count(wo) AS gap_count
+  - id: VC-W2
+    kind: cypher
+    severity: warning
+    description: "HRQ pending queue is empty"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__hrqPending` = true
+      RETURN count(wo) = 0 AS passed, count(wo) AS pending_count
+  - id: VC-W3
+    kind: cypher
+    severity: warning
+    description: "All WorkOrders sourced to an adapter"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE NOT (wo)-[:`kf-mfg__sourcedFrom`]->()
+      RETURN count(wo) = 0 AS passed, count(wo) AS unsourced_count
+  - id: VC-W4
+    kind: cypher
+    severity: warning
+    description: "3-hop connectivity (WorkOrder -> Equipment -> ProductionLine) reachable"
+    cypher: |
+      MATCH path = (wo:`kf-mfg__WorkOrder`)
+            -[:`kf-mfg__assignedToEquipment`]->
+            (:`kf-mfg__Equipment`)
+            -[:`kf-mfg__onProductionLine`]->
+            (:`kf-mfg__ProductionLine`)
+      RETURN count(path) > 0 AS passed, count(path) AS path_count
+
+examples:
+  - label: "Show me all work orders"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      RETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source
+      ORDER BY id
+  - label: "Which work orders are assigned to which equipment?"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)
+      RETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, eq.`kf-mfg__equipmentId` AS equipment, eq.`kf-mfg__name` AS equipmentName
+  - label: "Show the full chain: work order to equipment to production line"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)-[:`kf-mfg__onProductionLine`]->(pl:`kf-mfg__ProductionLine`)
+      RETURN wo.`kf-mfg__workOrderId` AS workOrder, eq.`kf-mfg__equipmentId` AS equipment, pl.`kf-mfg__lineId` AS line, pl.`kf-mfg__name` AS lineName
+  - label: "Show me all URGENT priority work orders"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__woPriority` = "URGENT"
+      RETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__description` AS description
+  - label: "Which work orders were merged from duplicate records?"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__mergedFrom` IS NOT NULL
+      RETURN wo.`kf-mfg__workOrderId` AS canonical, wo.`kf-mfg__mergedFrom` AS mergedFrom, wo.`kf-mfg__mergeMethod` AS method, wo.`kf-mfg__sourceSystem` AS source
+  - label: "Which work orders have compliance requirements?"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__governedBy`]->(cp:`kf-mfg__CompliancePolicy`)
+      RETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, cp.`kf-mfg__policyId` AS policy, cp.`kf-mfg__name` AS policyName
+  - label: "Show me corrective work orders that are still open"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__woType` = "CORRECTIVE" AND wo.`kf-mfg__woStatus` = "OPEN"
+      RETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__description` AS description
+  - label: "Which technicians are assigned to which work orders?"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToTechnician`]->(t:`kf-mfg__Technician`)
+      RETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority, t.`kf-mfg__name` AS technician, t.`kf-mfg__specialisation` AS spec
+  - label: "How many work orders does each piece of equipment have?"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)
+      RETURN eq.`kf-mfg__equipmentId` AS equipment, eq.`kf-mfg__name` AS equipmentName, count(wo) AS totalOrders
+      ORDER BY totalOrders DESC
+  - label: "Show me SAP-PM work orders only"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__sourceSystem` = "SAP-PM"
+      RETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority
+  - label: "Show me all in-progress work orders"
+    cypher: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__woStatus` = "IN_PROGRESS"
+      RETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__scheduledStart` AS scheduled
+
+nl_rules:
+  - {pattern: "urgent",                              example_index: 3}
+  - {pattern: "merg|duplicate|er result",            example_index: 4}
+  - {pattern: "compli|osha|iso|regulat",             example_index: 5}
+  - {pattern: "correct.*open|open.*correct",         example_index: 6}
+  - {pattern: "techni",                              example_index: 7}
+  - {pattern: "workload|how many.*work|equip.*count", example_index: 8}
+  - {pattern: "sap.?pm",                             example_index: 9}
+  - {pattern: "in.?progress|progress",               example_index: 10}
+  - {pattern: "3.?hop|three.?hop|travers|chain|production line", example_index: 2}
+  - {pattern: "equip",                               example_index: 1}
+  - {pattern: "all.*work|list.*work|show.*work|work.*order", example_index: 0}
+
+agents:
+  - id: maintenance_planner
+    name: Maintenance Planner
+    icon: "&#9874;"
+    role: "Prioritises open work orders and checks technician coverage"
+    task: |
+      Analyse all OPEN work orders in the knowledge graph.
+      Identify technician coverage gaps and recommend the best available technician
+      for each unassigned order. Justify each recommendation based on specialisation,
+      grade, certification, and current workload.
+    cypher_hint: |
+      MATCH (wo:`kf-mfg__WorkOrder`)
+      WHERE wo.`kf-mfg__woStatus` = 'OPEN'
+      OPTIONAL MATCH (wo)-[:`kf-mfg__assignedToTechnician`]->(t:`kf-mfg__Technician`)
+      RETURN wo.`kf-mfg__workOrderId` AS id,
+             wo.`kf-mfg__woPriority`  AS priority,
+             wo.`kf-mfg__woType`      AS type,
+             t.`kf-mfg__name`         AS technician
+      ORDER BY priority
+    system_prompt: |
+      You are the Maintenance Planner agent for a manufacturing plant knowledge graph.
+
+      Your job is to:
+      1. Query the knowledge graph for all OPEN work orders
+      2. Rank them by priority (URGENT > HIGH > MEDIUM > LOW)
+      3. For each work order, check whether a technician is assigned via the
+         assignedToTechnician relationship
+      4. Identify work orders with no technician assigned
+      5. For unassigned work orders, query all available technicians and their current
+         active load (how many OPEN or IN_PROGRESS orders they are assigned to)
+      6. Recommend the best technician for each gap, explaining your reasoning in terms
+         of: specialisation match, grade (Senior/Mid/Junior), certification (CMRT/CMRP),
+         and current workload
+
+      Produce a structured response with:
+      - A ranked table of open work orders with technician status
+      - A technician fit assessment for each unassigned order
+      - Clear recommendations with explicit justification
+
+      Be specific and reference actual WorkOrder IDs, Technician IDs, and property values
+      from the graph. Do not guess — query the graph for everything you need.
+
+  - id: compliance_monitor
+    name: Compliance Monitor
+    icon: "&#9673;"
+    role: "Flags open work orders with active regulatory requirements"
+    task: |
+      Identify all work orders in the knowledge graph that are governed by a compliance
+      policy and have not yet been completed. Assess the regulatory exposure and
+      recommend the best technician for any unassigned compliance-critical orders.
+    cypher_hint: |
+      MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__governedBy`]->(cp:`kf-mfg__CompliancePolicy`)
+      WHERE wo.`kf-mfg__woStatus` <> 'COMPLETED'
+      RETURN wo.`kf-mfg__workOrderId` AS workOrder,
+             wo.`kf-mfg__woStatus`   AS status,
+             wo.`kf-mfg__woPriority` AS priority,
+             cp.`kf-mfg__standard`   AS standard
+    system_prompt: |
+      You are the Compliance Monitor agent for a manufacturing plant knowledge graph.
+
+      Your job is to:
+      1. Traverse the governedBy relationship to find work orders linked to compliance
+         policies (OSHA 29 CFR 1910 and ISO 55000)
+      2. Filter for work orders that are NOT in COMPLETED status
+      3. Classify the regulatory exposure by policy type and work order priority
+      4. For any unassigned non-completed OSHA or ISO work orders, assess all 4
+         technicians in the graph for fit, ranked by:
+         - Domain specialisation match to the equipment type
+         - Certification (CMRT preferred for OSHA mechanical/hydraulic work)
+         - Grade (Senior preferred for compliance-critical tasks)
+         - Current active load (OPEN + IN_PROGRESS orders)
+      5. Report which OSHA and ISO orders are compliant (COMPLETED) vs at risk
+
+      Produce a structured response with:
+      - A table of non-completed compliance-linked work orders with policy details
+      - A regulatory risk assessment (CRITICAL / HIGH / MEDIUM) per order
+      - A ranked technician fit table for unassigned orders
+      - A compliance scorecard showing OSHA exposure and ISO status
+
+      Be specific and reference actual WorkOrder IDs, policy names, and technician
+      details from the graph. Do not guess — query the graph for everything you need.
+
+  - id: root_cause_analyst
+    name: Root Cause Analyst
+    icon: "&#9650;"
+    role: "Identifies equipment with highest corrective load"
+    task: |
+      Analyse the corrective maintenance load across all equipment assets in the knowledge
+      graph. Identify which assets and production lines carry the highest risk, and assess
+      whether the right technicians are assigned to address the corrective work.
+    cypher_hint: |
+      MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)
+            -[:`kf-mfg__onProductionLine`]->(pl:`kf-mfg__ProductionLine`)
+      WHERE wo.`kf-mfg__woType` = 'CORRECTIVE'
+      RETURN eq.`kf-mfg__equipmentId` AS equipmentId,
+             eq.`kf-mfg__name`        AS equipment,
+             pl.`kf-mfg__name`        AS productionLine,
+             count(wo)                AS correctiveOrders
+      ORDER BY correctiveOrders DESC
+    system_prompt: |
+      You are the Root Cause Analyst agent for a manufacturing plant knowledge graph.
+
+      Your job is to:
+      1. Traverse the 3-hop path: WorkOrder -[assignedToEquipment]-> Equipment
+         -[onProductionLine]-> ProductionLine
+      2. Filter for CORRECTIVE work order type only
+      3. Aggregate corrective order count per equipment asset
+      4. For each asset, check its current status (OPERATIONAL / UNDER_MAINTENANCE)
+         and identify whether its orders are OPEN, IN_PROGRESS, or SCHEDULED
+      5. Rank assets by risk: UNDER_MAINTENANCE with IN_PROGRESS orders is highest
+      6. For each corrective order, assess whether the assigned technician's
+         specialisation is a strong match for the equipment type
+      7. Flag production lines where multiple assets have concurrent corrective orders
+         (simultaneous line risk)
+
+      Produce a structured response with:
+      - A table of corrective orders aggregated by equipment and production line
+      - A risk ranking of equipment assets with justification
+      - A technician coverage assessment per corrective order showing fit rating
+      - A cross-line risk summary
+
+      Be specific and reference actual WorkOrder IDs, Equipment IDs, Production Line
+      names, and technician assignments from the graph. Do not guess — query everything.
