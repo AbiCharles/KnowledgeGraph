@@ -1,6 +1,11 @@
-"""Stage 4 — Live Data Ingestion: register source adapters and link target nodes."""
+"""Stage 4 — Live Data Ingestion: register source adapters and link target nodes.
 
-from db import run_write, run_query
+All adapter MERGEs run in a single transaction; if any fails the whole batch
+is rolled back so the graph never ends up half-populated. Linking each target
+to its adapter is a separate read-then-write, kept outside the transaction
+because it depends on prior data load.
+"""
+from db import run_query, run_writes_in_tx
 
 
 def register_adapters(ctx: dict) -> list[str]:
@@ -18,8 +23,8 @@ def register_adapters(ctx: dict) -> list[str]:
     p_sync_mode     = use_case.prop("syncMode")
     rel_sourced     = use_case.rel("sourcedFrom")
 
-    for adapter in adapters:
-        run_write(
+    merge_stmts = [
+        (
             f"""
             MERGE (a:IngestionAdapter {{`{p_adapter_id}`: $adapter_id}})
             SET a.`{p_source_system}` = $source_system,
@@ -33,6 +38,10 @@ def register_adapters(ctx: dict) -> list[str]:
                 "sync_mode":     adapter.sync_mode,
             },
         )
+        for adapter in adapters
+    ]
+    run_writes_in_tx(merge_stmts)
+    for adapter in adapters:
         logs.append(f"PASS  Adapter registered: {adapter.source_system} ({adapter.protocol})")
 
     # Link each target node to its adapter via sourcedFrom

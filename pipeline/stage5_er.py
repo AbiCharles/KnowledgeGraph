@@ -18,8 +18,12 @@ def run_entity_resolution(ctx: dict) -> list[str]:
         logs.append("INFO  No ER rules declared in manifest, skipping")
         return logs
 
-    # Count nodes of any in-scope class before/after for a meaningful summary
-    in_scope_labels = [use_case.label(c) for c in use_case.manifest.in_scope_classes if c != "IngestionAdapter"]
+    # Count nodes of any in-scope class before/after for a meaningful summary.
+    # Skip IngestionAdapter — it's pipeline metadata, not an ER target.
+    in_scope_labels = [
+        use_case.label(c) for c in use_case.manifest.in_scope_classes
+        if c != "IngestionAdapter"
+    ]
     before = _count_in_scope(in_scope_labels)
     logs.append(f"INFO  In-scope nodes before ER: {before}")
 
@@ -74,10 +78,17 @@ def run_entity_resolution(ctx: dict) -> list[str]:
 
 
 def _count_in_scope(labels: list[str]) -> int:
+    """Count distinct nodes carrying any of the given labels.
+
+    Uses one Cypher query per label and sums client-side, with a DISTINCT
+    elementId set to avoid double-counting nodes that have multiple in-scope
+    labels (which n10s SHORTEN can produce when a class is also a Resource).
+    """
     if not labels:
         return 0
-    union_clauses = " UNION ALL ".join(
-        f"MATCH (n:`{label}`) RETURN n" for label in labels
-    )
-    rows = run_query(f"CALL {{ {union_clauses} }} RETURN count(n) AS n")
-    return rows[0]["n"] if rows else 0
+    seen: set[str] = set()
+    for label in labels:
+        rows = run_query(f"MATCH (n:`{label}`) RETURN elementId(n) AS eid")
+        for r in rows:
+            seen.add(r["eid"])
+    return len(seen)

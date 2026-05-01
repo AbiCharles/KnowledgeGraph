@@ -5,12 +5,16 @@ in <repo_root>/use_cases/.active (a single line). On first call the registry
 falls back to the first bundle alphabetically if .active is missing.
 """
 from __future__ import annotations
+import logging
+import os
 import re
 import shutil
 from pathlib import Path
 
-from pipeline.use_case import UseCase, Manifest
+from pipeline.use_case import UseCase
 
+
+log = logging.getLogger(__name__)
 
 USE_CASES_DIR = Path(__file__).resolve().parent.parent / "use_cases"
 ACTIVE_FILE = USE_CASES_DIR / ".active"
@@ -36,7 +40,7 @@ def list_bundles() -> list[UseCase]:
         try:
             bundles.append(UseCase.from_dir(USE_CASES_DIR / slug))
         except Exception as exc:
-            print(f"[use_case_registry] skipping {slug}: {exc}")
+            log.warning("Skipping bundle %s: %s", slug, exc)
     return bundles
 
 
@@ -69,10 +73,16 @@ def get_active() -> UseCase:
 
 
 def set_active(slug: str) -> UseCase:
-    """Switch active bundle and return it. Validates the bundle loads first."""
+    """Switch active bundle and return it. Validates the bundle loads first.
+
+    Writes the .active marker atomically via os.replace to avoid torn reads
+    under concurrent activations.
+    """
     uc = load(slug)
     USE_CASES_DIR.mkdir(parents=True, exist_ok=True)
-    ACTIVE_FILE.write_text(slug + "\n")
+    tmp = ACTIVE_FILE.with_suffix(".active.tmp")
+    tmp.write_text(slug + "\n")
+    os.replace(tmp, ACTIVE_FILE)
     return uc
 
 
@@ -80,7 +90,8 @@ def register_uploaded(slug: str, ontology_bytes: bytes, data_bytes: bytes, manif
     """Persist an uploaded bundle to disk.
 
     Validates the slug, parses the manifest, writes all three files, then
-    returns the loaded UseCase. If the slug already exists, it is overwritten.
+    returns the loaded UseCase. If the slug already exists, it is overwritten —
+    callers should check existence first if they need conflict semantics.
     """
     if not SLUG_RE.match(slug):
         raise ValueError(f"Invalid slug {slug!r}: must match {SLUG_RE.pattern}")
@@ -94,8 +105,14 @@ def register_uploaded(slug: str, ontology_bytes: bytes, data_bytes: bytes, manif
     try:
         uc = UseCase.from_dir(bundle_dir)
     except Exception:
-        # Roll back partial writes so the caller doesn't see a half-baked bundle
-        shutil.rmtree(bundle_dir, ignore_errors=True)
+        # Roll back partial writes so the caller doesn't see a half-baked bundle.
+        # Only refuse to delete if THIS slug is explicitly marked active (so we
+        # don't nuke the live working bundle out from under a running pipeline).
+        explicit_active = (
+            ACTIVE_FILE.read_text().strip() if ACTIVE_FILE.exists() else None
+        )
+        if explicit_active != slug:
+            shutil.rmtree(bundle_dir, ignore_errors=True)
         raise
     return uc
 
