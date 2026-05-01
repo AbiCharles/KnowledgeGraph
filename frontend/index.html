@@ -331,7 +331,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
           <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
           RUN CURATION
         </button>
-        <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">Validates ontology/kf-mfg-workorder.ttl with rdflib + pyshacl</span>
+        <span id="ont-toolbar-info" style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">Validates the active bundle's ontology.ttl with rdflib + pyshacl</span>
       </div>
       <div class="pipe-body">
         <div class="pipe-left">
@@ -354,7 +354,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
       <div class="transfer-overlay" id="transfer-overlay" style="display:none">
         <div class="transfer-title" id="transfer-title">Transferring ontology artefacts&hellip;</div>
         <div class="transfer-bar-wrap"><div class="transfer-bar" id="transfer-bar"></div></div>
-        <div class="transfer-sub" id="transfer-sub">kf-mfg-workorder.ttl &rarr; Hydration Pipeline</div>
+        <div class="transfer-sub" id="transfer-sub">ontology.ttl &rarr; Hydration Pipeline</div>
       </div>
     </div>
 
@@ -448,7 +448,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
         </div>
       </div>
       <div id="wrap-cy" style="display:none">
-        <textarea class="cy-ed" id="cypher-input" placeholder="MATCH (wo:`kf-mfg__WorkOrder`) RETURN ..." spellcheck="false"></textarea>
+        <textarea class="cy-ed" id="cypher-input" placeholder="MATCH (n) RETURN n LIMIT 25" spellcheck="false"></textarea>
       </div>
       <div class="qbtns">
         <button class="qrun" onclick="runQuery()">&#9654; RUN</button>
@@ -577,10 +577,10 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 // API CLIENT
 // =============================================================================
 const API = "";
-async function api(path, body){
+async function api(path, body, signal){
   const opts = body
-    ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}
-    : {method:'GET'};
+    ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), signal}
+    : {method:'GET', signal};
   const res = await fetch(API+path, opts);
   if(!res.ok){
     let msg = `HTTP ${res.status}`;
@@ -590,6 +590,7 @@ async function api(path, body){
   return res.json();
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const isAbort = (err) => err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''));
 
 // =============================================================================
 // GRAPH STATE — populated from /query at page load and after each pipeline run
@@ -654,19 +655,41 @@ async function loadGraph(){
 function updateSnapshotChips(){
   const counts = {};
   NODES.forEach(n => { counts[n.type] = (counts[n.type]||0) + 1; });
-  const order = ['WorkOrder','Equipment','ProductionLine','Technician','CompliancePolicy','IngestionAdapter'];
-  const tags = order.filter(t => counts[t]).map(t => `<span class="desc-tag desc-tag-t">${counts[t]} ${t}${counts[t]!==1?'s':''}</span>`);
-  if(!tags.length){
-    document.getElementById('snapshot-tags').innerHTML = '<span class="desc-tag" style="color:var(--amber);border-color:rgba(251,191,36,.4)">Graph empty &mdash; run the Hydration Pipeline to populate it</span>';
+  // Drive the order from the active manifest's in_scope_classes so each bundle
+  // shows its own entity types in its own preferred order. Anything in NODES
+  // that wasn't declared still gets appended at the end.
+  const declared = (MANIFEST && MANIFEST.in_scope_classes) || [];
+  const known = new Set(declared);
+  const trailing = Object.keys(counts).filter(t => !known.has(t)).sort();
+  const order = [...declared, ...trailing];
+  const tagsEl = document.getElementById('snapshot-tags');
+  tagsEl.innerHTML = '';
+  const present = order.filter(t => counts[t]);
+  if(!present.length){
+    const t = document.createElement('span');
+    t.className = 'desc-tag';
+    t.style.cssText = 'color:var(--amber);border-color:rgba(251,191,36,.4)';
+    t.textContent = 'Graph empty — run the Hydration Pipeline to populate it';
+    tagsEl.appendChild(t);
   } else {
-    tags.push('<span class="desc-tag desc-tag-p">Maintenance Planner</span>');
-    tags.push('<span class="desc-tag desc-tag-p">Compliance Monitor</span>');
-    tags.push('<span class="desc-tag desc-tag-p">Root Cause Analyst</span>');
-    document.getElementById('snapshot-tags').innerHTML = tags.join('');
+    present.forEach(t => {
+      const el = document.createElement('span');
+      el.className = 'desc-tag desc-tag-t';
+      el.textContent = `${counts[t]} ${t}${counts[t]!==1?'s':''}`;
+      tagsEl.appendChild(el);
+    });
+    // Surface the manifest's declared agents (purple chips) so the user knows
+    // what's available without flipping to the Agent Ops tab.
+    (MANIFEST?.agents || []).forEach(a => {
+      const el = document.createElement('span');
+      el.className = 'desc-tag desc-tag-p';
+      el.textContent = a.name;
+      tagsEl.appendChild(el);
+    });
   }
   const stats = document.getElementById('kgpstats');
   if(stats){
-    stats.textContent = order.filter(t => counts[t])
+    stats.textContent = present
       .map(t => `${counts[t]} ${t}${counts[t]!==1?'s':''}`)
       .join(' · ') || 'Empty graph';
   }
@@ -749,9 +772,14 @@ function showPipeTab(tab, el){
 function pad(n){ return n<10?'0'+n:n; }
 function tsNow(){ const t=new Date(); return pad(t.getHours())+':'+pad(t.getMinutes())+':'+pad(t.getSeconds()); }
 function addLog(area, level, msg){
-  const fmt = String(msg).replace(/<k>(.*?)<\/k>/g,'<span class="lk">$1</span>').replace(/<v>(.*?)<\/v>/g,'<span class="lv">$1</span>');
+  // Escape the entire message first, then re-enable our two safe tag aliases
+  // (<k>...</k> for keys and <v>...</v> for values). Anything else becomes inert.
+  const safe = escapeHTML(String(msg))
+    .replace(/&lt;k&gt;(.*?)&lt;\/k&gt;/g, '<span class="lk">$1</span>')
+    .replace(/&lt;v&gt;(.*?)&lt;\/v&gt;/g, '<span class="lv">$1</span>');
+  const safeLevel = String(level).replace(/[^A-Z]/g, '').slice(0, 8) || 'INFO';
   const d = document.createElement('div'); d.className = 'lline';
-  d.innerHTML = `<span class="lts">${tsNow()}</span><span class="llv l${level}">${level}</span><span class="lmsg">${fmt}</span>`;
+  d.innerHTML = `<span class="lts">${tsNow()}</span><span class="llv l${safeLevel}">${safeLevel}</span><span class="lmsg">${safe}</span>`;
   area.appendChild(d);
   area.scrollTop = area.scrollHeight;
 }
@@ -768,11 +796,18 @@ function inferLevel(line){
 }
 function trimLevel(line){ return line.replace(/^(PASS|WARN|FAIL|ERROR|STEP|INFO)\s+/, ''); }
 
+let _pAbort = null;
 async function runPipeline(){
-  if(_pRunning) return;
+  if(_pRunning){
+    // Second click while running = cancel.
+    if(_pAbort){ _pAbort.abort(); }
+    return;
+  }
   _pRunning = true;
+  _pAbort = new AbortController();
   const btn = document.getElementById('rbtn');
-  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8"/></svg>CANCEL';
   document.getElementById('reparea').style.display = 'none';
   document.getElementById('kgscrollhint').style.display = 'none';
   const la = document.getElementById('logarea');
@@ -785,7 +820,7 @@ async function runPipeline(){
   addLog(la, 'INFO', 'POST /pipeline/run — awaiting backend (this may take 5–10s)…');
 
   try {
-    const data = await api('/pipeline/run', {});
+    const data = await api('/pipeline/run', {}, _pAbort.signal);
     addDiv(la, '── Pipeline returned ' + data.stages.length + ' stages ──', 'ldiv');
 
     for(let i = 0; i < data.stages.length; i++){
@@ -821,10 +856,12 @@ async function runPipeline(){
     }
 
   } catch(err){
-    addLog(la, 'ERROR', 'Pipeline call failed: ' + err.message);
+    addLog(la, isAbort(err) ? 'WARN' : 'ERROR', isAbort(err) ? 'Pipeline cancelled by user' : ('Pipeline call failed: ' + err.message));
   } finally {
     _pRunning = false;
+    _pAbort = null;
     btn.disabled = false;
+    btn.innerHTML = orig;
   }
 }
 
@@ -851,7 +888,7 @@ function scrollToKG(){ document.getElementById('kgpanel').scrollIntoView({behavi
 // ONTOLOGY CURATION (left tab) — calls real /ontology/curate
 // =============================================================================
 const ONT_STEPS = [
-  {n:1, name:'Domain Scoping',                  sub:'kf-mfg namespace · in-scope class allowlist'},
+  {n:1, name:'Domain Scoping',                  sub:'namespace · in-scope class allowlist'},
   {n:2, name:'Entity & Relationship Modelling', sub:'OWL classes · object properties · domain/range'},
   {n:3, name:'OWL2 Axiom Authoring',            sub:'owl:Restriction · cardinality constraints'},
   {n:4, name:'Property Definitions',            sub:'datatype properties · xsd ranges'},
@@ -859,7 +896,7 @@ const ONT_STEPS = [
   {n:6, name:'SHACL Validation',                sub:'shapes generated · pyshacl validate'}
 ];
 const ONT_PLAIN = [
-  'Before any modelling begins, the boundary of the ontology is agreed: which entities are in scope, which are not. The kf-mfg namespace is declared and every concept is checked against the in-scope allowlist.',
+  'Before any modelling begins, the boundary of the ontology is agreed: which entities are in scope, which are not. The bundle\'s namespace is declared and every concept is checked against the in-scope allowlist.',
   'Each in-scope concept becomes a formal OWL class, and every meaningful connection becomes a typed object property with declared rdfs:domain and rdfs:range.',
   'Cardinality restrictions encode the rules a valid instance must obey — e.g. every WorkOrder must have exactly one status. These materialise as Neo4j constraints in stage 2 of the hydration pipeline.',
   'Every attribute on every class gets a formal datatype property declaration with a defined XSD type (string, dateTime, boolean, decimal). These become typed Neo4j node properties.',
@@ -912,11 +949,17 @@ function showOntTab(tab, el){
   else { dp.style.display = 'none'; la.style.display = 'block'; la.scrollTop = la.scrollHeight; }
 }
 
+let _ontAbort = null;
 async function runCuration(){
-  if(_ontRunning) return;
+  if(_ontRunning){
+    if(_ontAbort){ _ontAbort.abort(); }
+    return;
+  }
   _ontRunning = true;
+  _ontAbort = new AbortController();
   const btn = document.getElementById('ont-rbtn');
-  btn.disabled = true;
+  const origBtn = btn.innerHTML;
+  btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8"/></svg>CANCEL';
   const la = document.getElementById('ont-logarea');
   la.innerHTML = '';
   showOntTab('log', document.getElementById('ont-ltab-log'));
@@ -927,7 +970,7 @@ async function runCuration(){
   addLog(la, 'INFO', 'POST /ontology/curate — awaiting rdflib + pyshacl analysis…');
 
   try {
-    const data = await api('/ontology/curate', {});
+    const data = await api('/ontology/curate', {}, _ontAbort.signal);
     addDiv(la, '── Curation returned ' + data.stages.length + ' steps ──', 'ldiv');
 
     for(let i = 0; i < data.stages.length; i++){
@@ -956,10 +999,12 @@ async function runCuration(){
       setTimeout(startTransfer, 600);
     }
   } catch(err){
-    addLog(la, 'ERROR', 'Curation call failed: ' + err.message);
+    addLog(la, isAbort(err) ? 'WARN' : 'ERROR', isAbort(err) ? 'Curation cancelled by user' : ('Curation call failed: ' + err.message));
   } finally {
     _ontRunning = false;
+    _ontAbort = null;
     btn.disabled = false;
+    btn.innerHTML = origBtn;
   }
 }
 
@@ -972,7 +1017,7 @@ function startTransfer(){
     'Packaging ontology artefacts…',
     'Validating TTL schema…',
     'Transferring to Hydration Pipeline…',
-    'Registering kf-mfg namespace…',
+    'Registering namespace…',
     'Handoff complete — pipeline ready'
   ];
   let pct = 0, msgIdx = 0;
@@ -990,7 +1035,7 @@ function startTransfer(){
     if(pct >= 100){
       clearInterval(iv);
       titl.textContent = messages[messages.length-1];
-      sub.textContent = 'kf-mfg-workorder.ttl → Stage 2: Schema Load';
+      sub.textContent = (MANIFEST?.slug ? MANIFEST.slug + '/' : '') + 'ontology.ttl → Stage 2: Schema Load';
       setTimeout(() => {
         ov.style.display = 'none';
         switchPipeTab('pip');
@@ -1014,8 +1059,16 @@ function selectAgent(i){
   document.querySelectorAll('.agent-card').forEach((c,idx) => c.classList.toggle('agent-sel', idx===i));
   document.getElementById('agent-rbtn').disabled = false;
   document.getElementById('agent-hint').textContent = `Ready: ${AGENTS[i].name}`;
-  document.getElementById('agent-console').innerHTML =
-    '<div class="agent-idle"><div style="font-size:20px;opacity:.25">❖</div><div>Press RUN AGENT to invoke ' + AGENTS[i].name + '</div></div>';
+  const con = document.getElementById('agent-console');
+  con.innerHTML = '';
+  const idle = document.createElement('div');
+  idle.className = 'agent-idle';
+  const eico = document.createElement('div');
+  eico.style.cssText = 'font-size:20px;opacity:.25';
+  eico.textContent = '❖';
+  const msg = document.createElement('div');
+  msg.textContent = 'Press RUN AGENT to invoke ' + AGENTS[i].name;
+  idle.appendChild(eico); idle.appendChild(msg); con.appendChild(idle);
 }
 
 function makePhase(parent, label, color, subtitle){
@@ -1044,10 +1097,18 @@ function typewriter(el, text, speed){
   });
 }
 
+let _agentAbort = null;
 async function runAgent(){
-  if(_agentRunning || _selAgent < 0) return;
+  if(_agentRunning){
+    if(_agentAbort){ _agentAbort.abort(); }
+    return;
+  }
+  if(_selAgent < 0) return;
   _agentRunning = true;
-  document.getElementById('agent-rbtn').disabled = true;
+  _agentAbort = new AbortController();
+  const aBtn = document.getElementById('agent-rbtn');
+  const aOrig = aBtn.innerHTML;
+  aBtn.innerHTML = '<svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><rect x="3" y="3" width="8" height="8"/></svg>CANCEL';
   const ag = AGENTS[_selAgent];
   const con = document.getElementById('agent-console');
   con.innerHTML = '';
@@ -1071,17 +1132,24 @@ async function runAgent(){
   p2.appendChild(execEl);
   con.scrollTop = con.scrollHeight;
 
-  let agentResult = null, agentError = null;
+  let agentResult = null, agentError = null, aborted = false;
   try {
-    agentResult = await api('/agents/run', {agent: ag.id});
+    agentResult = await api('/agents/run', {agent: ag.id}, _agentAbort.signal);
   } catch(err){
-    agentError = err.message;
+    if(isAbort(err)){ aborted = true; }
+    else { agentError = err.message; }
   }
 
+  if(aborted){
+    execEl.innerHTML = `<span style="color:var(--amber)">⏹</span> Agent run cancelled`;
+    _agentRunning = false; _agentAbort = null;
+    aBtn.disabled = false; aBtn.innerHTML = aOrig;
+    return;
+  }
   if(agentError){
-    execEl.innerHTML = `<span style="color:var(--red)">✗</span> Agent error: ${agentError}`;
-    _agentRunning = false;
-    document.getElementById('agent-rbtn').disabled = false;
+    execEl.innerHTML = `<span style="color:var(--red)">✗</span> Agent error: ${escapeHTML(agentError)}`;
+    _agentRunning = false; _agentAbort = null;
+    aBtn.disabled = false; aBtn.innerHTML = aOrig;
     return;
   }
   execEl.innerHTML = `<span style="color:var(--green)">✓</span> Agent returned ${agentResult.result.length} chars of analysis`;
@@ -1110,11 +1178,25 @@ async function runAgent(){
   con.scrollTop = con.scrollHeight;
 
   _agentRunning = false;
-  document.getElementById('agent-rbtn').disabled = false;
+  _agentAbort = null;
+  aBtn.disabled = false;
+  aBtn.innerHTML = aOrig;
 }
 
 function escapeHTML(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Manifest "icon" fields commonly use HTML entities like &#9874; — decode the
+// entity to a single character via textContent (which never executes), so a
+// malicious manifest cannot inject a tag here.
+function decodeEntity(s){
+  if(!s) return '?';
+  const t = document.createElement('textarea');
+  t.innerHTML = String(s);
+  // Strip anything that decoded to a markup character to be safe.
+  const decoded = t.value.replace(/[<>]/g, '');
+  return decoded || '?';
 }
 
 // =============================================================================
@@ -1290,17 +1372,27 @@ function extractSubgraphFromRows(rows){
       if(typeof v === 'string' && idLookup.has(v)) ids.add(v);
     });
   });
-  // If no element-IDs matched, try property-based fallback (e.g., workOrderId / equipmentId)
+  // Property-based fallback for queries that return business identifiers
+  // (e.g. workOrderId, poId). Only consult identifier-shaped properties to
+  // avoid false positives where many nodes share a value like "OPEN" — and
+  // when a property value really does belong to multiple nodes, include them
+  // all rather than silently dropping all but one.
   if(!ids.size){
-    const propIndex = {};
+    const ID_KEY = /(^|_)(id|key|sku|code)$/i;
+    const propIndex = new Map(); // value -> [nodeId, ...]
     NODES.forEach(n => {
-      Object.values(n.p || {}).forEach(v => {
-        if(typeof v === 'string') propIndex[v] = n.id;
+      Object.entries(n.p || {}).forEach(([k, v]) => {
+        if(typeof v !== 'string' || !v) return;
+        if(!ID_KEY.test(k)) return;
+        if(!propIndex.has(v)) propIndex.set(v, []);
+        propIndex.get(v).push(n.id);
       });
     });
     rows.forEach(row => {
       Object.values(row).forEach(v => {
-        if(typeof v === 'string' && propIndex[v]) ids.add(propIndex[v]);
+        if(typeof v === 'string' && propIndex.has(v)){
+          propIndex.get(v).forEach(nid => ids.add(nid));
+        }
       });
     });
   }
@@ -1344,7 +1436,8 @@ function renderTable(res){
 function renderExplain(res){
   let notice = '';
   if(res.edges.length === 0){
-    notice = '<div class="no-rel-box"><b>No relationships in this view</b><br>This query returns ' + res.nodeIds.length + ' node' + (res.nodeIds.length!==1?'s':'') + ' without traversing any relationships. Add a relationship pattern (e.g. <code>-[:`kf-mfg__assignedToEquipment`]-></code>) to see the graph.</div>';
+    const exampleRel = (MANIFEST && MANIFEST.prefix) ? `${MANIFEST.prefix}__someRelationship` : 'someRelationship';
+    notice = '<div class="no-rel-box"><b>No relationships in this view</b><br>This query returns ' + res.nodeIds.length + ' node' + (res.nodeIds.length!==1?'s':'') + ' without traversing any relationships. Add a relationship pattern (e.g. <code>-[:`' + escapeHTML(exampleRel) + '`]-&gt;</code>) to see the graph.</div>';
   }
   document.getElementById('pane-explain').innerHTML = notice +
     `<div class="exbl"><div class="exlabel">Cypher Executed</div><div class="exbox excypher">${escapeHTML(res.q)}</div></div>` +
@@ -1806,7 +1899,7 @@ function renderAgentCards(){
     card.className = 'agent-card';
     card.onclick = () => selectAgent(i);
     card.innerHTML = `
-      <div class="agent-card-icon">${a.icon}</div>
+      <div class="agent-card-icon">${decodeEntity(a.icon)}</div>
       <div class="agent-card-name">${escapeHTML(a.name)}</div>
       <div class="agent-card-role">${escapeHTML(a.role)}</div>`;
     cards.appendChild(card);
@@ -1819,11 +1912,33 @@ function renderAgentCards(){
 // =============================================================================
 // USE CASES TAB — list/activate/upload bundles
 // =============================================================================
-async function renderUseCases(){
+let _ucListCache = null;        // last successful /use_cases response
+let _ucListInflight = null;     // dedupe concurrent fetches
+
+function _invalidateUseCasesCache(){ _ucListCache = null; }
+
+async function renderUseCases(forceRefresh = false){
   const list = document.getElementById('uc-list');
+  if(_ucListCache && !forceRefresh){
+    _renderUcCards(_ucListCache);
+    return;
+  }
   list.innerHTML = '<div class="empty"><div class="eico">⚙</div><div>Loading bundles…</div></div>';
   try {
-    const data = await api('/use_cases');
+    if(!_ucListInflight) _ucListInflight = api('/use_cases');
+    const data = await _ucListInflight;
+    _ucListInflight = null;
+    _ucListCache = data;
+    _renderUcCards(data);
+  } catch(err){
+    _ucListInflight = null;
+    list.innerHTML = `<div class="errbox" style="margin:14px">Failed to load: ${escapeHTML(err.message)}</div>`;
+  }
+}
+
+function _renderUcCards(data){
+  const list = document.getElementById('uc-list');
+  try {
     const bundles = data.bundles;
     document.getElementById('uc-toolbar-info').textContent =
       `${bundles.length} bundle${bundles.length!==1?'s':''} · active: ${data.active || '—'}`;
@@ -1837,6 +1952,9 @@ async function renderUseCases(){
       card.className = 'uc-card' + (b.is_active ? ' uc-active' : '');
       const tags = (b.in_scope_classes || []).slice(0, 8).map(c => `<span class="uc-card-tag">${escapeHTML(c)}</span>`).join('');
       const agentChip = b.agent_count ? `<span class="uc-card-tag">${b.agent_count} agent${b.agent_count!==1?'s':''}</span>` : '';
+      // Slugs flow into HTML via textContent / dataset only; never interpolated
+      // raw into JS contexts. Backend SLUG_RE blocks special chars but keep
+      // defence-in-depth here in case the regex ever loosens.
       card.innerHTML = `
         <div class="uc-card-hdr">
           <span class="uc-name">${escapeHTML(b.name)}</span>
@@ -1844,24 +1962,39 @@ async function renderUseCases(){
         </div>
         <div class="uc-card-desc">${escapeHTML(b.description || '—')}</div>
         <div class="uc-card-meta">
-          <span class="uc-card-tag">${escapeHTML(b.slug)}</span>
-          <span class="uc-card-tag">${escapeHTML(b.prefix)}</span>
+          <span class="uc-card-tag uc-slug"></span>
+          <span class="uc-card-tag uc-prefix"></span>
           ${agentChip}${tags}
         </div>
         <div class="uc-card-actions">
-          <button class="uc-btn uc-btn-delete" onclick="deleteUseCase('${b.slug}', ${b.is_active})"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
-          ${b.is_active ? '' : `<button class="uc-btn uc-btn-activate" onclick="activateUseCase('${b.slug}')">Activate</button>`}
+          <button class="uc-btn uc-btn-delete" data-action="delete" data-slug="" data-active="${b.is_active}"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
+          ${b.is_active ? '' : '<button class="uc-btn uc-btn-activate" data-action="activate" data-slug="">Activate</button>'}
         </div>`;
+      // Fill text-only slots safely.
+      card.querySelector('.uc-slug').textContent = b.slug;
+      card.querySelector('.uc-prefix').textContent = b.prefix;
+      card.querySelectorAll('[data-slug]').forEach(btn => { btn.dataset.slug = b.slug; });
       list.appendChild(card);
     });
   } catch(err){
-    list.innerHTML = `<div class="errbox" style="margin:14px">Failed to load: ${escapeHTML(err.message)}</div>`;
+    list.innerHTML = `<div class="errbox" style="margin:14px">Render failed: ${escapeHTML(err.message)}</div>`;
   }
 }
+
+// Delegated handler — single listener on the list container; click bubbles up.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('#uc-list [data-action]');
+  if(!btn) return;
+  const slug = btn.dataset.slug;
+  if(!slug) return;
+  if(btn.dataset.action === 'activate') activateUseCase(slug);
+  else if(btn.dataset.action === 'delete') deleteUseCase(slug, btn.dataset.active === 'true');
+});
 
 async function activateUseCase(slug){
   try {
     await api('/use_cases/active', {slug});
+    _invalidateUseCasesCache();
     // After reload, jump straight to the Ontology Curation tab so the user
     // can run curation against the freshly-activated bundle.
     sessionStorage.setItem('postActivateTab', 'ont');
@@ -1880,7 +2013,8 @@ async function deleteUseCase(slug, isActive){
   try {
     const res = await fetch(`/use_cases/${encodeURIComponent(slug)}`, {method: 'DELETE'});
     if(!res.ok){ const e = await res.json(); throw new Error(e.detail || `HTTP ${res.status}`); }
-    renderUseCases();
+    _invalidateUseCasesCache();
+    renderUseCases(true);
   } catch(err){
     alert('Delete failed: ' + err.message);
   }
@@ -1921,7 +2055,8 @@ async function submitUpload(){
     const res = await fetch('/use_cases/upload', {method: 'POST', body: fd});
     if(!res.ok){ const e = await res.json(); throw new Error(e.detail || `HTTP ${res.status}`); }
     closeUploadModal();
-    renderUseCases();
+    _invalidateUseCasesCache();
+    renderUseCases(true);
   } catch(err){
     errEl.textContent = err.message;
     errEl.classList.add('show');
@@ -1942,6 +2077,10 @@ async function submitUpload(){
     document.getElementById('kgpanel').classList.add('active');
     document.getElementById('kgscrollhint').style.display = 'block';
     setTimeout(initKGCanvas, 250);
+  } else if(ok && !NODES.length){
+    // Bundle is loaded but Neo4j is empty for this prefix — typically just
+    // after activate/reload. Tell the user to run the pipeline.
+    showSnapshotBanner(`No data for use case "${MANIFEST?.slug || ''}". Run the Hydration Pipeline to populate.`);
   }
   // Honour a one-shot tab redirect (set by activateUseCase before reload).
   const wantedTab = sessionStorage.getItem('postActivateTab');

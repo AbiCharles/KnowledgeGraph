@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
+
+from pipeline.cypher_safety import assert_read_only, UnsafeCypherError
 
 
 class VizEntry(BaseModel):
@@ -63,6 +65,15 @@ class ERRuleSpec(BaseModel):
     confidence: float
     cypher: str
 
+    @field_validator("cypher")
+    @classmethod
+    def _safe_cypher(cls, v: str) -> str:
+        try:
+            assert_read_only(v, source="ER rule cypher")
+        except UnsafeCypherError as exc:
+            raise ValueError(str(exc)) from exc
+        return v
+
 
 class CheckSpec(BaseModel):
     """Validation check (stage 6).
@@ -83,6 +94,17 @@ class CheckSpec(BaseModel):
     value: int | None = None
     cypher: str | None = None
     description: str = ""
+
+    @field_validator("cypher")
+    @classmethod
+    def _safe_cypher(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            assert_read_only(v, source="validation check cypher")
+        except UnsafeCypherError as exc:
+            raise ValueError(str(exc)) from exc
+        return v
 
 
 class ExampleSpec(BaseModel):

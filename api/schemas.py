@@ -42,3 +42,23 @@ class NLRequest(BaseModel):
 class NLResponse(BaseModel):
     cypher: str
     explanation: str
+
+
+class SetActiveRequest(BaseModel):
+    slug: str
+
+
+class UseCaseSummary(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+    prefix: str
+    namespace: str
+    in_scope_classes: list[str] = []
+    agent_count: int = 0
+    is_active: bool = False
+
+
+class UseCaseListResponse(BaseModel):
+    active: str | None
+    bundles: list[UseCaseSummary]

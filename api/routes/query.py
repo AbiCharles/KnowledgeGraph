@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from db import run_query
 from api.schemas import QueryRequest, QueryResponse
+from pipeline.cypher_safety import assert_read_only, UnsafeCypherError
 
 router = APIRouter()
 
@@ -8,10 +9,10 @@ router = APIRouter()
 @router.post("", response_model=QueryResponse)
 def execute_query(req: QueryRequest):
     """Execute a read-only Cypher query against the knowledge graph."""
-    # Basic safety: block write keywords
-    banned = ("create", "merge", "delete", "set", "remove", "drop")
-    if any(kw in req.cypher.lower() for kw in banned):
-        raise HTTPException(status_code=400, detail="Write operations are not allowed via this endpoint.")
+    try:
+        assert_read_only(req.cypher, source="user query")
+    except UnsafeCypherError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     try:
         rows = run_query(req.cypher)

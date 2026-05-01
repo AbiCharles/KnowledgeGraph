@@ -2,11 +2,13 @@
 
 Replaces the per-file agents/{maintenance_planner,compliance_monitor,root_cause_analyst}.py
 modules — agent prompts now live in each use-case manifest, so any bundle can
-declare its own agents without code changes.
+declare its own agents without code changes. The active use case's schema is
+injected into the system prompt so the LLM picks correct labels and properties.
 """
 from __future__ import annotations
 
 from agents.base import build_agent, run_agent
+from pipeline.schema_introspection import schema_description
 from pipeline.use_case import UseCase, AgentSpec
 
 
@@ -30,9 +32,15 @@ def find_agent(use_case: UseCase, agent_id: str) -> AgentSpec | None:
     return None
 
 
+def _system_prompt_for(use_case: UseCase, spec: AgentSpec) -> str:
+    """Compose the agent-specific prompt with a use-case-specific schema preamble."""
+    schema = schema_description(use_case)
+    return f"{schema}\n\n---\n\n{spec.system_prompt}"
+
+
 def run(use_case: UseCase, agent_id: str) -> str:
     spec = find_agent(use_case, agent_id)
     if spec is None:
         raise KeyError(f"Agent {agent_id!r} not found in use case {use_case.slug!r}")
-    agent = build_agent(spec.system_prompt)
+    agent = build_agent(_system_prompt_for(use_case, spec))
     return run_agent(agent, spec.task)
