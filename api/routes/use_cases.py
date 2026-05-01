@@ -27,6 +27,7 @@ def _summary(uc, active_slug: str | None) -> UseCaseSummary:
         namespace=m.namespace,
         in_scope_classes=m.in_scope_classes,
         agent_count=len(m.agents),
+        agent_names=[a.name for a in m.agents],
         is_active=(m.slug == active_slug),
     )
 

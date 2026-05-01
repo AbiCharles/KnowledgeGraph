@@ -56,6 +56,7 @@ class UseCaseSummary(BaseModel):
     namespace: str
     in_scope_classes: list[str] = []
     agent_count: int = 0
+    agent_names: list[str] = []
     is_active: bool = False
 
 

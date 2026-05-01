@@ -223,17 +223,35 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 .agent-exec-pulse{font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:5px 0;display:flex;align-items:center;gap:7px}
 .agent-pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);animation:pu 1s ease-in-out infinite}
 .agent-task{font-size:11px;color:var(--text2);line-height:1.65;font-family:'Inter',sans-serif;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;white-space:pre-wrap}
-.agent-rec{background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:5px;padding:9px 12px;margin-top:2px;font-size:11px;line-height:1.7}
-.agent-rec h1,.agent-rec h2,.agent-rec h3{color:var(--purple);font-size:12px;margin:6px 0 4px}
+.agent-rec{background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:5px;padding:9px 12px;margin-top:2px;font-size:10.5px;line-height:1.55}
+.agent-rec h1,.agent-rec h2,.agent-rec h3{color:var(--purple);font-size:11px;margin:5px 0 3px;font-weight:600}
 .agent-rec strong{color:var(--text)}
-.agent-rec table{width:100%;border-collapse:collapse;margin:6px 0;font-size:10.5px;font-family:'JetBrains Mono',monospace}
-.agent-rec th{text-align:left;padding:4px 7px;background:var(--bg3);color:var(--text2);border-bottom:1px solid var(--border)}
-.agent-rec td{padding:4px 7px;border-bottom:1px solid rgba(42,49,72,.5)}
-.agent-rec ul,.agent-rec ol{padding-left:22px;margin:5px 0}
-.agent-rec li{margin:3px 0}
-.agent-rec code{background:var(--bg3);padding:1px 5px;border-radius:3px;color:var(--teal);font-size:10.5px}
-.agent-rec pre{background:var(--bg3);padding:8px 10px;border-radius:4px;overflow-x:auto;margin:5px 0}
+.agent-rec table{width:100%;border-collapse:collapse;margin:5px 0 8px;font-size:9.5px;font-family:'JetBrains Mono',monospace;table-layout:fixed}
+.agent-rec th{text-align:left;padding:3px 6px;background:var(--bg3);color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap;font-weight:600}
+.agent-rec td{padding:3px 6px;border-bottom:1px solid rgba(42,49,72,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px}
+.agent-rec td:hover{white-space:normal;overflow:visible;background:var(--bg3)}
+.agent-rec ul,.agent-rec ol{padding-left:18px;margin:4px 0}
+.agent-rec li{margin:2px 0}
+.agent-rec code{background:var(--bg3);padding:1px 5px;border-radius:3px;color:var(--teal);font-size:10px}
+.agent-rec pre{background:var(--bg3);padding:7px 9px;border-radius:4px;overflow-x:auto;margin:4px 0;font-size:10px}
 .agent-rec pre code{background:none;padding:0}
+/* Collapsible sections */
+.agent-rec details{margin:5px 0;border:1px solid rgba(167,139,250,.15);border-radius:4px;background:rgba(167,139,250,.04)}
+.agent-rec details[open]{background:rgba(167,139,250,.06)}
+.agent-rec details > summary{cursor:pointer;padding:6px 10px;color:var(--purple);font-weight:600;font-size:10.5px;user-select:none;list-style:none;display:flex;align-items:center;gap:6px}
+.agent-rec details > summary::before{content:'▶';font-size:8px;transition:transform .12s;flex-shrink:0}
+.agent-rec details[open] > summary::before{transform:rotate(90deg)}
+.agent-rec details > summary::-webkit-details-marker{display:none}
+.agent-rec details > *:not(summary){padding:0 10px 6px}
+.agent-rec details > *:not(summary):first-of-type{padding-top:0}
+/* Long table truncation */
+.agent-rec-tbl-truncated tbody tr.agent-rec-tbl-hidden{display:none}
+.agent-rec-tbl-toggle{font-size:9.5px;color:var(--purple);cursor:pointer;padding:4px 6px;display:inline-block;margin-top:-4px;font-family:'JetBrains Mono',monospace}
+.agent-rec-tbl-toggle:hover{text-decoration:underline}
+/* Toolbar */
+.agent-rec-toolbar{display:flex;gap:8px;justify-content:flex-end;margin-bottom:6px}
+.agent-rec-tbtn{background:transparent;border:1px solid var(--border2);border-radius:3px;color:var(--text3);font-size:9px;padding:2px 8px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.agent-rec-tbtn:hover{border-color:var(--purple);color:var(--purple)}
 
 .q-thinking{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px}
 .q-think-spinner{width:28px;height:28px;border:2.5px solid var(--border2);border-top-color:var(--teal);border-radius:50%;animation:qspin .7s linear infinite}
@@ -533,7 +551,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 <div class="uc-modal-bg" id="uc-modal-bg">
   <div class="uc-modal">
     <div class="uc-modal-title">Upload a use-case bundle</div>
-    <div class="uc-modal-sub">A bundle is a slug + manifest.yaml + ontology.ttl + data.ttl. The slug becomes the directory name under <code>use_cases/</code> and must be lower-case alphanumeric (with <code>-</code> or <code>_</code>).</div>
+    <div class="uc-modal-sub">A bundle is a slug + manifest.yaml + ontology.ttl + data.ttl. The slug becomes the directory name under <code>use_cases/</code> and must be lower-case alphanumeric (with <code>-</code> or <code>_</code>). To include LLM agents, declare them in the manifest's <code>agents:</code> block — see the <a href="#" id="uc-agent-help-link" style="color:var(--teal);text-decoration:underline">agent template</a>.</div>
     <div class="uc-form-row">
       <label class="uc-form-label">Slug (e.g. book-catalog)</label>
       <input class="uc-form-input" id="uc-upload-slug" placeholder="my-use-case" autocomplete="off"/>
@@ -1165,12 +1183,13 @@ async function runAgent(){
   await sleep(900);
   reasonEl.innerHTML = `<span style="color:var(--green)">✓</span> Recommendations ready`;
 
-  // Phase 4: RESULT — render real markdown
+  // Phase 4: RESULT — render real markdown with collapsible sections + truncated tables
   const p4 = makePhase(con, 'RESULT', 'var(--green)', '▦ Agent findings');
   const rec = document.createElement('div');
   rec.className = 'agent-rec';
   try {
     rec.innerHTML = window.marked ? marked.parse(agentResult.result) : '<pre>'+escapeHTML(agentResult.result)+'</pre>';
+    compactAgentResult(rec);
   } catch(_){
     rec.innerHTML = '<pre>'+escapeHTML(agentResult.result)+'</pre>';
   }
@@ -1185,6 +1204,74 @@ async function runAgent(){
 
 function escapeHTML(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Post-process the rendered agent markdown so long output is scannable:
+//   * each <h2>/<h3> section becomes collapsible (first one open by default)
+//   * tables with > 6 rows hide rows past the 5th behind a "Show all N rows" link
+//   * a top-level Expand-all / Collapse-all toolbar is prepended
+//   * cell hovering reveals full content (CSS handles ellipsis)
+//
+// `root` is the .agent-rec div — mutated in place.
+function compactAgentResult(root){
+  if(!root) return;
+
+  // 1. Long tables: hide rows past the 5th behind a toggle.
+  root.querySelectorAll('table').forEach(tbl => {
+    const rows = [...tbl.querySelectorAll('tbody tr')];
+    if(rows.length <= 6) return;
+    tbl.classList.add('agent-rec-tbl-truncated');
+    const hidden = rows.slice(5);
+    hidden.forEach(r => r.classList.add('agent-rec-tbl-hidden'));
+    const toggle = document.createElement('div');
+    toggle.className = 'agent-rec-tbl-toggle';
+    toggle.textContent = `▾ Show ${hidden.length} more row${hidden.length!==1?'s':''}`;
+    toggle.onclick = () => {
+      const showing = tbl.classList.toggle('agent-rec-tbl-truncated');
+      toggle.textContent = showing
+        ? `▾ Show ${hidden.length} more row${hidden.length!==1?'s':''}`
+        : `▴ Hide ${hidden.length} row${hidden.length!==1?'s':''}`;
+    };
+    tbl.parentNode.insertBefore(toggle, tbl.nextSibling);
+  });
+
+  // 2. Collapsible sections per <h2> / <h3>. First section open by default.
+  const headings = [...root.querySelectorAll(':scope > h2, :scope > h3')];
+  if(headings.length){
+    const sections = [];
+    headings.forEach((h, idx) => {
+      const det = document.createElement('details');
+      if(idx === 0) det.open = true;
+      const sum = document.createElement('summary');
+      sum.textContent = h.textContent;
+      det.appendChild(sum);
+      let next = h.nextElementSibling;
+      while(next && !['H2','H3'].includes(next.tagName)){
+        const after = next.nextElementSibling;
+        det.appendChild(next);
+        next = after;
+      }
+      sections.push(det);
+      h.replaceWith(det);
+    });
+
+    // 3. Toolbar
+    if(sections.length > 1){
+      const bar = document.createElement('div');
+      bar.className = 'agent-rec-toolbar';
+      const expand = document.createElement('button');
+      expand.className = 'agent-rec-tbtn';
+      expand.textContent = 'Expand all';
+      expand.onclick = () => sections.forEach(d => d.open = true);
+      const collapse = document.createElement('button');
+      collapse.className = 'agent-rec-tbtn';
+      collapse.textContent = 'Collapse all';
+      collapse.onclick = () => sections.forEach((d, i) => d.open = false);
+      bar.appendChild(expand);
+      bar.appendChild(collapse);
+      root.insertBefore(bar, root.firstChild);
+    }
+  }
 }
 
 // Manifest "icon" fields commonly use HTML entities like &#9874; — decode the
@@ -1951,7 +2038,10 @@ function _renderUcCards(data){
       const card = document.createElement('div');
       card.className = 'uc-card' + (b.is_active ? ' uc-active' : '');
       const tags = (b.in_scope_classes || []).slice(0, 8).map(c => `<span class="uc-card-tag">${escapeHTML(c)}</span>`).join('');
-      const agentChip = b.agent_count ? `<span class="uc-card-tag">${b.agent_count} agent${b.agent_count!==1?'s':''}</span>` : '';
+      const agentList = (b.agent_names || []).map(n => escapeHTML(n)).join(', ');
+      const agentChip = b.agent_count
+        ? `<span class="uc-card-tag" title="${agentList}" style="border-color:rgba(167,139,250,.35);color:var(--purple)">${b.agent_count} agent${b.agent_count!==1?'s':''}${agentList ? ': ' + agentList.slice(0,40) + (agentList.length>40?'…':'') : ''}</span>`
+        : '<span class="uc-card-tag" style="color:var(--text3)">no agents</span>';
       // Slugs flow into HTML via textContent / dataset only; never interpolated
       // raw into JS contexts. Backend SLUG_RE blocks special chars but keep
       // defence-in-depth here in case the regex ever loosens.
@@ -2020,6 +2110,25 @@ async function deleteUseCase(slug, isActive){
   }
 }
 
+const AGENT_TEMPLATE_YAML = [
+  '# Add this block to your manifest.yaml under top-level "agents:" — declare as many as you like.',
+  'agents:',
+  '  - id: my_agent              # snake_case, unique per bundle',
+  '    name: My Agent            # display name shown on the Agent Ops card',
+  '    icon: "&#9874;"           # HTML entity (single character — see frontend legend)',
+  '    role: One-line role description shown under the name',
+  '    task: |',
+  '      Multi-line natural-language brief sent to the LLM at run time.',
+  '      Be specific about what the agent should produce (tables, ranking, recommendations).',
+  '    cypher_hint: |            # optional — shown in the THINKING phase typewriter',
+  '      MATCH (n:`my-prefix__SomeClass`) RETURN n LIMIT 5',
+  '    system_prompt: |          # the persona / step-by-step procedure',
+  '      You are <Agent Name>. Your job is to:',
+  '      1. Query the knowledge graph for ...',
+  '      2. ...',
+  '      Reference real IDs from the graph. Do not guess — query everything.',
+].join('\n');
+
 function openUploadModal(){
   document.getElementById('uc-upload-slug').value = '';
   document.getElementById('uc-upload-manifest').value = '';
@@ -2028,6 +2137,24 @@ function openUploadModal(){
   document.getElementById('uc-upload-error').classList.remove('show');
   document.getElementById('uc-modal-bg').classList.add('open');
 }
+
+// Toggle a small inline panel inside the modal showing the agent template.
+function _toggleAgentTemplate(){
+  let panel = document.getElementById('uc-agent-template');
+  if(panel){ panel.remove(); return; }
+  panel = document.createElement('pre');
+  panel.id = 'uc-agent-template';
+  panel.style.cssText = 'background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 11px;font-size:9.5px;color:var(--text2);overflow-x:auto;line-height:1.5;margin:8px 0';
+  panel.textContent = AGENT_TEMPLATE_YAML;
+  // Insert before the form rows
+  document.querySelector('.uc-modal-sub').insertAdjacentElement('afterend', panel);
+}
+document.addEventListener('click', e => {
+  if(e.target && e.target.id === 'uc-agent-help-link'){
+    e.preventDefault();
+    _toggleAgentTemplate();
+  }
+});
 function closeUploadModal(){
   document.getElementById('uc-modal-bg').classList.remove('open');
 }
