@@ -662,6 +662,9 @@ async function loadGraph(){
     NODES.forEach(n => { NM[n.id] = n; });
     window.GRAPH = {NODES, EDGES, NM};
     updateSnapshotChips();
+    // Self-correcting: any successful load with nodes clears a stale
+    // "no data for this bundle" banner left over from boot.
+    if(NODES.length){ hideSnapshotBanner(); }
     return true;
   } catch(err){
     console.error('loadGraph failed:', err);
@@ -717,6 +720,11 @@ function showSnapshotBanner(msg){
   const b = document.getElementById('snapshot-banner');
   b.textContent = msg;
   b.classList.add('show');
+}
+
+function hideSnapshotBanner(){
+  const b = document.getElementById('snapshot-banner');
+  if(b){ b.classList.remove('show'); b.textContent = ''; }
 }
 
 // =============================================================================
