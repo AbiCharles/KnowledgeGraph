@@ -243,23 +243,56 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 
 .snapshot-banner{display:none;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);color:var(--red);padding:8px 14px;font-size:10.5px;font-family:'JetBrains Mono',monospace;text-align:center}
 .snapshot-banner.show{display:block}
+
+/* Use Cases tab */
+.uc-toolbar{padding:10px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.uc-upload-btn{padding:6px 14px;background:transparent;border:1px solid var(--border2);border-radius:5px;color:var(--text2);font-size:10.5px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.uc-upload-btn:hover{border-color:var(--teal);color:var(--teal)}
+.uc-list{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+.uc-card{border:1px solid var(--border);border-radius:6px;padding:11px 14px;background:var(--bg3);transition:all .15s}
+.uc-card:hover{border-color:var(--border2)}
+.uc-card.uc-active{border-color:var(--teal);background:rgba(0,196,184,.06);box-shadow:0 0 8px rgba(0,196,184,.1)}
+.uc-card-hdr{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.uc-name{font-size:12px;font-weight:600;color:var(--text);flex:1}
+.uc-active-pill{font-size:8.5px;font-weight:700;letter-spacing:1px;padding:2px 7px;border-radius:10px;background:var(--teal);color:#001a18;font-family:'JetBrains Mono',monospace}
+.uc-card-desc{font-size:10px;color:var(--text2);line-height:1.55;margin-bottom:7px}
+.uc-card-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.uc-card-tag{font-size:9px;font-family:'JetBrains Mono',monospace;padding:1px 7px;border-radius:9px;border:1px solid var(--border2);color:var(--text3)}
+.uc-card-actions{display:flex;gap:6px;justify-content:flex-end}
+.uc-btn{padding:5px 11px;border-radius:4px;font-size:10px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.uc-btn-activate{background:var(--teal);border:1px solid var(--teal);color:#001a18;font-weight:700}
+.uc-btn-activate:hover{background:#00dfd2}
+.uc-btn-delete{background:transparent;border:1px solid var(--border2);color:var(--text3)}
+.uc-btn-delete:hover{border-color:var(--red);color:var(--red)}
+
+/* Upload modal */
+.uc-modal-bg{display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,9,14,.75);align-items:center;justify-content:center}
+.uc-modal-bg.open{display:flex}
+.uc-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:22px 24px;width:480px;max-width:90vw;max-height:85vh;overflow-y:auto}
+.uc-modal-title{font-size:13px;font-weight:600;color:var(--teal);font-family:'JetBrains Mono',monospace;margin-bottom:6px}
+.uc-modal-sub{font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:18px}
+.uc-form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.uc-form-label{font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.uc-form-input{background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:7px 11px;color:var(--text);font-size:11px;font-family:'JetBrains Mono',monospace;outline:none}
+.uc-form-input:focus{border-color:var(--teal)}
+.uc-form-file{font-size:10.5px;color:var(--text2)}
+.uc-form-file::file-selector-button{background:var(--bg4);border:1px solid var(--border2);border-radius:3px;padding:4px 11px;color:var(--text2);font-size:10px;cursor:pointer;margin-right:9px}
+.uc-form-file::file-selector-button:hover{border-color:var(--teal);color:var(--teal)}
+.uc-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+.uc-modal-cancel{padding:7px 16px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-size:10.5px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.uc-modal-cancel:hover{border-color:var(--text2);color:var(--text)}
+.uc-modal-submit{padding:7px 18px;background:var(--teal);border:1px solid var(--teal);border-radius:4px;color:#001a18;font-size:10.5px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.uc-modal-submit:hover{background:#00dfd2}
+.uc-modal-submit:disabled{opacity:.4;cursor:not-allowed}
+.uc-modal-error{margin-top:10px;padding:7px 12px;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:4px;color:var(--red);font-size:10px;font-family:'JetBrains Mono',monospace;display:none}
+.uc-modal-error.show{display:block}
 </style>
 </head>
 <body>
 <div class="desc-banner">
   <div class="desc-banner-body">
-    <div class="desc-banner-title">&#11043; KF WorkOrder Knowledge Graph &mdash; Manufacturing Maintenance Use Case</div>
-    <div class="desc-banner-text">
-      Work orders &mdash; preventive, corrective, and inspection maintenance jobs &mdash; are captured from two source systems
-      (<strong style="color:var(--blue)">SAP-PM</strong> via OData v4 and <strong style="color:var(--green)">MES-PROD</strong> via REST/JSON),
-      curated and modelled into <strong style="color:var(--teal)">OWL2 ontology TTL files</strong> that formally define the structure and
-      relationships of every entity in the manufacturing domain. These TTL files are loaded into Neo4j via n10s, deduplicated by a
-      five-rule Entity Resolution engine, and connected in a knowledge graph to equipment assets, production lines, technicians, and
-      compliance policies. The result is a single queryable source of truth accessed by three specialised agents:
-      the <strong style="color:var(--purple)">Maintenance Planner</strong>,
-      the <strong style="color:var(--purple)">Compliance Monitor</strong>, and
-      the <strong style="color:var(--purple)">Root Cause Analyst</strong>.
-    </div>
+    <div class="desc-banner-title" id="banner-title">&#11043; Knowledge Graph &mdash; Loading active use case&hellip;</div>
+    <div class="desc-banner-text" id="banner-desc">Initialising&hellip;</div>
     <div class="desc-banner-tags" id="snapshot-tags">
       <span class="desc-tag">Loading graph snapshot&hellip;</span>
     </div>
@@ -273,11 +306,23 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 
 <div class="panel pl">
   <div class="ptab-row">
+    <button class="ptab ptab-active" id="ptab-uc" onclick="switchPipeTab('uc')">&#9881; Use Cases</button>
     <button class="ptab" id="ptab-ont"   onclick="switchPipeTab('ont')">&#9670; Ontology Curation</button>
-    <button class="ptab ptab-active" id="ptab-pip" onclick="switchPipeTab('pip')">&#9654; Hydration Pipeline</button>
+    <button class="ptab" id="ptab-pip"   onclick="switchPipeTab('pip')">&#9654; Hydration Pipeline</button>
     <button class="ptab" id="ptab-agent" onclick="switchPipeTab('agent')">&#11043; Agent Ops</button>
   </div>
   <div class="pb">
+
+    <!-- ── Use Cases pane ─────────────────────────────────────────────────── -->
+    <div class="pipe-pane" id="pipe-uc-pane">
+      <div class="uc-toolbar">
+        <button class="uc-upload-btn" onclick="openUploadModal()">&#8682; Upload bundle</button>
+        <span style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="uc-toolbar-info"></span>
+      </div>
+      <div class="uc-list" id="uc-list">
+        <div class="empty"><div class="eico">&#9881;</div><div>Loading bundles…</div></div>
+      </div>
+    </div>
 
     <!-- ── Ontology Curation pane ─────────────────────────────────────────── -->
     <div class="pipe-pane" id="pipe-ont-pane" style="display:none">
@@ -314,7 +359,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
     </div>
 
     <!-- ── Hydration Pipeline pane ────────────────────────────────────────── -->
-    <div class="pipe-pane" id="pipe-pip-pane">
+    <div class="pipe-pane" id="pipe-pip-pane" style="display:none">
       <div class="pc">
         <button class="rbtn" id="rbtn" onclick="runPipeline()">
           <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
@@ -412,34 +457,8 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
       </div>
     </div>
     <div class="exwrap">
-      <div class="exstrip" id="strip-nl">
-        <span class="exlbl">Examples:</span>
-        <button class="exbtn" onclick="setExampleQ(0)">Show me all work orders</button>
-        <button class="exbtn" onclick="setExampleQ(1)">Which work orders are on which equipment?</button>
-        <button class="exbtn" onclick="setExampleQ(2)">Full chain: work order to production line</button>
-        <button class="exbtn" onclick="setExampleQ(3)">Show me all URGENT work orders</button>
-        <button class="exbtn" onclick="setExampleQ(4)">Which work orders were merged duplicates?</button>
-        <button class="exbtn" onclick="setExampleQ(5)">Which work orders have compliance requirements?</button>
-        <button class="exbtn" onclick="setExampleQ(6)">Open corrective work orders</button>
-        <button class="exbtn" onclick="setExampleQ(7)">Which technicians are assigned to jobs?</button>
-        <button class="exbtn" onclick="setExampleQ(8)">How many jobs does each piece of equipment have?</button>
-        <button class="exbtn" onclick="setExampleQ(9)">SAP-PM work orders only</button>
-        <button class="exbtn" onclick="setExampleQ(10)">All in-progress jobs</button>
-      </div>
-      <div class="exstrip" id="strip-cy" style="display:none">
-        <span class="exlbl">Cypher:</span>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(0)">All WorkOrders</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(1)">WO to Equipment</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(2)">3-hop traversal</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(3)">URGENT orders</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(4)">ER merged nodes</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(5)">Compliance links</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(6)">Open corrective</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(7)">Technician jobs</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(8)">Equipment workload</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(9)">SAP-PM only</button>
-        <button class="exbtn exbtn-cy" onclick="setExampleQ(10)">In-progress jobs</button>
-      </div>
+      <div class="exstrip" id="strip-nl"><span class="exlbl">Examples:</span></div>
+      <div class="exstrip" id="strip-cy" style="display:none"><span class="exlbl">Cypher:</span></div>
     </div>
     <div class="resarea">
       <div class="tabs">
@@ -510,6 +529,35 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
   </div>
 </div>
 
+<!-- Use case upload modal -->
+<div class="uc-modal-bg" id="uc-modal-bg">
+  <div class="uc-modal">
+    <div class="uc-modal-title">Upload a use-case bundle</div>
+    <div class="uc-modal-sub">A bundle is a slug + manifest.yaml + ontology.ttl + data.ttl. The slug becomes the directory name under <code>use_cases/</code> and must be lower-case alphanumeric (with <code>-</code> or <code>_</code>).</div>
+    <div class="uc-form-row">
+      <label class="uc-form-label">Slug (e.g. book-catalog)</label>
+      <input class="uc-form-input" id="uc-upload-slug" placeholder="my-use-case" autocomplete="off"/>
+    </div>
+    <div class="uc-form-row">
+      <label class="uc-form-label">Manifest (.yaml)</label>
+      <input class="uc-form-file" id="uc-upload-manifest" type="file" accept=".yaml,.yml"/>
+    </div>
+    <div class="uc-form-row">
+      <label class="uc-form-label">Ontology (.ttl)</label>
+      <input class="uc-form-file" id="uc-upload-ontology" type="file" accept=".ttl"/>
+    </div>
+    <div class="uc-form-row">
+      <label class="uc-form-label">Data (.ttl)</label>
+      <input class="uc-form-file" id="uc-upload-data" type="file" accept=".ttl"/>
+    </div>
+    <div class="uc-modal-error" id="uc-upload-error"></div>
+    <div class="uc-modal-actions">
+      <button class="uc-modal-cancel" onclick="closeUploadModal()">Cancel</button>
+      <button class="uc-modal-submit" id="uc-upload-submit" onclick="submitUpload()">Upload</button>
+    </div>
+  </div>
+</div>
+
 <!-- Query graph pop-out modal -->
 <div class="graph-modal" id="graph-modal">
   <div class="gm-header">
@@ -549,9 +597,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let NODES = [];
 let EDGES = [];
 let NM = {};
-const KF_PREFIX = /^kf-mfg__/;
+function activePrefixRE(){
+  const p = (MANIFEST && MANIFEST.prefix) ? MANIFEST.prefix : 'kf-mfg';
+  // Escape regex special chars in the prefix (kf-mfg has a -)
+  return new RegExp('^' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '__');
+}
 
-function stripPrefix(s){ return typeof s === 'string' ? s.replace(KF_PREFIX, '') : s; }
+function stripPrefix(s){ return typeof s === 'string' ? s.replace(activePrefixRE(), '') : s; }
 function cleanProps(p){
   if(!p || typeof p !== 'object') return {};
   const out = {};
@@ -561,19 +613,22 @@ function cleanProps(p){
 
 async function loadGraph(){
   try{
+    const prefix = (MANIFEST && MANIFEST.prefix) ? MANIFEST.prefix : 'kf-mfg';
+    const labelMatch = `l STARTS WITH '${prefix}__' OR l = 'IngestionAdapter'`;
+    const relMatch = `type(r) STARTS WITH '${prefix}__'`;
     const [nodesRes, edgesRes] = await Promise.all([
       api('/query', {cypher:
         "MATCH (n) " +
-        "WITH n, [l IN labels(n) WHERE l STARTS WITH 'kf-mfg__' OR l = 'IngestionAdapter'] AS dl " +
+        `WITH n, [l IN labels(n) WHERE ${labelMatch}] AS dl ` +
         "WHERE size(dl) > 0 " +
         "RETURN elementId(n) AS id, dl[0] AS type, properties(n) AS p"}),
       api('/query', {cypher:
         "MATCH (a)-[r]->(b) " +
-        "WITH a, b, r, " +
-        "     [l IN labels(a) WHERE l STARTS WITH 'kf-mfg__' OR l = 'IngestionAdapter'] AS al, " +
-        "     [l IN labels(b) WHERE l STARTS WITH 'kf-mfg__' OR l = 'IngestionAdapter'] AS bl " +
+        `WITH a, b, r, ` +
+        `     [l IN labels(a) WHERE ${labelMatch}] AS al, ` +
+        `     [l IN labels(b) WHERE ${labelMatch}] AS bl ` +
         "WHERE size(al) > 0 AND size(bl) > 0 " +
-        "  AND (type(r) STARTS WITH 'kf-mfg__' OR type(r) = 'sourcedFrom') " +
+        `  AND ${relMatch} ` +
         "RETURN elementId(a) AS source, elementId(b) AS target, type(r) AS rel"})
     ]);
     NODES = nodesRes.rows.map(r => ({
@@ -949,26 +1004,7 @@ function startTransfer(){
 // =============================================================================
 // AGENT OPS (left tab) — calls real /agents/run, drives 4-phase animation
 // =============================================================================
-const AGENTS = [
-  {
-    id: 'maintenance_planner',
-    name: 'Maintenance Planner',
-    task: 'Analyse all OPEN work orders. Identify technician coverage gaps and recommend the best available technician for each unassigned order. Justify each recommendation based on specialisation, grade, certification, and current workload.',
-    cypher: "MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woStatus` = 'OPEN'\nOPTIONAL MATCH (wo)-[:`kf-mfg__assignedToTechnician`]->(t:`kf-mfg__Technician`)\nRETURN wo.`kf-mfg__workOrderId` AS id,\n       wo.`kf-mfg__woPriority`  AS priority,\n       wo.`kf-mfg__woType`      AS type,\n       t.`kf-mfg__name`         AS technician\nORDER BY priority"
-  },
-  {
-    id: 'compliance_monitor',
-    name: 'Compliance Monitor',
-    task: 'Find all work orders governed by a compliance policy (OSHA / ISO) that are not yet completed. Assess regulatory exposure and recommend the best technician for any unassigned compliance-critical orders.',
-    cypher: "MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__governedBy`]->(cp:`kf-mfg__CompliancePolicy`)\nWHERE wo.`kf-mfg__woStatus` <> 'COMPLETED'\nRETURN wo.`kf-mfg__workOrderId` AS workOrder,\n       wo.`kf-mfg__woStatus`   AS status,\n       wo.`kf-mfg__woPriority` AS priority,\n       cp.`kf-mfg__standard`   AS standard"
-  },
-  {
-    id: 'root_cause_analyst',
-    name: 'Root Cause Analyst',
-    task: 'Analyse the corrective maintenance load across all equipment assets. Identify which assets and production lines carry the highest risk, and assess whether the right technicians are assigned to address the corrective work.',
-    cypher: "MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)\n      -[:`kf-mfg__onProductionLine`]->(pl:`kf-mfg__ProductionLine`)\nWHERE wo.`kf-mfg__woType` = 'CORRECTIVE'\nRETURN eq.`kf-mfg__equipmentId` AS equipmentId,\n       eq.`kf-mfg__name`        AS equipment,\n       pl.`kf-mfg__name`        AS productionLine,\n       count(wo)                AS correctiveOrders\nORDER BY correctiveOrders DESC"
-  }
-];
+let AGENTS = []; // populated by applyManifest()
 
 let _selAgent = -1;
 let _agentRunning = false;
@@ -1085,12 +1121,13 @@ function escapeHTML(s){
 // LEFT-PANEL TAB SWITCHING
 // =============================================================================
 function switchPipeTab(tab){
-  ['ont','pip','agent'].forEach(t => {
+  ['uc','ont','pip','agent'].forEach(t => {
     const btn = document.getElementById('ptab-'+t);
     const pane = document.getElementById('pipe-'+t+'-pane');
     if(btn) btn.classList.toggle('ptab-active', t===tab);
     if(pane) pane.style.display = t===tab ? 'flex' : 'none';
   });
+  if(tab === 'uc')  renderUseCases();
   if(tab === 'ont') renderOntSteps(window._lastOntStates || {});
   if(tab === 'pip') renderStages(window._lastPipelineStates || {});
 }
@@ -1098,45 +1135,9 @@ function switchPipeTab(tab){
 // =============================================================================
 // QUERY CONSOLE — calls real /query and /nl
 // =============================================================================
-const EXAMPLES = [
-  'MATCH (wo:`kf-mfg__WorkOrder`)\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source\nORDER BY id',
-  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, eq.`kf-mfg__equipmentId` AS equipment, eq.`kf-mfg__name` AS equipmentName',
-  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)-[:`kf-mfg__onProductionLine`]->(pl:`kf-mfg__ProductionLine`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, eq.`kf-mfg__equipmentId` AS equipment, pl.`kf-mfg__lineId` AS line, pl.`kf-mfg__name` AS lineName',
-  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woPriority` = "URGENT"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__description` AS description',
-  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__mergedFrom` IS NOT NULL\nRETURN wo.`kf-mfg__workOrderId` AS canonical, wo.`kf-mfg__mergedFrom` AS mergedFrom, wo.`kf-mfg__mergeMethod` AS method, wo.`kf-mfg__sourceSystem` AS source',
-  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__governedBy`]->(cp:`kf-mfg__CompliancePolicy`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, cp.`kf-mfg__policyId` AS policy, cp.`kf-mfg__name` AS policyName',
-  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woType` = "CORRECTIVE" AND wo.`kf-mfg__woStatus` = "OPEN"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__description` AS description',
-  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToTechnician`]->(t:`kf-mfg__Technician`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority, t.`kf-mfg__name` AS technician, t.`kf-mfg__specialisation` AS spec',
-  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)\nRETURN eq.`kf-mfg__equipmentId` AS equipment, eq.`kf-mfg__name` AS equipmentName, count(wo) AS totalOrders\nORDER BY totalOrders DESC',
-  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__sourceSystem` = "SAP-PM"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority',
-  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woStatus` = "IN_PROGRESS"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__scheduledStart` AS scheduled'
-];
-const PLAIN_EXAMPLES = [
-  'Show me all work orders',
-  'Which work orders are assigned to which equipment?',
-  'Show the full chain: work order to equipment to production line',
-  'Show me all URGENT priority work orders',
-  'Which work orders were merged from duplicate records?',
-  'Which work orders have compliance requirements?',
-  'Show me corrective work orders that are still open',
-  'Which technicians are assigned to which work orders?',
-  'How many work orders does each piece of equipment have?',
-  'Show me SAP-PM work orders only',
-  'Show me all in-progress work orders'
-];
-const NL_RULES = [
-  [/urgent/i, 3],
-  [/merg|duplicate|er result/i, 4],
-  [/compli|osha|iso|regulat/i, 5],
-  [/correct.*open|open.*correct/i, 6],
-  [/techni/i, 7],
-  [/workload|how many.*work|equip.*count/i, 8],
-  [/sap.?pm/i, 9],
-  [/in.?progress|progress/i, 10],
-  [/3.?hop|three.?hop|travers|chain|production line/i, 2],
-  [/equip/i, 1],
-  [/all.*work|list.*work|show.*work|work.*order/i, 0]
-];
+let EXAMPLES = [];        // populated from manifest.examples[].cypher
+let PLAIN_EXAMPLES = [];  // populated from manifest.examples[].label
+let NL_RULES = [];        // populated from manifest.nl_rules
 
 let currentMode = 'nl';
 function setMode(mode){
@@ -1361,9 +1362,11 @@ function renderExplain(res){
 // =============================================================================
 // QUERY GRAPH (subgraph from current query result) — canvas force layout
 // =============================================================================
-const GCOL = {WorkOrder:'#1F6B8C', Equipment:'#5B4A8C', ProductionLine:'#0E7C7B', CompliancePolicy:'#7A3B2E', Technician:'#2A6B3C', IngestionAdapter:'#3a3f47'};
-const GSZ  = {WorkOrder:15, Equipment:19, ProductionLine:21, CompliancePolicy:17, Technician:14, IngestionAdapter:14};
-const GICO = {WorkOrder:'W', Equipment:'E', ProductionLine:'L', CompliancePolicy:'C', Technician:'T', IngestionAdapter:'A'};
+// Visualization maps — populated from manifest.visualization in applyManifest()
+let GCOL = {};
+let GSZ  = {};
+let GICO = {};
+const FALLBACK_PALETTE = ['#1F6B8C','#5B4A8C','#0E7C7B','#7A3B2E','#2A6B3C','#3a3f47','#a78bfa','#fbbf24','#f87171','#34d399','#4da6ff','#bf6ed8'];
 
 function drawQueryGraph(res){
   if(gFrame){ cancelAnimationFrame(gFrame); gFrame = null; }
@@ -1721,16 +1724,233 @@ function drawModalGraph(res, cv, W, H){
 document.addEventListener('keydown', e => { if(e.key === 'Escape') closeGraphModal(); });
 
 // =============================================================================
+// USE CASE MANIFEST — fetched on boot, drives GCOL/EXAMPLES/AGENTS/banner
+// =============================================================================
+let MANIFEST = null;
+
+async function loadManifest(){
+  try {
+    MANIFEST = await api('/use_cases/active');
+    applyManifest(MANIFEST);
+  } catch(err){
+    console.error('Failed to load active use case:', err);
+    document.getElementById('banner-title').textContent = 'No active use case';
+    document.getElementById('banner-desc').textContent = err.message;
+  }
+}
+
+function applyManifest(m){
+  // Banner
+  document.getElementById('banner-title').textContent = `⧫ ${m.name}`;
+  document.getElementById('banner-desc').textContent = m.description || '';
+  // Visualization
+  GCOL = {};
+  GSZ  = {};
+  GICO = {};
+  const classes = m.in_scope_classes || [];
+  classes.forEach((cls, i) => {
+    const v = (m.visualization || {})[cls];
+    GCOL[cls] = v?.color || FALLBACK_PALETTE[i % FALLBACK_PALETTE.length];
+    GSZ[cls]  = v?.size  || 16;
+    GICO[cls] = v?.icon  || cls.charAt(0).toUpperCase();
+  });
+  // Legend stays visually consistent — could re-render here, kept as static labels
+  // Examples + NL rules
+  EXAMPLES = (m.examples || []).map(e => e.cypher);
+  PLAIN_EXAMPLES = (m.examples || []).map(e => e.label);
+  NL_RULES = (m.nl_rules || []).map(r => [new RegExp(r.pattern, 'i'), r.example_index]);
+  renderExampleChips();
+  // Agents
+  AGENTS = (m.agents || []).map(a => ({
+    id: a.id, name: a.name, icon: a.icon, role: a.role,
+    task: a.task, cypher: a.cypher_hint || ''
+  }));
+  renderAgentCards();
+}
+
+function renderExampleChips(){
+  const nl = document.getElementById('strip-nl');
+  const cy = document.getElementById('strip-cy');
+  nl.innerHTML = '<span class="exlbl">Examples:</span>';
+  cy.innerHTML = '<span class="exlbl">Cypher:</span>';
+  PLAIN_EXAMPLES.forEach((label, i) => {
+    const b = document.createElement('button');
+    b.className = 'exbtn';
+    b.textContent = label;
+    b.onclick = () => setExampleQ(i);
+    nl.appendChild(b);
+    const b2 = document.createElement('button');
+    b2.className = 'exbtn exbtn-cy';
+    b2.textContent = label.length > 24 ? label.slice(0, 24) + '…' : label;
+    b2.onclick = () => setExampleQ(i);
+    cy.appendChild(b2);
+  });
+  if(!PLAIN_EXAMPLES.length){
+    nl.innerHTML += '<span style="font-size:9.5px;color:var(--text3)">No examples in manifest</span>';
+    cy.innerHTML += '<span style="font-size:9.5px;color:var(--text3)">No examples in manifest</span>';
+  }
+}
+
+function renderAgentCards(){
+  const cards = document.querySelector('#pipe-agent-pane .agent-cards');
+  if(!cards) return;
+  cards.innerHTML = '';
+  if(!AGENTS.length){
+    cards.innerHTML = '<div style="flex:1;padding:9px;color:var(--text3);font-size:10px;text-align:center">No agents declared in this use case manifest.</div>';
+    document.getElementById('agent-rbtn').disabled = true;
+    document.getElementById('agent-hint').textContent = '';
+    return;
+  }
+  AGENTS.forEach((a, i) => {
+    const card = document.createElement('div');
+    card.className = 'agent-card';
+    card.onclick = () => selectAgent(i);
+    card.innerHTML = `
+      <div class="agent-card-icon">${a.icon}</div>
+      <div class="agent-card-name">${escapeHTML(a.name)}</div>
+      <div class="agent-card-role">${escapeHTML(a.role)}</div>`;
+    cards.appendChild(card);
+  });
+  _selAgent = -1;
+  document.getElementById('agent-rbtn').disabled = true;
+  document.getElementById('agent-hint').textContent = 'Select an agent above to begin';
+}
+
+// =============================================================================
+// USE CASES TAB — list/activate/upload bundles
+// =============================================================================
+async function renderUseCases(){
+  const list = document.getElementById('uc-list');
+  list.innerHTML = '<div class="empty"><div class="eico">⚙</div><div>Loading bundles…</div></div>';
+  try {
+    const data = await api('/use_cases');
+    const bundles = data.bundles;
+    document.getElementById('uc-toolbar-info').textContent =
+      `${bundles.length} bundle${bundles.length!==1?'s':''} · active: ${data.active || '—'}`;
+    if(!bundles.length){
+      list.innerHTML = '<div class="empty"><div class="eico">⚙</div><div>No bundles found. Click “Upload bundle” to add one.</div></div>';
+      return;
+    }
+    list.innerHTML = '';
+    bundles.forEach(b => {
+      const card = document.createElement('div');
+      card.className = 'uc-card' + (b.is_active ? ' uc-active' : '');
+      const tags = (b.in_scope_classes || []).slice(0, 8).map(c => `<span class="uc-card-tag">${escapeHTML(c)}</span>`).join('');
+      const agentChip = b.agent_count ? `<span class="uc-card-tag">${b.agent_count} agent${b.agent_count!==1?'s':''}</span>` : '';
+      card.innerHTML = `
+        <div class="uc-card-hdr">
+          <span class="uc-name">${escapeHTML(b.name)}</span>
+          ${b.is_active ? '<span class="uc-active-pill">ACTIVE</span>' : ''}
+        </div>
+        <div class="uc-card-desc">${escapeHTML(b.description || '—')}</div>
+        <div class="uc-card-meta">
+          <span class="uc-card-tag">${escapeHTML(b.slug)}</span>
+          <span class="uc-card-tag">${escapeHTML(b.prefix)}</span>
+          ${agentChip}${tags}
+        </div>
+        <div class="uc-card-actions">
+          <button class="uc-btn uc-btn-delete" onclick="deleteUseCase('${b.slug}', ${b.is_active})"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
+          ${b.is_active ? '' : `<button class="uc-btn uc-btn-activate" onclick="activateUseCase('${b.slug}')">Activate</button>`}
+        </div>`;
+      list.appendChild(card);
+    });
+  } catch(err){
+    list.innerHTML = `<div class="errbox" style="margin:14px">Failed to load: ${escapeHTML(err.message)}</div>`;
+  }
+}
+
+async function activateUseCase(slug){
+  try {
+    await api('/use_cases/active', {slug});
+    // After reload, jump straight to the Ontology Curation tab so the user
+    // can run curation against the freshly-activated bundle.
+    sessionStorage.setItem('postActivateTab', 'ont');
+    window.location.reload();
+  } catch(err){
+    alert('Activate failed: ' + err.message);
+  }
+}
+
+async function deleteUseCase(slug, isActive){
+  if(isActive){
+    alert(`"${slug}" is the active use case.\n\nActivate a different bundle first, then delete this one.`);
+    return;
+  }
+  if(!confirm(`Delete bundle "${slug}"?\n\nThis removes its files from disk (use_cases/${slug}/) and cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/use_cases/${encodeURIComponent(slug)}`, {method: 'DELETE'});
+    if(!res.ok){ const e = await res.json(); throw new Error(e.detail || `HTTP ${res.status}`); }
+    renderUseCases();
+  } catch(err){
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+function openUploadModal(){
+  document.getElementById('uc-upload-slug').value = '';
+  document.getElementById('uc-upload-manifest').value = '';
+  document.getElementById('uc-upload-ontology').value = '';
+  document.getElementById('uc-upload-data').value = '';
+  document.getElementById('uc-upload-error').classList.remove('show');
+  document.getElementById('uc-modal-bg').classList.add('open');
+}
+function closeUploadModal(){
+  document.getElementById('uc-modal-bg').classList.remove('open');
+}
+
+async function submitUpload(){
+  const slug = document.getElementById('uc-upload-slug').value.trim();
+  const manifestF = document.getElementById('uc-upload-manifest').files[0];
+  const ontologyF = document.getElementById('uc-upload-ontology').files[0];
+  const dataF = document.getElementById('uc-upload-data').files[0];
+  const errEl = document.getElementById('uc-upload-error');
+  errEl.classList.remove('show');
+  if(!slug || !manifestF || !ontologyF || !dataF){
+    errEl.textContent = 'All four fields are required.';
+    errEl.classList.add('show');
+    return;
+  }
+  const fd = new FormData();
+  fd.append('slug', slug);
+  fd.append('manifest', manifestF);
+  fd.append('ontology', ontologyF);
+  fd.append('data', dataF);
+  const submit = document.getElementById('uc-upload-submit');
+  submit.disabled = true;
+  try {
+    const res = await fetch('/use_cases/upload', {method: 'POST', body: fd});
+    if(!res.ok){ const e = await res.json(); throw new Error(e.detail || `HTTP ${res.status}`); }
+    closeUploadModal();
+    renderUseCases();
+  } catch(err){
+    errEl.textContent = err.message;
+    errEl.classList.add('show');
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+// =============================================================================
 // BOOT
 // =============================================================================
 (async function boot(){
   renderStages({});
   renderOntSteps({});
+  await loadManifest();
   const ok = await loadGraph();
   if(ok && NODES.length){
     document.getElementById('kgpanel').classList.add('active');
     document.getElementById('kgscrollhint').style.display = 'block';
     setTimeout(initKGCanvas, 250);
+  }
+  // Honour a one-shot tab redirect (set by activateUseCase before reload).
+  const wantedTab = sessionStorage.getItem('postActivateTab');
+  if(wantedTab){
+    sessionStorage.removeItem('postActivateTab');
+    switchPipeTab(wantedTab);
+  } else {
+    // Default landing tab is Use Cases — populate the bundle list now.
+    renderUseCases();
   }
 })();
 </script>

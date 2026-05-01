@@ -1,0 +1,170 @@
+@prefix sc:   <http://knowledgefabric.tcs.com/ontology/supplychain#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+<http://knowledgefabric.tcs.com/ontology/supplychain>
+    a owl:Ontology ;
+    dcterms:title       "KF Global Supply Chain Ontology" ;
+    dcterms:description "OWL2 ontology covering purchase orders, suppliers, products, warehouses, shipments and carriers in a multi-region supply chain." ;
+    owl:versionInfo     "1.0.0" .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Classes
+# ─────────────────────────────────────────────────────────────────────────────
+sc:PurchaseOrder    a owl:Class ; rdfs:label "PurchaseOrder" ;
+    skos:definition "An order placed with a supplier for one or more products. Canonical entity after Entity Resolution." .
+
+sc:Supplier         a owl:Class ; rdfs:label "Supplier" ;
+    skos:definition "A vendor that fulfils purchase orders." .
+
+sc:Product          a owl:Class ; rdfs:label "Product" ;
+    skos:definition "A SKU that can be ordered through purchase orders." .
+
+sc:Warehouse        a owl:Class ; rdfs:label "Warehouse" ;
+    skos:definition "A receiving facility for inbound goods." .
+
+sc:Shipment         a owl:Class ; rdfs:label "Shipment" ;
+    skos:definition "A physical movement of goods fulfilling a purchase order." .
+
+sc:Carrier          a owl:Class ; rdfs:label "Carrier" ;
+    skos:definition "A logistics provider that operates shipments." .
+
+sc:IngestionAdapter a owl:Class ; rdfs:label "IngestionAdapter" ;
+    skos:definition "Source-system connector that ingests purchase order data." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Object Properties
+# ─────────────────────────────────────────────────────────────────────────────
+sc:placedWith   a owl:ObjectProperty ; rdfs:label "placedWith" ;
+    rdfs:domain sc:PurchaseOrder ; rdfs:range sc:Supplier ;
+    skos:definition "Links a PurchaseOrder to the Supplier fulfilling it." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+sc:contains     a owl:ObjectProperty ; rdfs:label "contains" ;
+    rdfs:domain sc:PurchaseOrder ; rdfs:range sc:Product ;
+    skos:definition "Links a PurchaseOrder to the Product being ordered." .
+
+sc:shipsTo      a owl:ObjectProperty ; rdfs:label "shipsTo" ;
+    rdfs:domain sc:PurchaseOrder ; rdfs:range sc:Warehouse ;
+    skos:definition "Links a PurchaseOrder to its destination Warehouse." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+sc:transports   a owl:ObjectProperty ; rdfs:label "transports" ;
+    rdfs:domain sc:Shipment ; rdfs:range sc:PurchaseOrder ;
+    skos:definition "Links a Shipment to the PurchaseOrder it is fulfilling." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+sc:assignedTo   a owl:ObjectProperty ; rdfs:label "assignedTo" ;
+    rdfs:domain sc:Shipment ; rdfs:range sc:Carrier ;
+    skos:definition "Links a Shipment to the Carrier operating it." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+sc:arrivesAt    a owl:ObjectProperty ; rdfs:label "arrivesAt" ;
+    rdfs:domain sc:Shipment ; rdfs:range sc:Warehouse ;
+    skos:definition "Links a Shipment to the destination Warehouse." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+sc:suppliedBy   a owl:ObjectProperty ; rdfs:label "suppliedBy" ;
+    rdfs:domain sc:Product ; rdfs:range sc:Supplier ;
+    skos:definition "Links a Product to its primary Supplier." .
+
+sc:sourcedFrom  a owl:ObjectProperty ; rdfs:label "sourcedFrom" ;
+    rdfs:domain sc:PurchaseOrder ; rdfs:range sc:IngestionAdapter ;
+    skos:definition "Provenance: which source system loaded this PurchaseOrder." ;
+    owl:cardinality "1"^^xsd:nonNegativeInteger .
+
+sc:mergedInto   a owl:ObjectProperty ; rdfs:label "mergedInto" ;
+    rdfs:domain sc:PurchaseOrder ; rdfs:range sc:PurchaseOrder ;
+    skos:definition "Links a duplicate PurchaseOrder to its canonical master after Entity Resolution." .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — PurchaseOrder
+# ─────────────────────────────────────────────────────────────────────────────
+sc:poId           a owl:DatatypeProperty ; rdfs:label "poId"           ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:poStatus       a owl:DatatypeProperty ; rdfs:label "poStatus"       ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:poPriority     a owl:DatatypeProperty ; rdfs:label "poPriority"     ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:orderValueUSD  a owl:DatatypeProperty ; rdfs:label "orderValueUSD"  ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:decimal .
+sc:quantity       a owl:DatatypeProperty ; rdfs:label "quantity"       ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:integer .
+sc:placedDate     a owl:DatatypeProperty ; rdfs:label "placedDate"     ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:requestedDelivery a owl:DatatypeProperty ; rdfs:label "requestedDelivery" ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:supplierId     a owl:DatatypeProperty ; rdfs:label "supplierId"     ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:productId      a owl:DatatypeProperty ; rdfs:label "productId"      ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:warehouseId    a owl:DatatypeProperty ; rdfs:label "warehouseId"    ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:sourceSystem   a owl:DatatypeProperty ; rdfs:label "sourceSystem"   ; rdfs:range xsd:string .
+sc:crossRefId     a owl:DatatypeProperty ; rdfs:label "crossRefId"     ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:mergedFrom     a owl:DatatypeProperty ; rdfs:label "mergedFrom"     ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:mergeMethod    a owl:DatatypeProperty ; rdfs:label "mergeMethod"    ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:string .
+sc:mergeConfidence a owl:DatatypeProperty ; rdfs:label "mergeConfidence" ; rdfs:domain sc:PurchaseOrder ; rdfs:range xsd:decimal .
+
+# Common name property reused across classes
+sc:name           a owl:DatatypeProperty ; rdfs:label "name"           ; rdfs:range xsd:string .
+sc:status         a owl:DatatypeProperty ; rdfs:label "status"         ; rdfs:range xsd:string .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — Supplier
+# ─────────────────────────────────────────────────────────────────────────────
+sc:supplierKey    a owl:DatatypeProperty ; rdfs:label "supplierId"     ; rdfs:domain sc:Supplier ; rdfs:range xsd:string .
+sc:country        a owl:DatatypeProperty ; rdfs:label "country"        ; rdfs:range xsd:string .
+sc:category       a owl:DatatypeProperty ; rdfs:label "category"       ; rdfs:domain sc:Supplier ; rdfs:range xsd:string .
+sc:reliabilityScore a owl:DatatypeProperty ; rdfs:label "reliabilityScore" ; rdfs:domain sc:Supplier ; rdfs:range xsd:decimal .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — Product
+# ─────────────────────────────────────────────────────────────────────────────
+sc:productKey     a owl:DatatypeProperty ; rdfs:label "productId"      ; rdfs:domain sc:Product ; rdfs:range xsd:string .
+sc:sku            a owl:DatatypeProperty ; rdfs:label "sku"            ; rdfs:domain sc:Product ; rdfs:range xsd:string .
+sc:productCategory a owl:DatatypeProperty ; rdfs:label "category"      ; rdfs:domain sc:Product ; rdfs:range xsd:string .
+sc:unitPriceUSD   a owl:DatatypeProperty ; rdfs:label "unitPriceUSD"   ; rdfs:domain sc:Product ; rdfs:range xsd:decimal .
+sc:leadTimeDays   a owl:DatatypeProperty ; rdfs:label "leadTimeDays"   ; rdfs:domain sc:Product ; rdfs:range xsd:integer .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — Warehouse
+# ─────────────────────────────────────────────────────────────────────────────
+sc:warehouseKey   a owl:DatatypeProperty ; rdfs:label "warehouseId"    ; rdfs:domain sc:Warehouse ; rdfs:range xsd:string .
+sc:region         a owl:DatatypeProperty ; rdfs:label "region"         ; rdfs:domain sc:Warehouse ; rdfs:range xsd:string .
+sc:capacityUnits  a owl:DatatypeProperty ; rdfs:label "capacityUnits"  ; rdfs:domain sc:Warehouse ; rdfs:range xsd:integer .
+sc:utilisationPct a owl:DatatypeProperty ; rdfs:label "utilisationPct" ; rdfs:domain sc:Warehouse ; rdfs:range xsd:integer .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — Shipment
+# ─────────────────────────────────────────────────────────────────────────────
+sc:shipmentId     a owl:DatatypeProperty ; rdfs:label "shipmentId"     ; rdfs:domain sc:Shipment ; rdfs:range xsd:string .
+sc:shipmentStatus a owl:DatatypeProperty ; rdfs:label "shipmentStatus" ; rdfs:domain sc:Shipment ; rdfs:range xsd:string .
+sc:trackingNumber a owl:DatatypeProperty ; rdfs:label "trackingNumber" ; rdfs:domain sc:Shipment ; rdfs:range xsd:string .
+sc:dispatchedDate a owl:DatatypeProperty ; rdfs:label "dispatchedDate" ; rdfs:domain sc:Shipment ; rdfs:range xsd:string .
+sc:eta            a owl:DatatypeProperty ; rdfs:label "eta"            ; rdfs:domain sc:Shipment ; rdfs:range xsd:string .
+sc:isLate         a owl:DatatypeProperty ; rdfs:label "isLate"         ; rdfs:domain sc:Shipment ; rdfs:range xsd:boolean .
+sc:carrierId      a owl:DatatypeProperty ; rdfs:label "carrierId"      ; rdfs:domain sc:Shipment ; rdfs:range xsd:string .
+sc:poRef          a owl:DatatypeProperty ; rdfs:label "poRef"          ; rdfs:domain sc:Shipment ; rdfs:range xsd:string .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — Carrier
+# ─────────────────────────────────────────────────────────────────────────────
+sc:carrierKey     a owl:DatatypeProperty ; rdfs:label "carrierId"      ; rdfs:domain sc:Carrier ; rdfs:range xsd:string .
+sc:mode           a owl:DatatypeProperty ; rdfs:label "mode"           ; rdfs:domain sc:Carrier ; rdfs:range xsd:string .
+sc:onTimePct      a owl:DatatypeProperty ; rdfs:label "onTimePct"      ; rdfs:domain sc:Carrier ; rdfs:range xsd:integer .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Datatype Properties — IngestionAdapter
+# ─────────────────────────────────────────────────────────────────────────────
+sc:adapterId      a owl:DatatypeProperty ; rdfs:label "adapterId"      ; rdfs:domain sc:IngestionAdapter ; rdfs:range xsd:string .
+sc:protocol       a owl:DatatypeProperty ; rdfs:label "protocol"       ; rdfs:domain sc:IngestionAdapter ; rdfs:range xsd:string .
+sc:syncMode       a owl:DatatypeProperty ; rdfs:label "syncMode"       ; rdfs:domain sc:IngestionAdapter ; rdfs:range xsd:string .
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OWL2 Restrictions (enforced as Neo4j constraints in stage 2)
+# ─────────────────────────────────────────────────────────────────────────────
+sc:PurchaseOrder rdfs:subClassOf [
+    a owl:Restriction ; owl:onProperty sc:poStatus ; owl:cardinality "1"^^xsd:nonNegativeInteger
+] ;
+rdfs:subClassOf [
+    a owl:Restriction ; owl:onProperty sc:poId ; owl:cardinality "1"^^xsd:nonNegativeInteger
+] .
+
+sc:Shipment rdfs:subClassOf [
+    a owl:Restriction ; owl:onProperty sc:shipmentStatus ; owl:cardinality "1"^^xsd:nonNegativeInteger
+] .

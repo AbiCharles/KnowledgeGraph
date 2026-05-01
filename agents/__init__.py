@@ -1,11 +1,9 @@
-from .maintenance_planner import run as run_maintenance_planner
-from .compliance_monitor   import run as run_compliance_monitor
-from .root_cause_analyst   import run as run_root_cause_analyst
+"""Agent module — agents are declared in each use-case manifest and built dynamically.
 
-AGENT_REGISTRY = {
-    "maintenance_planner":  run_maintenance_planner,
-    "compliance_monitor":   run_compliance_monitor,
-    "root_cause_analyst":   run_root_cause_analyst,
-}
+The previous per-file agents/{maintenance_planner,compliance_monitor,root_cause_analyst}.py
+modules have been replaced by agents/dynamic.py + AgentSpec entries in
+use_cases/<slug>/manifest.yaml.
+"""
+from agents.dynamic import list_agents, find_agent, run
 
-__all__ = ["AGENT_REGISTRY"]
+__all__ = ["list_agents", "find_agent", "run"]
