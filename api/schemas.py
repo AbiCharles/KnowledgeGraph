@@ -33,3 +33,12 @@ class AgentRunRequest(BaseModel):
 class AgentRunResponse(BaseModel):
     agent: str
     result: str
+
+
+class NLRequest(BaseModel):
+    question: str
+
+
+class NLResponse(BaseModel):
+    cypher: str
+    explanation: str
