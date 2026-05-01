@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>KF WorkOrder Knowledge Graph</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#0b0e14;--bg2:#111620;--bg3:#181e2e;--bg4:#1e2538;--border:#2a3148;--border2:#3a4460;--text:#d4deff;--text2:#6e7fa8;--text3:#4a5578;--teal:#00c4b8;--blue:#4da6ff;--purple:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif}
+.app{display:grid;grid-template-rows:50px 1fr;grid-template-columns:1fr 1fr;flex:1;min-height:0}
+header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.logo{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--teal);letter-spacing:1px}
+.logo em{color:var(--text2);font-style:normal;font-weight:400}
+.panel{display:flex;flex-direction:column;overflow:hidden}
+.pl{border-right:1px solid var(--border)}
+.ph{display:flex;align-items:center;gap:10px;padding:10px 15px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.pt{font-size:10.5px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2)}
+.pb{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.pc{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.rbtn{display:flex;align-items:center;gap:7px;padding:7px 16px;background:var(--teal);border:none;border-radius:5px;color:#001a18;font-size:11.5px;font-weight:700;cursor:pointer;transition:all .18s}
+.rbtn:hover{background:#00dfd2;transform:translateY(-1px)}.rbtn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.stagelist{padding:8px 12px;display:flex;flex-direction:column;gap:3px;flex-shrink:0;border-bottom:1px solid var(--border);overflow-y:auto;max-height:240px}
+.srow{border-radius:5px;background:var(--bg3);border:1px solid var(--border);cursor:pointer;overflow:hidden;transition:all .25s}
+.srow.active{background:var(--bg4);border-color:var(--teal);box-shadow:0 0 8px rgba(0,196,184,.1)}
+.srow.done{border-color:rgba(52,211,153,.25)}
+.srow.fail{border-color:rgba(248,113,113,.45)}
+.srow-top{display:flex;align-items:center;gap:9px;padding:6px 9px}
+.sicon{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;font-family:'JetBrains Mono',monospace;background:var(--bg);border:1.5px solid var(--border2);color:var(--text3);transition:all .25s}
+.srow.active .sicon{border-color:var(--teal);color:var(--teal);animation:pu 1.2s ease-in-out infinite}
+.srow.done .sicon{background:var(--green);border-color:var(--green);color:#001a0e}
+.srow.fail .sicon{background:var(--red);border-color:var(--red);color:#1a0000}
+@keyframes pu{0%,100%{box-shadow:0 0 0 0 rgba(0,196,184,.4)}50%{box-shadow:0 0 0 3px rgba(0,196,184,.1)}}
+.sinfo{flex:1;min-width:0}
+.sname{font-size:10.5px;font-weight:500;color:var(--text)}
+.ssub{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-top:1px}
+.sbarw{height:2px;background:var(--border);border-radius:1px;margin-top:3px}
+.sbar{height:2px;border-radius:1px;background:var(--teal);width:0;transition:width .12s linear}
+.stime{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;flex-shrink:0;width:34px;text-align:right}
+.logarea{flex:1;overflow-y:auto;padding:7px 13px;font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.8}
+.lline{display:flex;gap:7px}
+.lts{color:var(--text3);flex-shrink:0;width:54px}
+.llv{flex-shrink:0;width:38px}
+.lINFO{color:var(--blue)}.lPASS{color:var(--green)}.lWARN{color:var(--amber)}.lFAIL,.lERROR{color:var(--red)}.lSTEP{color:var(--teal)}
+.lmsg{color:var(--text);flex:1;word-break:break-word}.lk{color:var(--purple)}.lv{color:var(--amber)}
+.ldiv{font-size:8.5px;color:var(--text3);padding:5px 0 2px;border-top:1px solid var(--border);margin-top:4px;letter-spacing:.5px}
+.reparea{padding:9px 13px;border-top:1px solid var(--border);flex-shrink:0}
+.reptitle{font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);margin-bottom:6px}
+.checkgrid{display:grid;grid-template-columns:1fr 1fr;gap:3px}
+.checkrow{display:flex;align-items:center;gap:5px;font-size:9px;font-family:'JetBrains Mono',monospace;padding:3px 6px;border-radius:3px;background:var(--bg3)}
+.kgscrollhint{display:none;margin:6px 13px;padding:7px 13px;background:rgba(0,196,184,.1);border:1px solid rgba(0,196,184,.25);border-radius:5px;font-size:10px;color:var(--teal);cursor:pointer;text-align:center;font-family:'JetBrains Mono',monospace}
+.kgscrollhint:hover{background:rgba(0,196,184,.18)}
+.qtop{padding:10px 13px;border-bottom:1px solid var(--border);flex-shrink:0}
+.mtoggle{display:flex;gap:0;margin-bottom:8px;border:1px solid var(--border2);border-radius:5px;overflow:hidden;width:fit-content}
+.mbtn{padding:5px 14px;font-size:10px;font-weight:600;background:transparent;border:none;cursor:pointer;color:var(--text3);transition:all .15s}
+.mbtn.active{background:var(--teal);color:#001a18}
+.nl-ed{width:100%;background:var(--bg3);border:1px solid rgba(0,196,184,.3);border-radius:5px;padding:8px 11px;font-family:'Inter',sans-serif;font-size:12px;color:var(--text);resize:none;height:68px;outline:none;line-height:1.6}
+.nl-ed:focus{border-color:var(--teal)}.nl-ed::placeholder{color:var(--text3)}
+.cy-ed{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:8px 11px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);resize:none;height:68px;outline:none;transition:border-color .18s;line-height:1.6}
+.cy-ed:focus{border-color:var(--teal)}
+.ts-strip{margin-top:5px;padding:6px 10px;background:rgba(0,196,184,.05);border:1px solid rgba(0,196,184,.15);border-radius:4px;font-size:9.5px;display:none;gap:8px}
+.ts-lbl{color:var(--teal);font-family:'JetBrains Mono',monospace;font-size:9px;white-space:nowrap}
+.ts-txt{color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;line-height:1.5;flex:1;word-break:break-all}
+.qbtns{display:flex;align-items:center;gap:7px;margin-top:7px}
+.qrun{padding:6px 14px;background:var(--teal);border:none;border-radius:4px;color:#001a18;font-size:10.5px;font-weight:700;cursor:pointer}
+.qrun:hover{background:#00dfd2}
+.qclr{padding:6px 11px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-size:10.5px;cursor:pointer}
+.qclr:hover{border-color:var(--text2);color:var(--text)}
+.qhint{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:2px}
+.exwrap{border-bottom:1px solid var(--border);flex-shrink:0}
+.exstrip{display:flex;gap:5px;overflow-x:auto;padding:6px 13px;scrollbar-width:none}
+.exstrip::-webkit-scrollbar{display:none}
+.exlbl{font-size:9px;color:var(--text3);white-space:nowrap;padding:3px 0;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.exbtn{padding:3px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;font-size:9.5px;color:var(--text2);cursor:pointer;white-space:nowrap;font-family:'Inter',sans-serif;flex-shrink:0;transition:all .15s}
+.exbtn:hover{border-color:var(--teal);color:var(--teal);background:rgba(0,196,184,.06)}
+.exbtn-cy{font-family:'JetBrains Mono',monospace;font-size:8.5px}
+.resarea{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{padding:7px 13px;font-size:10.5px;cursor:pointer;border-bottom:2px solid transparent;color:var(--text3);transition:all .15s;background:none;border-top:none;border-left:none;border-right:none}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal)}.tab:hover:not(.active){color:var(--text2)}
+.rpane{flex:1;overflow-y:auto;padding:11px 13px;display:none}.rpane.active{display:block}
+.rpane-graph{flex:1;padding:0;display:none;overflow:hidden;height:100%}.rpane-graph.active{display:flex}
+.rcount{font-size:9.5px;color:var(--text3);margin-bottom:7px;font-family:'JetBrains Mono',monospace}
+.rtable{width:100%;border-collapse:collapse;font-size:10.5px;font-family:'JetBrains Mono',monospace}
+.rtable th{text-align:left;padding:5px 9px;background:var(--bg3);color:var(--text2);font-size:9px;letter-spacing:.4px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+.rtable td{padding:5px 9px;border-bottom:1px solid rgba(42,49,72,.5);color:var(--text);vertical-align:top}
+.rtable tr:hover td{background:rgba(30,37,56,.6)}
+.csap{color:#4da6ff}.cmes{color:#34d399}.copen{color:var(--green)}.cprog{color:var(--amber)}.cdone{color:var(--text3)}.curgent{color:var(--red)}.chigh{color:var(--amber)}.ctype{color:var(--purple)}.cmerge{color:var(--purple)}
+.exbl{margin-bottom:11px}
+.exlabel{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px}
+.exbox{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 11px;font-size:10.5px;line-height:1.65}
+.excypher{font-family:'JetBrains Mono',monospace;color:var(--teal);white-space:pre-wrap}
+.statrow{display:flex;gap:7px;flex-wrap:wrap}
+.statchip{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:3px 9px;font-size:9.5px;font-family:'JetBrains Mono',monospace;color:var(--text2)}
+.statchip b{color:var(--teal)}
+.no-rel-box{background:rgba(77,166,255,.07);border:1px solid rgba(77,166,255,.2);border-radius:5px;padding:10px 13px;font-size:10.5px;line-height:1.7;color:var(--text2);margin-bottom:10px}
+.no-rel-box b{color:var(--blue)}
+.graphwrap{flex:1;position:relative;overflow:hidden;width:100%;height:100%;min-height:200px}
+.graphwrap canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:7px;color:var(--text3);font-size:11.5px;text-align:center;padding:20px}
+.eico{font-size:26px;opacity:.25}
+.errbox{background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.28);border-radius:5px;padding:11px 13px;font-size:10.5px;color:var(--red);font-family:'JetBrains Mono',monospace;line-height:1.65}
+.kgpanel{display:none;flex-direction:column;width:100%;height:100vh;background:var(--bg);border-top:2px solid var(--teal)}
+.kgpanel.active{display:flex}
+.kgph{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.kgptitle{font-size:12px;font-weight:600;color:var(--teal);font-family:'JetBrains Mono',monospace}
+.kgpstats{font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.kgpbtns{margin-left:auto;display:flex;gap:7px}
+.kgpbtn{padding:5px 13px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-size:10px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.kgpbtn:hover{border-color:var(--teal);color:var(--teal)}
+.kgbody{flex:1;position:relative;overflow:hidden}
+#kgcanvas{position:absolute;top:0;left:0;cursor:grab}
+#kgcanvas:active{cursor:grabbing}
+.kglegend{position:absolute;top:14px;right:14px;width:270px;background:var(--bg2);border:1px solid var(--border2);border-radius:7px;overflow:hidden;z-index:10}
+.kglegend.collapsed .kgleg-body{display:none}
+.kgleg-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.kgleg-hdr-title{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2)}
+.kgleg-toggle{font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;padding:0}
+.kgleg-body{padding:10px 12px;max-height:420px;overflow-y:auto}
+.kgleg-section{margin-bottom:11px}
+.kgleg-section-title{font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;font-family:'JetBrains Mono',monospace}
+.kgleg-item{display:flex;align-items:flex-start;gap:8px;margin-bottom:7px;font-size:9.5px}
+.kgleg-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;margin-top:2px}
+.kgleg-arrow{color:var(--teal);flex-shrink:0;font-size:10px;font-family:'JetBrains Mono',monospace;margin-top:1px}
+.kgleg-label{font-family:'JetBrains Mono',monospace;color:var(--text);font-size:9.5px}
+.kgleg-desc{color:var(--text2);font-size:9px;line-height:1.4;margin-top:2px}
+.kgleg-divider{height:1px;background:var(--border);margin:8px 0}
+.kgleg-note{font-size:9px;color:var(--text3);line-height:1.55}
+.kgdetail{position:absolute;top:0;bottom:0;right:0;width:280px;background:var(--bg2);border-left:1px solid var(--border);display:none;flex-direction:column;z-index:20;box-shadow:-4px 0 12px rgba(0,0,0,.4)}
+.kgdetail.visible{display:flex}
+.kgd-hdr{padding:11px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;flex-shrink:0}
+.kgd-dot{width:15px;height:15px;border-radius:50%;flex-shrink:0}
+.kgd-type{font-size:9.5px;color:var(--text2)}
+.kgd-id{font-size:11.5px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace;word-break:break-all}
+.kgd-close{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px}
+.kgd-close:hover{color:var(--text)}
+.kgd-props{flex:1;overflow-y:auto;padding:11px 13px}
+.kgd-prop{margin-bottom:9px}
+.kgd-pk{font-size:8.5px;color:var(--purple);font-family:'JetBrains Mono',monospace;margin-bottom:2px}
+.kgd-pv{font-size:10px;color:var(--text);background:var(--bg3);border-radius:3px;padding:3px 7px;word-break:break-all;line-height:1.4}
+.kgd-rels{padding:10px 13px;border-top:1px solid var(--border);flex-shrink:0;max-height:30%;overflow-y:auto}
+.kgd-rels-title{font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:7px;font-family:'JetBrains Mono',monospace}
+.kgd-rel-chip{display:flex;align-items:center;gap:5px;font-size:9.5px;color:var(--text2);padding:3px 0;cursor:pointer}
+.kgd-rel-chip:hover{color:var(--teal)}.kgd-rel-arrow{color:var(--teal)}
+::-webkit-scrollbar{width:3px;height:3px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+.pipe-body{flex:1;display:flex;flex-direction:row;overflow:hidden;border-bottom:none}
+.pipe-left{width:230px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--border);overflow-y:auto}
+.pipe-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.stagelist{padding:8px 10px;display:flex;flex-direction:column;gap:3px;flex:1;overflow-y:auto;max-height:none;border-bottom:none}
+.srow.sel{border-color:var(--teal)!important;background:rgba(0,196,184,.07)!important}
+.desc-panel{flex:1;overflow-y:auto;padding:16px 18px;border-bottom:1px solid var(--border)}
+.desc-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:11px;text-align:center;gap:6px}
+.desc-stage-num{font-size:9px;color:var(--teal);font-family:'JetBrains Mono',monospace;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
+.desc-stage-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
+.desc-body{font-size:12.5px;color:var(--text2);line-height:1.85;margin-bottom:14px}
+.desc-tech{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:6px 10px;background:var(--bg3);border-radius:4px;border:1px solid var(--border)}
+.logtab-row{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg2)}
+.logtab{padding:6px 14px;font-size:10px;cursor:pointer;color:var(--text3);border:none;background:none;border-bottom:2px solid transparent;transition:all .15s}
+.logtab.active{color:var(--teal);border-bottom-color:var(--teal)}
+
+.graph-modal{display:none;position:fixed;inset:0;z-index:1000;background:rgba(6,9,14,.92);flex-direction:column}
+.graph-modal.open{display:flex}
+.gm-header{display:flex;align-items:center;gap:14px;padding:11px 18px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.gm-title{font-size:12px;font-weight:600;color:var(--teal);font-family:'JetBrains Mono',monospace}
+.gm-info{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.gm-close{margin-left:auto;padding:5px 14px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.gm-close:hover{border-color:var(--red);color:var(--red)}
+.gm-body{flex:1;position:relative;overflow:hidden}
+#gm-canvas{position:absolute;top:0;left:0}
+.graph-expand-btn{position:absolute;top:8px;right:8px;z-index:5;padding:4px 10px;background:var(--bg2);border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-size:9.5px;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
+.graph-expand-btn:hover{border-color:var(--teal);color:var(--teal)}
+
+.desc-banner{flex-shrink:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 22px;display:flex;align-items:flex-start;gap:20px}
+.desc-banner-body{flex:1;min-width:0}
+.desc-banner-title{font-size:11px;font-weight:600;color:var(--teal);letter-spacing:.5px;font-family:'JetBrains Mono',monospace;margin-bottom:3px}
+.desc-banner-text{font-size:10.5px;color:var(--text2);line-height:1.6}
+.desc-banner-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.desc-tag{font-size:9px;font-family:'JetBrains Mono',monospace;padding:2px 8px;border-radius:10px;border:1px solid var(--border2);color:var(--text3)}
+.desc-tag-t{border-color:rgba(0,196,184,.35);color:var(--teal)}
+.desc-tag-p{border-color:rgba(167,139,250,.35);color:var(--purple)}
+
+.ptab-row{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg2)}
+.ptab{padding:7px 16px;font-size:10px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s}
+.ptab:hover:not(.ptab-active){color:var(--text2)}
+.ptab-active{color:var(--teal);border-bottom-color:var(--teal)}
+.pipe-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.ont-icon{border-color:rgba(251,191,36,.4)!important;color:var(--amber)!important}
+.srow.done .ont-icon{background:var(--amber)!important;border-color:var(--amber)!important;color:#1a0e00!important}
+
+.ont-rbtn{background:var(--amber)!important;color:#1a0e00!important}
+.ont-rbtn:hover{background:#fcd34d!important}
+.transfer-overlay{position:absolute;inset:0;background:rgba(11,14,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:50;gap:18px}
+.transfer-title{font-size:13px;font-weight:600;color:var(--teal);font-family:'JetBrains Mono',monospace;letter-spacing:.5px;text-align:center}
+.transfer-sub{font-size:10px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.transfer-bar-wrap{width:320px;height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.transfer-bar{height:4px;width:0;border-radius:2px;background:linear-gradient(90deg,var(--amber),var(--teal));transition:width .05s linear}
+#pipe-ont-pane{position:relative}
+@keyframes tabFlash{0%,100%{color:var(--teal);border-bottom-color:var(--teal)}50%{color:#fff;background:rgba(0,196,184,.15);border-bottom-color:var(--teal)}}
+.tab-flash{animation:tabFlash .4s ease-in-out 3}
+
+.agent-cards{display:flex;gap:8px;padding:10px 13px;border-bottom:1px solid var(--border);flex-shrink:0}
+.agent-card{flex:1;border:1px solid var(--border);border-radius:6px;padding:9px 11px;cursor:pointer;transition:all .2s;background:var(--bg3)}
+.agent-card:hover{border-color:var(--purple);background:rgba(167,139,250,.05)}
+.agent-sel{border-color:var(--purple)!important;background:rgba(167,139,250,.08)!important;box-shadow:0 0 10px rgba(167,139,250,.12)}
+.agent-card-icon{font-size:16px;margin-bottom:5px;color:var(--purple)}
+.agent-card-name{font-size:10px;font-weight:600;color:var(--text);margin-bottom:3px}
+.agent-card-role{font-size:8.5px;color:var(--text3);line-height:1.4}
+.agent-pc{padding:8px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.agent-rbtn{background:var(--purple)!important;color:#fff!important}
+.agent-rbtn:hover{background:#c4b5fd!important}
+.agent-rbtn:disabled{opacity:.35!important;cursor:not-allowed!important}
+.agent-console{flex:1;overflow-y:auto;padding:10px 13px;display:flex;flex-direction:column;gap:10px}
+.agent-idle{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:7px;color:var(--text3);font-size:11px}
+.agent-phase{display:flex;flex-direction:column;gap:6px}
+.agent-phase-hdr{display:flex;align-items:center;gap:8px}
+.agent-phase-badge{font-size:8px;font-weight:700;letter-spacing:1px;padding:2px 7px;border-radius:10px;color:#000;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.agent-phase-sub{font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.agent-cypher{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--teal);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;white-space:pre-wrap;line-height:1.6;margin-top:2px}
+.agent-exec-pulse{font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:5px 0;display:flex;align-items:center;gap:7px}
+.agent-pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--teal);animation:pu 1s ease-in-out infinite}
+.agent-task{font-size:11px;color:var(--text2);line-height:1.65;font-family:'Inter',sans-serif;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;white-space:pre-wrap}
+.agent-rec{background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.2);border-radius:5px;padding:9px 12px;margin-top:2px;font-size:11px;line-height:1.7}
+.agent-rec h1,.agent-rec h2,.agent-rec h3{color:var(--purple);font-size:12px;margin:6px 0 4px}
+.agent-rec strong{color:var(--text)}
+.agent-rec table{width:100%;border-collapse:collapse;margin:6px 0;font-size:10.5px;font-family:'JetBrains Mono',monospace}
+.agent-rec th{text-align:left;padding:4px 7px;background:var(--bg3);color:var(--text2);border-bottom:1px solid var(--border)}
+.agent-rec td{padding:4px 7px;border-bottom:1px solid rgba(42,49,72,.5)}
+.agent-rec ul,.agent-rec ol{padding-left:22px;margin:5px 0}
+.agent-rec li{margin:3px 0}
+.agent-rec code{background:var(--bg3);padding:1px 5px;border-radius:3px;color:var(--teal);font-size:10.5px}
+.agent-rec pre{background:var(--bg3);padding:8px 10px;border-radius:4px;overflow-x:auto;margin:5px 0}
+.agent-rec pre code{background:none;padding:0}
+
+.q-thinking{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px}
+.q-think-spinner{width:28px;height:28px;border:2.5px solid var(--border2);border-top-color:var(--teal);border-radius:50%;animation:qspin .7s linear infinite}
+@keyframes qspin{to{transform:rotate(360deg)}}
+.q-think-msg{font-size:10.5px;color:var(--teal);font-family:'JetBrains Mono',monospace;letter-spacing:.3px;text-align:center}
+.q-think-sub{font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+.snapshot-banner{display:none;background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);color:var(--red);padding:8px 14px;font-size:10.5px;font-family:'JetBrains Mono',monospace;text-align:center}
+.snapshot-banner.show{display:block}
+</style>
+</head>
+<body>
+<div class="desc-banner">
+  <div class="desc-banner-body">
+    <div class="desc-banner-title">&#11043; KF WorkOrder Knowledge Graph &mdash; Manufacturing Maintenance Use Case</div>
+    <div class="desc-banner-text">
+      Work orders &mdash; preventive, corrective, and inspection maintenance jobs &mdash; are captured from two source systems
+      (<strong style="color:var(--blue)">SAP-PM</strong> via OData v4 and <strong style="color:var(--green)">MES-PROD</strong> via REST/JSON),
+      curated and modelled into <strong style="color:var(--teal)">OWL2 ontology TTL files</strong> that formally define the structure and
+      relationships of every entity in the manufacturing domain. These TTL files are loaded into Neo4j via n10s, deduplicated by a
+      five-rule Entity Resolution engine, and connected in a knowledge graph to equipment assets, production lines, technicians, and
+      compliance policies. The result is a single queryable source of truth accessed by three specialised agents:
+      the <strong style="color:var(--purple)">Maintenance Planner</strong>,
+      the <strong style="color:var(--purple)">Compliance Monitor</strong>, and
+      the <strong style="color:var(--purple)">Root Cause Analyst</strong>.
+    </div>
+    <div class="desc-banner-tags" id="snapshot-tags">
+      <span class="desc-tag">Loading graph snapshot&hellip;</span>
+    </div>
+  </div>
+</div>
+<div id="snapshot-banner" class="snapshot-banner"></div>
+<div class="app">
+<header>
+  <div class="logo">KF<em>&middot;</em>GRAPH <em>// WorkOrder Knowledge Graph</em></div>
+</header>
+
+<div class="panel pl">
+  <div class="ptab-row">
+    <button class="ptab" id="ptab-ont"   onclick="switchPipeTab('ont')">&#9670; Ontology Curation</button>
+    <button class="ptab ptab-active" id="ptab-pip" onclick="switchPipeTab('pip')">&#9654; Hydration Pipeline</button>
+    <button class="ptab" id="ptab-agent" onclick="switchPipeTab('agent')">&#11043; Agent Ops</button>
+  </div>
+  <div class="pb">
+
+    <!-- ── Ontology Curation pane ─────────────────────────────────────────── -->
+    <div class="pipe-pane" id="pipe-ont-pane" style="display:none">
+      <div class="pc">
+        <button class="rbtn ont-rbtn" id="ont-rbtn" onclick="runCuration()">
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
+          RUN CURATION
+        </button>
+        <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">Validates ontology/kf-mfg-workorder.ttl with rdflib + pyshacl</span>
+      </div>
+      <div class="pipe-body">
+        <div class="pipe-left">
+          <div class="stagelist" id="ont-steplist"></div>
+        </div>
+        <div class="pipe-right">
+          <div class="logtab-row">
+            <button class="logtab active" id="ont-ltab-desc" onclick="showOntTab('desc',this)">Step Guide</button>
+            <button class="logtab"        id="ont-ltab-log"  onclick="showOntTab('log',this)">Live Log</button>
+          </div>
+          <div class="desc-panel" id="ont-desc">
+            <div class="desc-empty">
+              <div class="eico" style="font-size:22px;color:var(--amber)">&#9670;</div>
+              <div>Click any step to read its plain-English explanation</div>
+            </div>
+          </div>
+          <div class="logarea" id="ont-logarea" style="display:none"></div>
+        </div>
+      </div>
+      <div class="transfer-overlay" id="transfer-overlay" style="display:none">
+        <div class="transfer-title" id="transfer-title">Transferring ontology artefacts&hellip;</div>
+        <div class="transfer-bar-wrap"><div class="transfer-bar" id="transfer-bar"></div></div>
+        <div class="transfer-sub" id="transfer-sub">kf-mfg-workorder.ttl &rarr; Hydration Pipeline</div>
+      </div>
+    </div>
+
+    <!-- ── Hydration Pipeline pane ────────────────────────────────────────── -->
+    <div class="pipe-pane" id="pipe-pip-pane">
+      <div class="pc">
+        <button class="rbtn" id="rbtn" onclick="runPipeline()">
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
+          RUN PIPELINE
+        </button>
+        <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">7 stages against live Neo4j</span>
+      </div>
+      <div class="pipe-body">
+        <div class="pipe-left">
+          <div class="stagelist" id="stagelist"></div>
+        </div>
+        <div class="pipe-right">
+          <div class="logtab-row">
+            <button class="logtab active" id="ltab-desc" onclick="showPipeTab('desc',this)">Stage Guide</button>
+            <button class="logtab" id="ltab-log"  onclick="showPipeTab('log',this)">Live Log</button>
+          </div>
+          <div class="desc-panel" id="desc-panel">
+            <div class="desc-empty">
+              <div class="eico" style="font-size:22px">&#9656;</div>
+              <div>Click any stage to read its plain-English explanation</div>
+            </div>
+          </div>
+          <div class="logarea" id="logarea" style="display:none"></div>
+        </div>
+      </div>
+      <div id="kgscrollhint" class="kgscrollhint" onclick="scrollToKG()">&#8595; Full Knowledge Graph ready &mdash; click to explore</div>
+      <div class="reparea" id="reparea" style="display:none">
+        <div class="reptitle">Validation Report</div>
+        <div class="checkgrid" id="checkgrid"></div>
+      </div>
+    </div>
+
+    <!-- ── Agent Ops pane ─────────────────────────────────────────────────── -->
+    <div class="pipe-pane" id="pipe-agent-pane" style="display:none">
+      <div class="agent-cards">
+        <div class="agent-card" onclick="selectAgent(0)">
+          <div class="agent-card-icon">&#9874;</div>
+          <div class="agent-card-name">Maintenance Planner</div>
+          <div class="agent-card-role">Prioritises open work orders and checks technician coverage</div>
+        </div>
+        <div class="agent-card" onclick="selectAgent(1)">
+          <div class="agent-card-icon">&#9673;</div>
+          <div class="agent-card-name">Compliance Monitor</div>
+          <div class="agent-card-role">Flags open work orders with active regulatory requirements</div>
+        </div>
+        <div class="agent-card" onclick="selectAgent(2)">
+          <div class="agent-card-icon">&#9650;</div>
+          <div class="agent-card-name">Root Cause Analyst</div>
+          <div class="agent-card-role">Identifies equipment with highest corrective load</div>
+        </div>
+      </div>
+      <div class="agent-pc">
+        <button class="rbtn agent-rbtn" id="agent-rbtn" onclick="runAgent()" disabled>
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
+          RUN AGENT
+        </button>
+        <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="agent-hint">Select an agent above to begin</span>
+      </div>
+      <div class="agent-console" id="agent-console">
+        <div class="agent-idle"><div style="font-size:20px;opacity:.25">&#11043;</div><div>Select an agent, then press RUN AGENT</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Right: Query Console ─────────────────────────────────────────────── -->
+<div class="panel">
+  <div class="ph">
+    <div class="pt">Query Console</div>
+    <div style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">Ctrl+Enter to run</div>
+  </div>
+  <div class="pb">
+    <div class="qtop">
+      <div class="mtoggle">
+        <button class="mbtn active" id="btn-nl" onclick="setMode('nl')">Plain English</button>
+        <button class="mbtn" id="btn-cy" onclick="setMode('cypher')">Cypher</button>
+      </div>
+      <div id="wrap-nl">
+        <textarea class="nl-ed" id="nl-input"
+          placeholder="e.g. Show me all urgent work orders&#10;e.g. Which technicians are assigned to in-progress jobs?&#10;e.g. Show the full chain: work order to equipment to production line"
+          spellcheck="false"></textarea>
+        <div class="ts-strip" id="ts-strip">
+          <span class="ts-lbl">CYPHER &#8594;</span>
+          <span class="ts-txt" id="ts-text"></span>
+        </div>
+      </div>
+      <div id="wrap-cy" style="display:none">
+        <textarea class="cy-ed" id="cypher-input" placeholder="MATCH (wo:`kf-mfg__WorkOrder`) RETURN ..." spellcheck="false"></textarea>
+      </div>
+      <div class="qbtns">
+        <button class="qrun" onclick="runQuery()">&#9654; RUN</button>
+        <button class="qclr" onclick="clearQ()">Clear</button>
+        <span class="qhint" id="qhint">Type a plain-English question</span>
+      </div>
+    </div>
+    <div class="exwrap">
+      <div class="exstrip" id="strip-nl">
+        <span class="exlbl">Examples:</span>
+        <button class="exbtn" onclick="setExampleQ(0)">Show me all work orders</button>
+        <button class="exbtn" onclick="setExampleQ(1)">Which work orders are on which equipment?</button>
+        <button class="exbtn" onclick="setExampleQ(2)">Full chain: work order to production line</button>
+        <button class="exbtn" onclick="setExampleQ(3)">Show me all URGENT work orders</button>
+        <button class="exbtn" onclick="setExampleQ(4)">Which work orders were merged duplicates?</button>
+        <button class="exbtn" onclick="setExampleQ(5)">Which work orders have compliance requirements?</button>
+        <button class="exbtn" onclick="setExampleQ(6)">Open corrective work orders</button>
+        <button class="exbtn" onclick="setExampleQ(7)">Which technicians are assigned to jobs?</button>
+        <button class="exbtn" onclick="setExampleQ(8)">How many jobs does each piece of equipment have?</button>
+        <button class="exbtn" onclick="setExampleQ(9)">SAP-PM work orders only</button>
+        <button class="exbtn" onclick="setExampleQ(10)">All in-progress jobs</button>
+      </div>
+      <div class="exstrip" id="strip-cy" style="display:none">
+        <span class="exlbl">Cypher:</span>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(0)">All WorkOrders</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(1)">WO to Equipment</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(2)">3-hop traversal</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(3)">URGENT orders</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(4)">ER merged nodes</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(5)">Compliance links</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(6)">Open corrective</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(7)">Technician jobs</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(8)">Equipment workload</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(9)">SAP-PM only</button>
+        <button class="exbtn exbtn-cy" onclick="setExampleQ(10)">In-progress jobs</button>
+      </div>
+    </div>
+    <div class="resarea">
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('table',this)">Table</button>
+        <button class="tab" onclick="switchTab('explain',this)">Query Info</button>
+        <button class="tab" onclick="switchTab('graph',this)">Graph</button>
+      </div>
+      <div class="rpane active" id="pane-table"><div class="empty"><div class="eico">&#9647;</div><div>Run a query to see results</div></div></div>
+      <div class="rpane" id="pane-explain"><div class="empty"><div class="eico">&#9672;</div><div>Query info will appear here</div></div></div>
+      <div class="rpane-graph" id="pane-graph" style="position:relative">
+        <button class="graph-expand-btn" onclick="openGraphModal()" title="Expand graph">&#8599;&nbsp;Expand</button>
+        <div class="graphwrap" id="graphwrap"><div class="empty"><div class="eico">&#11043;</div><div>Graph view will appear here</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ── Full Knowledge Graph panel (below the fold) ──────────────────────── -->
+<div class="kgpanel" id="kgpanel">
+  <div class="kgph">
+    <span class="kgptitle">Full WorkOrder Knowledge Graph</span>
+    <span class="kgpstats" id="kgpstats">Loading&hellip;</span>
+    <div class="kgpbtns">
+      <button class="kgpbtn" onclick="resetKGView()">Reset</button>
+      <button class="kgpbtn" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8593; Top</button>
+    </div>
+  </div>
+  <div class="kgbody" id="kgbody">
+    <canvas id="kgcanvas"></canvas>
+    <div class="kglegend" id="kglegend">
+      <div class="kgleg-hdr" onclick="toggleKGLegend()">
+        <span class="kgleg-hdr-title">Legend</span>
+        <button class="kgleg-toggle" id="legtoggle">&#9650;</button>
+      </div>
+      <div class="kgleg-body">
+        <div class="kgleg-section">
+          <div class="kgleg-section-title">Node Types</div>
+          <div class="kgleg-item"><div class="kgleg-dot" style="background:#1F6B8C"></div><div><div class="kgleg-label">WorkOrder</div><div class="kgleg-desc">A maintenance job &mdash; preventive, corrective or inspection.</div></div></div>
+          <div class="kgleg-item"><div class="kgleg-dot" style="background:#5B4A8C"></div><div><div class="kgleg-label">Equipment</div><div class="kgleg-desc">Physical asset: CNC mill, press, conveyor, robot, laser.</div></div></div>
+          <div class="kgleg-item"><div class="kgleg-dot" style="background:#0E7C7B"></div><div><div class="kgleg-label">ProductionLine</div><div class="kgleg-desc">Manufacturing line that owns equipment assets.</div></div></div>
+          <div class="kgleg-item"><div class="kgleg-dot" style="background:#7A3B2E"></div><div><div class="kgleg-label">CompliancePolicy</div><div class="kgleg-desc">OSHA 29 CFR 1910 and ISO 55000.</div></div></div>
+          <div class="kgleg-item"><div class="kgleg-dot" style="background:#2A6B3C"></div><div><div class="kgleg-label">Technician</div><div class="kgleg-desc">Operative assigned to carry out the work.</div></div></div>
+          <div class="kgleg-item"><div class="kgleg-dot" style="background:#3a3f47"></div><div><div class="kgleg-label">IngestionAdapter</div><div class="kgleg-desc">SAP-PM (OData) and MES-PROD (REST).</div></div></div>
+        </div>
+        <div class="kgleg-divider"></div>
+        <div class="kgleg-section">
+          <div class="kgleg-section-title">Relationships</div>
+          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">assignedToEquipment</div></div></div>
+          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">onProductionLine</div></div></div>
+          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">assignedToTechnician</div></div></div>
+          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">governedBy</div></div></div>
+          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">sourcedFrom</div></div></div>
+        </div>
+        <div class="kgleg-divider"></div>
+        <div class="kgleg-note">Click any node to inspect. Scroll to zoom, drag to pan.</div>
+      </div>
+    </div>
+    <div class="kgdetail" id="kgdetail">
+      <div class="kgd-hdr">
+        <div class="kgd-dot" id="kgd-dot"></div>
+        <div style="min-width:0"><div class="kgd-type" id="kgd-type"></div><div class="kgd-id" id="kgd-id"></div></div>
+        <button class="kgd-close" onclick="closeKGDetail()">&times;</button>
+      </div>
+      <div class="kgd-props" id="kgd-props"></div>
+      <div class="kgd-rels"><div class="kgd-rels-title">Relationships</div><div id="kgd-rels-list"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Query graph pop-out modal -->
+<div class="graph-modal" id="graph-modal">
+  <div class="gm-header">
+    <div style="flex:1;min-width:0">
+      <div class="gm-title" id="gm-title"></div>
+      <div class="gm-info" id="gm-info"></div>
+    </div>
+    <button class="gm-close" onclick="closeGraphModal()">&#215; Close &nbsp; <span style="font-size:8.5px;opacity:.6">Esc</span></button>
+  </div>
+  <div class="gm-body" id="gm-body">
+    <canvas id="gm-canvas"></canvas>
+  </div>
+</div>
+
+<script>
+// =============================================================================
+// API CLIENT
+// =============================================================================
+const API = "";
+async function api(path, body){
+  const opts = body
+    ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}
+    : {method:'GET'};
+  const res = await fetch(API+path, opts);
+  if(!res.ok){
+    let msg = `HTTP ${res.status}`;
+    try{ const j = await res.json(); msg = j.detail || JSON.stringify(j); } catch(_){}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// =============================================================================
+// GRAPH STATE — populated from /query at page load and after each pipeline run
+// =============================================================================
+let NODES = [];
+let EDGES = [];
+let NM = {};
+const KF_PREFIX = /^kf-mfg__/;
+
+function stripPrefix(s){ return typeof s === 'string' ? s.replace(KF_PREFIX, '') : s; }
+function cleanProps(p){
+  if(!p || typeof p !== 'object') return {};
+  const out = {};
+  for(const k in p){ out[stripPrefix(k)] = p[k]; }
+  return out;
+}
+
+async function loadGraph(){
+  try{
+    const [nodesRes, edgesRes] = await Promise.all([
+      api('/query', {cypher:
+        "MATCH (n) " +
+        "WITH n, [l IN labels(n) WHERE l STARTS WITH 'kf-mfg__' OR l = 'IngestionAdapter'] AS dl " +
+        "WHERE size(dl) > 0 " +
+        "RETURN elementId(n) AS id, dl[0] AS type, properties(n) AS p"}),
+      api('/query', {cypher:
+        "MATCH (a)-[r]->(b) " +
+        "WITH a, b, r, " +
+        "     [l IN labels(a) WHERE l STARTS WITH 'kf-mfg__' OR l = 'IngestionAdapter'] AS al, " +
+        "     [l IN labels(b) WHERE l STARTS WITH 'kf-mfg__' OR l = 'IngestionAdapter'] AS bl " +
+        "WHERE size(al) > 0 AND size(bl) > 0 " +
+        "  AND (type(r) STARTS WITH 'kf-mfg__' OR type(r) = 'sourcedFrom') " +
+        "RETURN elementId(a) AS source, elementId(b) AS target, type(r) AS rel"})
+    ]);
+    NODES = nodesRes.rows.map(r => ({
+      id: r.id,
+      type: stripPrefix(r.type) || r.type || 'Unknown',
+      p: cleanProps(r.p)
+    }));
+    EDGES = edgesRes.rows.map(r => ({
+      s: r.source, t: r.target, rel: stripPrefix(r.rel)
+    }));
+    NM = {};
+    NODES.forEach(n => { NM[n.id] = n; });
+    window.GRAPH = {NODES, EDGES, NM};
+    updateSnapshotChips();
+    return true;
+  } catch(err){
+    console.error('loadGraph failed:', err);
+    showSnapshotBanner('Graph load failed: ' + err.message);
+    return false;
+  }
+}
+
+function updateSnapshotChips(){
+  const counts = {};
+  NODES.forEach(n => { counts[n.type] = (counts[n.type]||0) + 1; });
+  const order = ['WorkOrder','Equipment','ProductionLine','Technician','CompliancePolicy','IngestionAdapter'];
+  const tags = order.filter(t => counts[t]).map(t => `<span class="desc-tag desc-tag-t">${counts[t]} ${t}${counts[t]!==1?'s':''}</span>`);
+  if(!tags.length){
+    document.getElementById('snapshot-tags').innerHTML = '<span class="desc-tag" style="color:var(--amber);border-color:rgba(251,191,36,.4)">Graph empty &mdash; run the Hydration Pipeline to populate it</span>';
+  } else {
+    tags.push('<span class="desc-tag desc-tag-p">Maintenance Planner</span>');
+    tags.push('<span class="desc-tag desc-tag-p">Compliance Monitor</span>');
+    tags.push('<span class="desc-tag desc-tag-p">Root Cause Analyst</span>');
+    document.getElementById('snapshot-tags').innerHTML = tags.join('');
+  }
+  const stats = document.getElementById('kgpstats');
+  if(stats){
+    stats.textContent = order.filter(t => counts[t])
+      .map(t => `${counts[t]} ${t}${counts[t]!==1?'s':''}`)
+      .join(' · ') || 'Empty graph';
+  }
+}
+
+function showSnapshotBanner(msg){
+  const b = document.getElementById('snapshot-banner');
+  b.textContent = msg;
+  b.classList.add('show');
+}
+
+// =============================================================================
+// HYDRATION PIPELINE (left tab) — calls real /pipeline/run
+// =============================================================================
+const STAGES = [
+  {n:0, name:'Preflight Check',     sub:'Neo4j · plugins · TTL files'},
+  {n:1, name:'Wipe + n10s Init',    sub:'DETACH DELETE · graphconfig · prefixes'},
+  {n:2, name:'OWL2 Schema Load',    sub:'onto.import · constraints · indexes'},
+  {n:3, name:'Test Data Load',      sub:'rdf.import · nodes materialised'},
+  {n:4, name:'Live Data Ingestion', sub:'SAP-PM + MES-PROD adapters'},
+  {n:5, name:'Entity Resolution',   sub:'ER-001 through ER-005'},
+  {n:6, name:'Validation',          sub:'4 critical + 4 warning checks'}
+];
+const STAGE_PLAIN = [
+  'Before touching any data, the pipeline checks the database is accepting connections, both Neo4j plugins (n10s and APOC) are installed, and both source TTL files exist on disk.',
+  'The database is wiped completely (every node and relationship from any previous run is deleted), then n10s graphconfig is initialised in SHORTEN mode and ten namespace prefixes are registered.',
+  'The ontology TTL is loaded into Neo4j via n10s.onto.import.inline. Property-existence constraints are created, plus 5 indexes on the most-queried fields.',
+  'The test data TTL (20 WorkOrders, 5 Equipment, 3 Lines, 4 Technicians, 2 Compliance Policies) is imported via n10s.rdf.import.inline.',
+  'Two IngestionAdapter records are created (SAP-PM via OData v4 and MES-PROD via REST/JSON) and every WorkOrder is linked to its source adapter for full provenance.',
+  'Five ER rules run in confidence order: exact ID match, cross-reference key, fuzzy description, synonym work-type, and same-equipment-same-date fingerprint. Confirmed duplicates are merged into the SAP-PM master.',
+  'Eight checks run — four critical (must pass) and four warning. Counts, no-duplicate IDs, no-orphans, provenance complete, HRQ queue empty, every WO sourced, 3-hop connectivity reachable.'
+];
+
+let _pRunning = false;
+let _selStage = -1;
+
+function renderStages(states){
+  document.getElementById('stagelist').innerHTML = STAGES.map(s => {
+    const st = (states && states[s.n]) || 'idle';
+    let cls = 'srow', icon = String(s.n);
+    if(st === 'active'){ cls += ' active'; icon = '●'; }
+    else if(st === 'pass'){ cls += ' done'; icon = '✓'; }
+    else if(st === 'fail'){ cls += ' fail'; icon = '✗'; }
+    if(s.n === _selStage) cls += ' sel';
+    return `<div class="${cls}" onclick="showStageDesc(${s.n})">
+      <div class="srow-top">
+        <div class="sicon">${icon}</div>
+        <div class="sinfo">
+          <div class="sname">Stage ${s.n} — ${s.name}</div>
+          <div class="ssub">${s.sub}</div>
+          <div class="sbarw"><div class="sbar" id="bar${s.n}" style="width:${st==='pass'||st==='fail'?'100%':'0'}"></div></div>
+        </div>
+        <div class="stime" id="tim${s.n}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showStageDesc(n){
+  _selStage = n;
+  const states = window._lastPipelineStates || {};
+  renderStages(states);
+  const s = STAGES[n] || {};
+  document.getElementById('desc-panel').innerHTML =
+    `<div class="desc-stage-num">Stage ${n}</div>
+     <div class="desc-stage-name">${s.name}</div>
+     <div class="desc-body">${STAGE_PLAIN[n] || ''}</div>
+     <div class="desc-tech">${s.sub}</div>`;
+  showPipeTab('desc', document.getElementById('ltab-desc'));
+}
+
+function showPipeTab(tab, el){
+  document.querySelectorAll('#pipe-pip-pane .logtab').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  const dp = document.getElementById('desc-panel'), la = document.getElementById('logarea');
+  if(tab === 'desc'){ dp.style.display = 'block'; la.style.display = 'none'; }
+  else { dp.style.display = 'none'; la.style.display = 'block'; la.scrollTop = la.scrollHeight; }
+}
+
+function pad(n){ return n<10?'0'+n:n; }
+function tsNow(){ const t=new Date(); return pad(t.getHours())+':'+pad(t.getMinutes())+':'+pad(t.getSeconds()); }
+function addLog(area, level, msg){
+  const fmt = String(msg).replace(/<k>(.*?)<\/k>/g,'<span class="lk">$1</span>').replace(/<v>(.*?)<\/v>/g,'<span class="lv">$1</span>');
+  const d = document.createElement('div'); d.className = 'lline';
+  d.innerHTML = `<span class="lts">${tsNow()}</span><span class="llv l${level}">${level}</span><span class="lmsg">${fmt}</span>`;
+  area.appendChild(d);
+  area.scrollTop = area.scrollHeight;
+}
+function addDiv(area, txt, cls){
+  const d = document.createElement('div'); d.className = cls; d.textContent = txt;
+  area.appendChild(d);
+}
+function inferLevel(line){
+  if(/^PASS\b/.test(line)) return 'PASS';
+  if(/^WARN\b/.test(line)) return 'WARN';
+  if(/^FAIL\b/.test(line) || /^ERROR\b/.test(line)) return 'FAIL';
+  if(/^STEP\b/.test(line)) return 'STEP';
+  return 'INFO';
+}
+function trimLevel(line){ return line.replace(/^(PASS|WARN|FAIL|ERROR|STEP|INFO)\s+/, ''); }
+
+async function runPipeline(){
+  if(_pRunning) return;
+  _pRunning = true;
+  const btn = document.getElementById('rbtn');
+  btn.disabled = true;
+  document.getElementById('reparea').style.display = 'none';
+  document.getElementById('kgscrollhint').style.display = 'none';
+  const la = document.getElementById('logarea');
+  la.innerHTML = '';
+  showPipeTab('log', document.getElementById('ltab-log'));
+  const states = {};
+  STAGES.forEach(s => states[s.n] = 'idle');
+  window._lastPipelineStates = states;
+  renderStages(states);
+  addLog(la, 'INFO', 'POST /pipeline/run — awaiting backend (this may take 5–10s)…');
+
+  try {
+    const data = await api('/pipeline/run', {});
+    addDiv(la, '── Pipeline returned ' + data.stages.length + ' stages ──', 'ldiv');
+
+    for(let i = 0; i < data.stages.length; i++){
+      const stage = data.stages[i];
+      states[stage.stage] = 'active';
+      renderStages(states);
+      addDiv(la, `── Stage ${stage.stage}: ${stage.name} ──`, 'ldiv');
+      await sleep(150);
+
+      for(const line of (stage.logs || [])){
+        addLog(la, inferLevel(line), trimLevel(line));
+        await sleep(40);
+      }
+      if(stage.error){
+        addLog(la, 'ERROR', stage.error);
+      }
+
+      states[stage.stage] = stage.status;
+      const tim = document.getElementById('tim' + stage.stage);
+      if(tim) tim.textContent = (stage.duration_ms || 0) + 'ms';
+      renderStages(states);
+      await sleep(120);
+    }
+
+    addDiv(la, '── Overall: ' + data.overall.toUpperCase() + ' ──', 'ldiv');
+
+    if(data.overall === 'pass'){
+      showValidationReport(data.stages);
+      await loadGraph();
+      document.getElementById('kgscrollhint').style.display = 'block';
+      document.getElementById('kgpanel').classList.add('active');
+      setTimeout(initKGCanvas, 250);
+    }
+
+  } catch(err){
+    addLog(la, 'ERROR', 'Pipeline call failed: ' + err.message);
+  } finally {
+    _pRunning = false;
+    btn.disabled = false;
+  }
+}
+
+function showValidationReport(stages){
+  const validation = stages.find(s => /validation/i.test(s.name));
+  if(!validation || !validation.logs) return;
+  const checks = validation.logs.filter(l => /^(PASS|WARN|FAIL)\s+VC-/i.test(l)).map(l => {
+    const m = l.match(/^(PASS|WARN|FAIL)\s+(VC-\S+)\s+(.+)$/i);
+    if(!m) return null;
+    return {status: m[1].toUpperCase(), code: m[2], msg: m[3]};
+  }).filter(Boolean);
+  if(!checks.length) return;
+  document.getElementById('checkgrid').innerHTML = checks.map(c => {
+    const colour = c.status === 'PASS' ? 'var(--green)' : c.status === 'WARN' ? 'var(--amber)' : 'var(--red)';
+    const glyph = c.status === 'PASS' ? '✓' : c.status === 'WARN' ? '!' : '✗';
+    return `<div class="checkrow"><span style="color:${colour}">${glyph}</span><span style="flex:1;color:var(--text2)">${c.code}</span><span style="color:${colour}">${c.msg}</span></div>`;
+  }).join('');
+  document.getElementById('reparea').style.display = 'block';
+}
+
+function scrollToKG(){ document.getElementById('kgpanel').scrollIntoView({behavior:'smooth'}); }
+
+// =============================================================================
+// ONTOLOGY CURATION (left tab) — calls real /ontology/curate
+// =============================================================================
+const ONT_STEPS = [
+  {n:1, name:'Domain Scoping',                  sub:'kf-mfg namespace · in-scope class allowlist'},
+  {n:2, name:'Entity & Relationship Modelling', sub:'OWL classes · object properties · domain/range'},
+  {n:3, name:'OWL2 Axiom Authoring',            sub:'owl:Restriction · cardinality constraints'},
+  {n:4, name:'Property Definitions',            sub:'datatype properties · xsd ranges'},
+  {n:5, name:'TTL Serialisation',               sub:'file size · round-trip parse'},
+  {n:6, name:'SHACL Validation',                sub:'shapes generated · pyshacl validate'}
+];
+const ONT_PLAIN = [
+  'Before any modelling begins, the boundary of the ontology is agreed: which entities are in scope, which are not. The kf-mfg namespace is declared and every concept is checked against the in-scope allowlist.',
+  'Each in-scope concept becomes a formal OWL class, and every meaningful connection becomes a typed object property with declared rdfs:domain and rdfs:range.',
+  'Cardinality restrictions encode the rules a valid instance must obey — e.g. every WorkOrder must have exactly one status. These materialise as Neo4j constraints in stage 2 of the hydration pipeline.',
+  'Every attribute on every class gets a formal datatype property declaration with a defined XSD type (string, dateTime, boolean, decimal). These become typed Neo4j node properties.',
+  'The completed model is serialised to Turtle. The file is round-tripped through rdflib to confirm syntactic validity, and its size is recorded as a deliverable metric.',
+  'SHACL shapes are generated from the OWL cardinality axioms and validated against the test data graph using pyshacl. Conformance is reported.'
+];
+
+let _ontRunning = false;
+let _selOntStep = -1;
+
+function renderOntSteps(states){
+  document.getElementById('ont-steplist').innerHTML = ONT_STEPS.map(s => {
+    const st = (states && states[s.n]) || 'idle';
+    let cls = 'srow', icon = String(s.n);
+    if(st === 'active'){ cls += ' active'; icon = '●'; }
+    else if(st === 'pass'){ cls += ' done'; icon = '✓'; }
+    else if(st === 'fail'){ cls += ' fail'; icon = '✗'; }
+    if(s.n === _selOntStep) cls += ' sel';
+    return `<div class="${cls}" onclick="showOntDesc(${s.n})">
+      <div class="srow-top">
+        <div class="sicon ont-icon">${icon}</div>
+        <div class="sinfo">
+          <div class="sname">Step ${s.n} — ${s.name}</div>
+          <div class="ssub">${s.sub}</div>
+          <div class="sbarw"><div class="sbar" id="ont-bar${s.n}" style="background:var(--amber);width:${st==='pass'||st==='fail'?'100%':'0'}"></div></div>
+        </div>
+        <div class="stime" id="ont-tim${s.n}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showOntDesc(n){
+  _selOntStep = n;
+  renderOntSteps(window._lastOntStates || {});
+  const s = ONT_STEPS[n-1];
+  document.getElementById('ont-desc').innerHTML =
+    `<div class="desc-stage-num" style="color:var(--amber)">Step ${s.n} of 6</div>
+     <div class="desc-stage-name">${s.name}</div>
+     <div class="desc-body">${ONT_PLAIN[n-1]}</div>
+     <div class="desc-tech" style="border-color:rgba(251,191,36,.2);color:var(--amber)">${s.sub}</div>`;
+  showOntTab('desc', document.getElementById('ont-ltab-desc'));
+}
+
+function showOntTab(tab, el){
+  document.querySelectorAll('#pipe-ont-pane .logtab').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  const dp = document.getElementById('ont-desc'), la = document.getElementById('ont-logarea');
+  if(tab === 'desc'){ dp.style.display = 'block'; la.style.display = 'none'; }
+  else { dp.style.display = 'none'; la.style.display = 'block'; la.scrollTop = la.scrollHeight; }
+}
+
+async function runCuration(){
+  if(_ontRunning) return;
+  _ontRunning = true;
+  const btn = document.getElementById('ont-rbtn');
+  btn.disabled = true;
+  const la = document.getElementById('ont-logarea');
+  la.innerHTML = '';
+  showOntTab('log', document.getElementById('ont-ltab-log'));
+  const states = {};
+  ONT_STEPS.forEach(s => states[s.n] = 'idle');
+  window._lastOntStates = states;
+  renderOntSteps(states);
+  addLog(la, 'INFO', 'POST /ontology/curate — awaiting rdflib + pyshacl analysis…');
+
+  try {
+    const data = await api('/ontology/curate', {});
+    addDiv(la, '── Curation returned ' + data.stages.length + ' steps ──', 'ldiv');
+
+    for(let i = 0; i < data.stages.length; i++){
+      const step = data.stages[i];
+      states[step.stage] = 'active';
+      renderOntSteps(states);
+      addDiv(la, `── Step ${step.stage}: ${step.name} ──`, 'ldiv');
+      await sleep(150);
+
+      for(const line of (step.logs || [])){
+        addLog(la, inferLevel(line), trimLevel(line));
+        await sleep(35);
+      }
+      if(step.error){
+        addLog(la, 'ERROR', step.error);
+      }
+      states[step.stage] = step.status;
+      const tim = document.getElementById('ont-tim' + step.stage);
+      if(tim) tim.textContent = (step.duration_ms || 0) + 'ms';
+      renderOntSteps(states);
+      await sleep(120);
+    }
+
+    addDiv(la, '── Overall: ' + data.overall.toUpperCase() + ' ──', 'ldiv');
+    if(data.overall === 'pass'){
+      setTimeout(startTransfer, 600);
+    }
+  } catch(err){
+    addLog(la, 'ERROR', 'Curation call failed: ' + err.message);
+  } finally {
+    _ontRunning = false;
+    btn.disabled = false;
+  }
+}
+
+function startTransfer(){
+  const ov = document.getElementById('transfer-overlay');
+  const bar = document.getElementById('transfer-bar');
+  const titl = document.getElementById('transfer-title');
+  const sub = document.getElementById('transfer-sub');
+  const messages = [
+    'Packaging ontology artefacts…',
+    'Validating TTL schema…',
+    'Transferring to Hydration Pipeline…',
+    'Registering kf-mfg namespace…',
+    'Handoff complete — pipeline ready'
+  ];
+  let pct = 0, msgIdx = 0;
+  ov.style.display = 'flex';
+  bar.style.width = '0%';
+  titl.textContent = messages[0];
+  const iv = setInterval(() => {
+    pct += 1.4;
+    bar.style.width = Math.min(100, pct) + '%';
+    const newMsg = Math.floor((pct/100) * messages.length);
+    if(newMsg !== msgIdx && newMsg < messages.length){
+      msgIdx = newMsg;
+      titl.textContent = messages[msgIdx];
+    }
+    if(pct >= 100){
+      clearInterval(iv);
+      titl.textContent = messages[messages.length-1];
+      sub.textContent = 'kf-mfg-workorder.ttl → Stage 2: Schema Load';
+      setTimeout(() => {
+        ov.style.display = 'none';
+        switchPipeTab('pip');
+        const pipTab = document.getElementById('ptab-pip');
+        if(pipTab){ pipTab.classList.add('tab-flash'); setTimeout(() => pipTab.classList.remove('tab-flash'), 1400); }
+      }, 900);
+    }
+  }, 35);
+}
+
+// =============================================================================
+// AGENT OPS (left tab) — calls real /agents/run, drives 4-phase animation
+// =============================================================================
+const AGENTS = [
+  {
+    id: 'maintenance_planner',
+    name: 'Maintenance Planner',
+    task: 'Analyse all OPEN work orders. Identify technician coverage gaps and recommend the best available technician for each unassigned order. Justify each recommendation based on specialisation, grade, certification, and current workload.',
+    cypher: "MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woStatus` = 'OPEN'\nOPTIONAL MATCH (wo)-[:`kf-mfg__assignedToTechnician`]->(t:`kf-mfg__Technician`)\nRETURN wo.`kf-mfg__workOrderId` AS id,\n       wo.`kf-mfg__woPriority`  AS priority,\n       wo.`kf-mfg__woType`      AS type,\n       t.`kf-mfg__name`         AS technician\nORDER BY priority"
+  },
+  {
+    id: 'compliance_monitor',
+    name: 'Compliance Monitor',
+    task: 'Find all work orders governed by a compliance policy (OSHA / ISO) that are not yet completed. Assess regulatory exposure and recommend the best technician for any unassigned compliance-critical orders.',
+    cypher: "MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__governedBy`]->(cp:`kf-mfg__CompliancePolicy`)\nWHERE wo.`kf-mfg__woStatus` <> 'COMPLETED'\nRETURN wo.`kf-mfg__workOrderId` AS workOrder,\n       wo.`kf-mfg__woStatus`   AS status,\n       wo.`kf-mfg__woPriority` AS priority,\n       cp.`kf-mfg__standard`   AS standard"
+  },
+  {
+    id: 'root_cause_analyst',
+    name: 'Root Cause Analyst',
+    task: 'Analyse the corrective maintenance load across all equipment assets. Identify which assets and production lines carry the highest risk, and assess whether the right technicians are assigned to address the corrective work.',
+    cypher: "MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)\n      -[:`kf-mfg__onProductionLine`]->(pl:`kf-mfg__ProductionLine`)\nWHERE wo.`kf-mfg__woType` = 'CORRECTIVE'\nRETURN eq.`kf-mfg__equipmentId` AS equipmentId,\n       eq.`kf-mfg__name`        AS equipment,\n       pl.`kf-mfg__name`        AS productionLine,\n       count(wo)                AS correctiveOrders\nORDER BY correctiveOrders DESC"
+  }
+];
+
+let _selAgent = -1;
+let _agentRunning = false;
+
+function selectAgent(i){
+  _selAgent = i;
+  document.querySelectorAll('.agent-card').forEach((c,idx) => c.classList.toggle('agent-sel', idx===i));
+  document.getElementById('agent-rbtn').disabled = false;
+  document.getElementById('agent-hint').textContent = `Ready: ${AGENTS[i].name}`;
+  document.getElementById('agent-console').innerHTML =
+    '<div class="agent-idle"><div style="font-size:20px;opacity:.25">❖</div><div>Press RUN AGENT to invoke ' + AGENTS[i].name + '</div></div>';
+}
+
+function makePhase(parent, label, color, subtitle){
+  const wrap = document.createElement('div');
+  wrap.className = 'agent-phase';
+  wrap.innerHTML = `<div class="agent-phase-hdr">
+      <span class="agent-phase-badge" style="background:${color}">${label}</span>
+      <span class="agent-phase-sub">${subtitle}</span>
+    </div>`;
+  parent.appendChild(wrap);
+  parent.scrollTop = parent.scrollHeight;
+  return wrap;
+}
+
+function typewriter(el, text, speed){
+  return new Promise(resolve => {
+    let i = 0;
+    el.textContent = '';
+    (function step(){
+      if(i >= text.length){ resolve(); return; }
+      el.textContent += text[i++];
+      const con = document.getElementById('agent-console');
+      if(con) con.scrollTop = con.scrollHeight;
+      setTimeout(step, i < 5 ? 0 : speed);
+    })();
+  });
+}
+
+async function runAgent(){
+  if(_agentRunning || _selAgent < 0) return;
+  _agentRunning = true;
+  document.getElementById('agent-rbtn').disabled = true;
+  const ag = AGENTS[_selAgent];
+  const con = document.getElementById('agent-console');
+  con.innerHTML = '';
+
+  // Phase 1: THINKING — typewrite the task + cypher hint
+  const p1 = makePhase(con, 'THINKING', 'var(--amber)', '\u{1F9E0} Constructing Cypher query against knowledge graph schema…');
+  const taskEl = document.createElement('div');
+  taskEl.className = 'agent-task';
+  p1.appendChild(taskEl);
+  await typewriter(taskEl, ag.task, 12);
+  const cyphEl = document.createElement('div');
+  cyphEl.className = 'agent-cypher';
+  p1.appendChild(cyphEl);
+  await typewriter(cyphEl, ag.cypher, 8);
+
+  // Phase 2: EXECUTING — fire the real /agents/run, animate pulse during fetch
+  const p2 = makePhase(con, 'EXECUTING', 'var(--teal)', '⚡ Running ReAct loop against knowledge graph…');
+  const execEl = document.createElement('div');
+  execEl.className = 'agent-exec-pulse';
+  execEl.innerHTML = '<span class="agent-pulse"></span> Querying NODES + traversing EDGES via LangGraph + ChatOpenAI…';
+  p2.appendChild(execEl);
+  con.scrollTop = con.scrollHeight;
+
+  let agentResult = null, agentError = null;
+  try {
+    agentResult = await api('/agents/run', {agent: ag.id});
+  } catch(err){
+    agentError = err.message;
+  }
+
+  if(agentError){
+    execEl.innerHTML = `<span style="color:var(--red)">✗</span> Agent error: ${agentError}`;
+    _agentRunning = false;
+    document.getElementById('agent-rbtn').disabled = false;
+    return;
+  }
+  execEl.innerHTML = `<span style="color:var(--green)">✓</span> Agent returned ${agentResult.result.length} chars of analysis`;
+  await sleep(400);
+
+  // Phase 3: REASONING — brief pulse to introduce the result
+  const p3 = makePhase(con, 'REASONING', 'var(--blue)', '\u{1F4A1} Interpreting graph results into recommendations…');
+  const reasonEl = document.createElement('div');
+  reasonEl.className = 'agent-exec-pulse';
+  reasonEl.innerHTML = '<span class="agent-pulse"></span> Synthesising recommendations…';
+  p3.appendChild(reasonEl);
+  con.scrollTop = con.scrollHeight;
+  await sleep(900);
+  reasonEl.innerHTML = `<span style="color:var(--green)">✓</span> Recommendations ready`;
+
+  // Phase 4: RESULT — render real markdown
+  const p4 = makePhase(con, 'RESULT', 'var(--green)', '▦ Agent findings');
+  const rec = document.createElement('div');
+  rec.className = 'agent-rec';
+  try {
+    rec.innerHTML = window.marked ? marked.parse(agentResult.result) : '<pre>'+escapeHTML(agentResult.result)+'</pre>';
+  } catch(_){
+    rec.innerHTML = '<pre>'+escapeHTML(agentResult.result)+'</pre>';
+  }
+  p4.appendChild(rec);
+  con.scrollTop = con.scrollHeight;
+
+  _agentRunning = false;
+  document.getElementById('agent-rbtn').disabled = false;
+}
+
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// =============================================================================
+// LEFT-PANEL TAB SWITCHING
+// =============================================================================
+function switchPipeTab(tab){
+  ['ont','pip','agent'].forEach(t => {
+    const btn = document.getElementById('ptab-'+t);
+    const pane = document.getElementById('pipe-'+t+'-pane');
+    if(btn) btn.classList.toggle('ptab-active', t===tab);
+    if(pane) pane.style.display = t===tab ? 'flex' : 'none';
+  });
+  if(tab === 'ont') renderOntSteps(window._lastOntStates || {});
+  if(tab === 'pip') renderStages(window._lastPipelineStates || {});
+}
+
+// =============================================================================
+// QUERY CONSOLE — calls real /query and /nl
+// =============================================================================
+const EXAMPLES = [
+  'MATCH (wo:`kf-mfg__WorkOrder`)\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source\nORDER BY id',
+  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, eq.`kf-mfg__equipmentId` AS equipment, eq.`kf-mfg__name` AS equipmentName',
+  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)-[:`kf-mfg__onProductionLine`]->(pl:`kf-mfg__ProductionLine`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, eq.`kf-mfg__equipmentId` AS equipment, pl.`kf-mfg__lineId` AS line, pl.`kf-mfg__name` AS lineName',
+  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woPriority` = "URGENT"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__description` AS description',
+  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__mergedFrom` IS NOT NULL\nRETURN wo.`kf-mfg__workOrderId` AS canonical, wo.`kf-mfg__mergedFrom` AS mergedFrom, wo.`kf-mfg__mergeMethod` AS method, wo.`kf-mfg__sourceSystem` AS source',
+  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__governedBy`]->(cp:`kf-mfg__CompliancePolicy`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, cp.`kf-mfg__policyId` AS policy, cp.`kf-mfg__name` AS policyName',
+  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woType` = "CORRECTIVE" AND wo.`kf-mfg__woStatus` = "OPEN"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__description` AS description',
+  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToTechnician`]->(t:`kf-mfg__Technician`)\nRETURN wo.`kf-mfg__workOrderId` AS workOrder, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority, t.`kf-mfg__name` AS technician, t.`kf-mfg__specialisation` AS spec',
+  'MATCH (wo:`kf-mfg__WorkOrder`)-[:`kf-mfg__assignedToEquipment`]->(eq:`kf-mfg__Equipment`)\nRETURN eq.`kf-mfg__equipmentId` AS equipment, eq.`kf-mfg__name` AS equipmentName, count(wo) AS totalOrders\nORDER BY totalOrders DESC',
+  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__sourceSystem` = "SAP-PM"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woStatus` AS status, wo.`kf-mfg__woPriority` AS priority',
+  'MATCH (wo:`kf-mfg__WorkOrder`)\nWHERE wo.`kf-mfg__woStatus` = "IN_PROGRESS"\nRETURN wo.`kf-mfg__workOrderId` AS id, wo.`kf-mfg__woType` AS type, wo.`kf-mfg__woPriority` AS priority, wo.`kf-mfg__sourceSystem` AS source, wo.`kf-mfg__scheduledStart` AS scheduled'
+];
+const PLAIN_EXAMPLES = [
+  'Show me all work orders',
+  'Which work orders are assigned to which equipment?',
+  'Show the full chain: work order to equipment to production line',
+  'Show me all URGENT priority work orders',
+  'Which work orders were merged from duplicate records?',
+  'Which work orders have compliance requirements?',
+  'Show me corrective work orders that are still open',
+  'Which technicians are assigned to which work orders?',
+  'How many work orders does each piece of equipment have?',
+  'Show me SAP-PM work orders only',
+  'Show me all in-progress work orders'
+];
+const NL_RULES = [
+  [/urgent/i, 3],
+  [/merg|duplicate|er result/i, 4],
+  [/compli|osha|iso|regulat/i, 5],
+  [/correct.*open|open.*correct/i, 6],
+  [/techni/i, 7],
+  [/workload|how many.*work|equip.*count/i, 8],
+  [/sap.?pm/i, 9],
+  [/in.?progress|progress/i, 10],
+  [/3.?hop|three.?hop|travers|chain|production line/i, 2],
+  [/equip/i, 1],
+  [/all.*work|list.*work|show.*work|work.*order/i, 0]
+];
+
+let currentMode = 'nl';
+function setMode(mode){
+  currentMode = mode;
+  const nl = mode === 'nl';
+  document.getElementById('btn-nl').classList.toggle('active', nl);
+  document.getElementById('btn-cy').classList.toggle('active', !nl);
+  document.getElementById('wrap-nl').style.display = nl ? 'block' : 'none';
+  document.getElementById('wrap-cy').style.display = nl ? 'none' : 'block';
+  document.getElementById('strip-nl').style.display = nl ? 'flex' : 'none';
+  document.getElementById('strip-cy').style.display = nl ? 'none' : 'flex';
+  document.getElementById('qhint').textContent = nl ? 'Type a plain-English question (LLM fallback if no example matches)' : 'Write a Cypher MATCH query';
+}
+
+function nlMatchRegex(q){
+  for(const [re, idx] of NL_RULES){ if(re.test(q)) return EXAMPLES[idx]; }
+  return null;
+}
+
+document.getElementById('nl-input').addEventListener('input', function(){
+  const q = this.value.trim();
+  const mapped = q ? nlMatchRegex(q) : null;
+  const s = document.getElementById('ts-strip'), t = document.getElementById('ts-text');
+  if(mapped){ t.textContent = mapped.replace(/\n/g,' ').replace(/\s+/g,' '); s.style.display = 'flex'; }
+  else { s.style.display = 'none'; }
+});
+
+let _lastPlainLabel = '';
+function setExampleQ(i){
+  _lastPlainLabel = PLAIN_EXAMPLES[i] || '';
+  if(currentMode === 'nl'){
+    document.getElementById('nl-input').value = PLAIN_EXAMPLES[i];
+    document.getElementById('nl-input').dispatchEvent(new Event('input'));
+  } else {
+    document.getElementById('cypher-input').value = EXAMPLES[i];
+  }
+}
+
+async function getActiveCypher(){
+  if(currentMode === 'nl'){
+    const q = document.getElementById('nl-input').value.trim();
+    if(!q) return null;
+    const mapped = nlMatchRegex(q);
+    if(mapped) return {cypher: mapped, source: 'regex'};
+    // Fallback: hit /nl
+    const data = await api('/nl', {question: q});
+    return {cypher: data.cypher, source: 'llm', explanation: data.explanation};
+  }
+  const c = document.getElementById('cypher-input').value.trim();
+  return c ? {cypher: c, source: 'cypher'} : null;
+}
+
+let lastResult = null, currentTab = 'table', gFrame = null;
+function switchTab(t, el){
+  if(gFrame){ cancelAnimationFrame(gFrame); gFrame = null; }
+  currentTab = t;
+  document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  ['table','explain','graph'].forEach(nm => {
+    const p = document.getElementById('pane-'+nm);
+    p.classList.remove('active');
+    p.style.display = 'none';
+  });
+  const pane = document.getElementById('pane-'+t);
+  pane.style.display = t === 'graph' ? 'flex' : 'block';
+  pane.classList.add('active');
+  if(t === 'graph' && lastResult){
+    requestAnimationFrame(() => requestAnimationFrame(() => drawQueryGraph(lastResult)));
+  }
+}
+
+function clearQ(){
+  document.getElementById('nl-input').value = '';
+  document.getElementById('cypher-input').value = '';
+  document.getElementById('ts-strip').style.display = 'none';
+  if(gFrame){ cancelAnimationFrame(gFrame); gFrame = null; }
+  lastResult = null;
+  document.getElementById('pane-table').innerHTML = '<div class="empty"><div class="eico">▯</div><div>Run a query to see results</div></div>';
+  document.getElementById('pane-explain').innerHTML = '<div class="empty"><div class="eico">◈</div><div>Query info will appear here</div></div>';
+  document.getElementById('graphwrap').innerHTML = '<div class="empty"><div class="eico">❖</div><div>Graph view will appear here</div></div>';
+}
+
+let _qThinkTimer = null;
+function showThinking(label){
+  const msgs = ['Parsing query…','Translating to Cypher…','Sending to Neo4j…','Awaiting result rows…','Rendering results…'];
+  const html = `<div class="q-thinking"><div class="q-think-spinner"></div><div class="q-think-msg" id="q-think-msg">${label || msgs[0]}</div><div class="q-think-sub">Live query against knowledge graph</div></div>`;
+  document.getElementById('pane-table').innerHTML = html;
+  document.getElementById('pane-explain').innerHTML = html;
+  const gw = document.getElementById('graphwrap');
+  if(gw) gw.innerHTML = html;
+  let i = 0;
+  _qThinkTimer = setInterval(() => {
+    i = (i+1) % msgs.length;
+    const el = document.getElementById('q-think-msg');
+    if(el) el.textContent = msgs[i];
+  }, 600);
+}
+function stopThinking(){ if(_qThinkTimer){ clearInterval(_qThinkTimer); _qThinkTimer = null; } }
+
+async function runQuery(){
+  showThinking(currentMode === 'nl' ? 'Resolving plain English…' : 'Sending Cypher to Neo4j…');
+  let active;
+  try {
+    active = await getActiveCypher();
+  } catch(err){
+    stopThinking();
+    showError('NL fallback failed: ' + err.message + '. Try one of the example buttons or switch to Cypher mode.');
+    return;
+  }
+  if(!active){
+    stopThinking();
+    showError('Enter a question or Cypher query.');
+    return;
+  }
+  try {
+    const data = await api('/query', {cypher: active.cypher});
+    stopThinking();
+    const explainBits = [];
+    if(active.source === 'llm') explainBits.push('Plain English → LLM → Cypher');
+    else if(active.source === 'regex') explainBits.push('Plain English → regex match');
+    else explainBits.push('Cypher (raw)');
+    if(active.explanation) explainBits.push(active.explanation);
+    const subgraph = extractSubgraphFromRows(data.rows);
+    lastResult = {
+      cols: data.columns,
+      rows: data.rows,
+      q: active.cypher,
+      explain: explainBits.join(' · '),
+      nodeIds: subgraph.nodeIds,
+      edges: subgraph.edges
+    };
+    renderTable(lastResult);
+    renderExplain(lastResult);
+    if(currentTab === 'graph'){
+      requestAnimationFrame(() => requestAnimationFrame(() => drawQueryGraph(lastResult)));
+    } else {
+      document.getElementById('graphwrap').innerHTML = '<div class="empty"><div class="eico">❖</div><div>Switch to Graph tab to render</div></div>';
+    }
+  } catch(err){
+    stopThinking();
+    showError(err.message);
+  }
+}
+
+function extractSubgraphFromRows(rows){
+  const ids = new Set();
+  const idLookup = new Set(NODES.map(n => n.id));
+  rows.forEach(row => {
+    Object.values(row).forEach(v => {
+      if(typeof v === 'string' && idLookup.has(v)) ids.add(v);
+    });
+  });
+  // If no element-IDs matched, try property-based fallback (e.g., workOrderId / equipmentId)
+  if(!ids.size){
+    const propIndex = {};
+    NODES.forEach(n => {
+      Object.values(n.p || {}).forEach(v => {
+        if(typeof v === 'string') propIndex[v] = n.id;
+      });
+    });
+    rows.forEach(row => {
+      Object.values(row).forEach(v => {
+        if(typeof v === 'string' && propIndex[v]) ids.add(propIndex[v]);
+      });
+    });
+  }
+  const edges = EDGES.filter(e => ids.has(e.s) && ids.has(e.t));
+  return {nodeIds: Array.from(ids), edges};
+}
+
+function showError(msg){
+  document.getElementById('pane-table').innerHTML = `<div style="padding:13px"><div class="errbox"><b>Query error</b><br><br>${escapeHTML(msg)}</div><div style="margin-top:8px;font-size:9px;color:var(--text3)">Try an example button above, or switch to Cypher mode and paste a known query.</div></div>`;
+  document.getElementById('pane-explain').innerHTML = '<div class="empty"><div class="eico">◈</div><div>No info available</div></div>';
+}
+
+function cellCls(col, val){
+  const c = col.toLowerCase();
+  if(c.indexOf('source') > -1) return val === 'SAP-PM' ? 'csap' : val === 'MES-PROD' ? 'cmes' : '';
+  if(c.indexOf('status') > -1) return val === 'OPEN' || val === 'ACTIVE' || val === 'OPERATIONAL' ? 'copen' : val === 'IN_PROGRESS' || val === 'SCHEDULED' ? 'cprog' : val === 'COMPLETED' ? 'cdone' : '';
+  if(c.indexOf('priority') > -1) return val === 'URGENT' ? 'curgent' : val === 'HIGH' ? 'chigh' : '';
+  if(c.indexOf('type') > -1) return 'ctype';
+  if(c.indexOf('merge') > -1) return 'cmerge';
+  return '';
+}
+
+function renderTable(res){
+  const pane = document.getElementById('pane-table');
+  if(!res.rows.length){
+    pane.innerHTML = '<div class="empty"><div class="eico">▯</div><div>No results returned</div></div>';
+    return;
+  }
+  const sq = res.q.replace(/\s+/g,' ').slice(0, 95) + (res.q.length > 95 ? '…' : '');
+  pane.innerHTML = `<div class="rcount">${res.rows.length} row${res.rows.length!==1?'s':''} &nbsp;·&nbsp; <span style="color:var(--teal)">${escapeHTML(sq)}</span></div>` +
+    `<table class="rtable"><thead><tr>${res.cols.map(c => `<th>${escapeHTML(c)}</th>`).join('')}</tr></thead>` +
+    `<tbody>${res.rows.map(row => `<tr>${res.cols.map(c => {
+      const v = row[c];
+      const s = (v == null || v === '') ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+      const cls = s ? cellCls(c, s) : '';
+      const d = s === '' ? '' : s.length > 58 ? `<span title="${escapeHTML(s)}">${escapeHTML(s.slice(0, 58))}…</span>` : escapeHTML(s);
+      return `<td>${cls ? `<span class="${cls}">${d}</span>` : d}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+function renderExplain(res){
+  let notice = '';
+  if(res.edges.length === 0){
+    notice = '<div class="no-rel-box"><b>No relationships in this view</b><br>This query returns ' + res.nodeIds.length + ' node' + (res.nodeIds.length!==1?'s':'') + ' without traversing any relationships. Add a relationship pattern (e.g. <code>-[:`kf-mfg__assignedToEquipment`]-></code>) to see the graph.</div>';
+  }
+  document.getElementById('pane-explain').innerHTML = notice +
+    `<div class="exbl"><div class="exlabel">Cypher Executed</div><div class="exbox excypher">${escapeHTML(res.q)}</div></div>` +
+    `<div class="exbl"><div class="exlabel">Trace</div><div class="exbox">${escapeHTML(res.explain || '—')}</div></div>` +
+    `<div class="exbl"><div class="exlabel">Stats</div><div class="statrow"><div class="statchip">Rows: <b>${res.rows.length}</b></div><div class="statchip">Nodes: <b>${res.nodeIds.length}</b></div><div class="statchip">Edges: <b>${res.edges.length}</b></div></div></div>`;
+}
+
+['nl-input','cypher-input'].forEach(id => {
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('keydown', e => {
+    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ e.preventDefault(); runQuery(); }
+  });
+});
+
+// =============================================================================
+// QUERY GRAPH (subgraph from current query result) — canvas force layout
+// =============================================================================
+const GCOL = {WorkOrder:'#1F6B8C', Equipment:'#5B4A8C', ProductionLine:'#0E7C7B', CompliancePolicy:'#7A3B2E', Technician:'#2A6B3C', IngestionAdapter:'#3a3f47'};
+const GSZ  = {WorkOrder:15, Equipment:19, ProductionLine:21, CompliancePolicy:17, Technician:14, IngestionAdapter:14};
+const GICO = {WorkOrder:'W', Equipment:'E', ProductionLine:'L', CompliancePolicy:'C', Technician:'T', IngestionAdapter:'A'};
+
+function drawQueryGraph(res){
+  if(gFrame){ cancelAnimationFrame(gFrame); gFrame = null; }
+  const wrap = document.getElementById('graphwrap');
+  const W = wrap.offsetWidth, H = wrap.offsetHeight;
+  if(!W || !H){ gFrame = requestAnimationFrame(() => drawQueryGraph(res)); return; }
+  const usedSet = new Set(res.nodeIds);
+  const vis = NODES.filter(n => usedSet.has(n.id));
+  if(!vis.length){
+    wrap.innerHTML = '<div class="empty"><div class="eico">❖</div><div>No nodes in this result</div></div>';
+    return;
+  }
+  wrap.innerHTML = '<canvas style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>';
+  const cv = wrap.querySelector('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d'), cx = W/2, cy = H/2;
+  const nm = {};
+  const sn = vis.map((n, i) => {
+    const a = (i / vis.length) * Math.PI * 2;
+    const rad = Math.min(W, H) * (vis.length < 4 ? 0.2 : 0.32);
+    const o = {id: n.id, type: n.type, x: cx + Math.cos(a) * rad, y: cy + Math.sin(a) * rad, vx: 0, vy: 0, r: GSZ[n.type] || 14, label: pickLabel(n)};
+    nm[n.id] = o;
+    return o;
+  });
+  const se = res.edges.map(e => ({src: nm[e.s], tgt: nm[e.t], rel: e.rel})).filter(e => e.src && e.tgt);
+  const hasEdges = se.length > 0;
+  function tick(){
+    for(let i = 0; i < sn.length; i++) for(let j = i+1; j < sn.length; j++){
+      const a = sn[i], b = sn[j], dx = b.x - a.x, dy = b.y - a.y;
+      const d2 = Math.max(dx*dx + dy*dy, 1), l = Math.sqrt(d2), f = 2800 / d2;
+      a.vx -= dx/l*f; a.vy -= dy/l*f; b.vx += dx/l*f; b.vy += dy/l*f;
+    }
+    se.forEach(e => {
+      const dx = e.tgt.x - e.src.x, dy = e.tgt.y - e.src.y, d = Math.sqrt(dx*dx + dy*dy) || 1, f = (d - 130) * 0.05;
+      e.src.vx += dx/d*f; e.src.vy += dy/d*f; e.tgt.vx -= dx/d*f; e.tgt.vy -= dy/d*f;
+    });
+    const g = hasEdges ? 0.003 : 0.01;
+    sn.forEach(n => { n.vx += (cx - n.x) * g; n.vy += (cy - n.y) * g; n.vx *= 0.8; n.vy *= 0.8; n.x += n.vx; n.y += n.vy; });
+    ctx.clearRect(0, 0, W, H);
+    se.forEach(e => {
+      const dx = e.tgt.x - e.src.x, dy = e.tgt.y - e.src.y, d = Math.sqrt(dx*dx + dy*dy) || 1, ux = dx/d, uy = dy/d;
+      ctx.beginPath(); ctx.moveTo(e.src.x, e.src.y); ctx.lineTo(e.tgt.x, e.tgt.y);
+      ctx.strokeStyle = 'rgba(0,196,184,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+      const ax = e.tgt.x - ux * (e.tgt.r + 5), ay = e.tgt.y - uy * (e.tgt.r + 5);
+      ctx.beginPath(); ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - ux*9 + uy*4, ay - uy*9 - ux*4);
+      ctx.lineTo(ax - ux*9 - uy*4, ay - uy*9 + ux*4);
+      ctx.closePath(); ctx.fillStyle = 'rgba(0,196,184,.65)'; ctx.fill();
+      const mx = (e.src.x + e.tgt.x) / 2, my = (e.src.y + e.tgt.y) / 2;
+      ctx.font = '8.5px JetBrains Mono,monospace';
+      const tw = ctx.measureText(e.rel).width;
+      ctx.fillStyle = 'rgba(11,14,20,.88)';
+      ctx.fillRect(mx - tw/2 - 5, my - 7, tw + 10, 14);
+      ctx.fillStyle = '#00c4b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(e.rel, mx, my);
+    });
+    sn.forEach(n => {
+      const col = GCOL[n.type] || '#555';
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = col + 'bb'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.font = 'bold 8px JetBrains Mono,monospace';
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(GICO[n.type] || '?', n.x, n.y);
+      ctx.font = '9px Inter,sans-serif';
+      ctx.fillStyle = 'rgba(200,215,240,.85)'; ctx.textBaseline = 'top';
+      const txt = n.label.length > 14 ? n.label.slice(0, 14) + '…' : n.label;
+      ctx.fillText(txt, n.x, n.y + n.r + 3);
+    });
+    if(!hasEdges){
+      ctx.font = '9px JetBrains Mono,monospace';
+      ctx.fillStyle = 'rgba(100,130,160,.6)'; ctx.textAlign = 'center';
+      ctx.fillText('No relationships in this query — see Query Info tab', W/2, H - 14);
+    }
+    gFrame = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+function pickLabel(n){
+  const p = n.p || {};
+  return p.workOrderId || p.equipmentId || p.lineId || p.policyId || p.technicianId || p.adapterId || p.name || (n.id || '').slice(-8);
+}
+
+// =============================================================================
+// FULL KG CANVAS (below the fold)
+// =============================================================================
+let kgFrame = null, kgZoom = 1, kgPanX = 0, kgPanY = 0;
+let kgDragging = null, kgPanning = false, kgPanStart = {x:0,y:0}, kgPanOrigin = {x:0,y:0};
+let kgSelected = null, kgHovered = null, kgSim = [], kgSimEdges = [], kgSimMap = {};
+
+function initKGCanvas(){
+  const cv = document.getElementById('kgcanvas');
+  const wrap = document.getElementById('kgbody');
+  if(!cv || !wrap) return;
+  const W = wrap.offsetWidth, H = wrap.offsetHeight;
+  if(!W || !H){ setTimeout(initKGCanvas, 200); return; }
+  cv.width = W; cv.height = H;
+  drawFullGraph();
+}
+
+function drawFullGraph(){
+  if(kgFrame){ cancelAnimationFrame(kgFrame); kgFrame = null; }
+  const cv = document.getElementById('kgcanvas');
+  const W = cv.width, H = cv.height;
+  if(!W || !H) return;
+  const ctx = cv.getContext('2d'), cx = W/2, cy = H/2;
+  kgZoom = 1; kgPanX = 0; kgPanY = 0;
+  kgSim = []; kgSimEdges = []; kgSimMap = {};
+  kgSelected = null; kgHovered = null;
+  if(!NODES.length){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = 'rgba(110,127,168,.6)'; ctx.font = '13px Inter,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Graph is empty — run the Hydration Pipeline first', W/2, H/2);
+    return;
+  }
+  const TC = {ProductionLine:{a:-Math.PI/2,r:90,sp:0.6},Equipment:{a:-Math.PI/2+0.1,r:190,sp:0.9},WorkOrder:{a:Math.PI*0.5,r:310,sp:2.8},CompliancePolicy:{a:Math.PI*1.15,r:200,sp:0.4},Technician:{a:-Math.PI*0.05,r:220,sp:0.5},IngestionAdapter:{a:Math.PI*0.5,r:380,sp:0.4}};
+  NODES.forEach(n => {
+    const cfg = TC[n.type] || {a:0, r:250, sp:1};
+    const same = NODES.filter(x => x.type === n.type);
+    const idx = same.indexOf(n), cnt = same.length;
+    const angle = cfg.a + (cnt > 1 ? (idx - (cnt-1)/2) * (cfg.sp / (cnt-1 || 1)) : 0);
+    const o = {id:n.id, type:n.type, node:n, x:cx + Math.cos(angle)*cfg.r + (Math.random()-0.5)*20, y:cy + Math.sin(angle)*cfg.r + (Math.random()-0.5)*20, vx:0, vy:0, r:GSZ[n.type] || 13, color:GCOL[n.type] || '#555'};
+    kgSim.push(o); kgSimMap[n.id] = o;
+  });
+  kgSimEdges = EDGES.map(e => ({s:e.s, t:e.t, rel:e.rel, src:kgSimMap[e.s], tgt:kgSimMap[e.t]})).filter(e => e.src && e.tgt);
+
+  function tick(){
+    for(let i = 0; i < kgSim.length; i++) for(let j = i+1; j < kgSim.length; j++){
+      const a = kgSim[i], b = kgSim[j], dx = b.x - a.x, dy = b.y - a.y;
+      const d2 = Math.max(dx*dx + dy*dy, 1), l = Math.sqrt(d2), f = 3500 / d2;
+      a.vx -= dx/l*f; a.vy -= dy/l*f; b.vx += dx/l*f; b.vy += dy/l*f;
+    }
+    kgSimEdges.forEach(e => {
+      const dx = e.tgt.x - e.src.x, dy = e.tgt.y - e.src.y, d = Math.sqrt(dx*dx + dy*dy) || 1;
+      const ideal = (e.src.type === 'WorkOrder' || e.tgt.type === 'WorkOrder') ? 140 : 110;
+      const f = (d - ideal) * 0.035;
+      e.src.vx += dx/d*f; e.src.vy += dy/d*f; e.tgt.vx -= dx/d*f; e.tgt.vy -= dy/d*f;
+    });
+    kgSim.forEach(n => { n.vx += (cx - n.x) * .0015; n.vy += (cy - n.y) * .0015; });
+    kgSim.forEach(n => { if(n === kgDragging) return; n.vx *= 0.85; n.vy *= 0.85; n.x += n.vx; n.y += n.vy; });
+    ctx.clearRect(0, 0, W, H);
+    ctx.save(); ctx.translate(kgPanX, kgPanY); ctx.scale(kgZoom, kgZoom);
+    const fids = {};
+    if(kgSelected || kgHovered){
+      const foc = kgSelected || kgHovered;
+      fids[foc.id] = true;
+      kgSimEdges.forEach(e => { if(e.src.id === foc.id || e.tgt.id === foc.id){ fids[e.src.id] = true; fids[e.tgt.id] = true; } });
+    }
+    const hf = Object.keys(fids).length > 0;
+    kgSimEdges.forEach(e => {
+      const focused = hf && (fids[e.src.id] || fids[e.tgt.id]);
+      const dim = hf && !focused;
+      ctx.beginPath(); ctx.moveTo(e.src.x, e.src.y); ctx.lineTo(e.tgt.x, e.tgt.y);
+      ctx.strokeStyle = dim ? 'rgba(50,60,80,.12)' : focused ? 'rgba(0,196,184,.7)' : 'rgba(100,130,160,.3)';
+      ctx.lineWidth = (focused ? 2 : 1) / kgZoom; ctx.stroke();
+      const dx = e.tgt.x - e.src.x, dy = e.tgt.y - e.src.y, d = Math.sqrt(dx*dx + dy*dy) || 1, ux = dx/d, uy = dy/d;
+      const ax = e.tgt.x - ux * (e.tgt.r + 4/kgZoom), ay = e.tgt.y - uy * (e.tgt.r + 4/kgZoom);
+      const aw = 4/kgZoom;
+      ctx.beginPath(); ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - ux*8/kgZoom + uy*aw, ay - uy*8/kgZoom - ux*aw);
+      ctx.lineTo(ax - ux*8/kgZoom - uy*aw, ay - uy*8/kgZoom + ux*aw);
+      ctx.closePath();
+      ctx.fillStyle = dim ? 'rgba(50,60,80,.12)' : 'rgba(100,130,160,.5)';
+      ctx.fill();
+      if(focused && kgZoom >= 0.5){
+        const mx = (e.src.x + e.tgt.x)/2, my = (e.src.y + e.tgt.y)/2;
+        const fs = 9/kgZoom;
+        ctx.font = fs + 'px JetBrains Mono,monospace';
+        const tw = ctx.measureText(e.rel).width;
+        ctx.fillStyle = 'rgba(11,14,20,.85)';
+        ctx.fillRect(mx - tw/2 - 4/kgZoom, my - fs*0.7, tw + 8/kgZoom, fs*1.4);
+        ctx.fillStyle = '#00c4b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(e.rel, mx, my);
+      }
+    });
+    kgSim.forEach(n => {
+      const isSel = n === kgSelected, isHov = n === kgHovered, dim = hf && !fids[n.id];
+      const r = n.r/kgZoom * (isSel ? 1.3 : isHov ? 1.1 : 1);
+      if(isSel || isHov){
+        const g = ctx.createRadialGradient(n.x, n.y, r * .5, n.x, n.y, r * 2.8);
+        g.addColorStop(0, n.color + '50'); g.addColorStop(1, 'transparent');
+        ctx.beginPath(); ctx.arc(n.x, n.y, r * 2.8, 0, Math.PI*2);
+        ctx.fillStyle = g; ctx.fill();
+      }
+      if(n.node.p && n.node.p.mergedFrom){
+        ctx.beginPath(); ctx.arc(n.x, n.y, r + 3/kgZoom, 0, Math.PI*2);
+        ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 1.5/kgZoom;
+        ctx.setLineDash([3/kgZoom, 2/kgZoom]); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+      ctx.fillStyle = dim ? n.color + '25' : n.color; ctx.fill();
+      ctx.strokeStyle = isSel ? '#fff' : isHov ? '#cde' : n.color + '99';
+      ctx.lineWidth = (isSel ? 2.5 : 1.5) / kgZoom; ctx.stroke();
+      ctx.font = 'bold ' + 8/kgZoom + 'px JetBrains Mono,monospace';
+      ctx.fillStyle = dim ? 'rgba(255,255,255,.15)' : 'rgba(255,255,255,.9)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(GICO[n.type] || '?', n.x, n.y);
+      if(kgZoom >= 0.4 && !dim){
+        ctx.font = 9/kgZoom + 'px Inter,sans-serif';
+        ctx.fillStyle = 'rgba(200,215,240,.85)'; ctx.textBaseline = 'top';
+        const lab = pickLabel(n.node);
+        const txt = lab.length > 14 ? lab.slice(0, 14) + '…' : lab;
+        ctx.fillText(txt, n.x, n.y + r + 2/kgZoom);
+      }
+    });
+    ctx.restore();
+    kgFrame = requestAnimationFrame(tick);
+  }
+  tick();
+  setupKGCanvas(cv);
+}
+
+function setupKGCanvas(cv){
+  if(cv._kgReady) return;
+  cv._kgReady = true;
+  function wXY(e){ const rect = cv.getBoundingClientRect(); return {x:(e.clientX - rect.left - kgPanX)/kgZoom, y:(e.clientY - rect.top - kgPanY)/kgZoom}; }
+  function nAt(wx, wy){ for(let i = kgSim.length - 1; i >= 0; i--){ const n = kgSim[i]; if(Math.hypot(n.x - wx, n.y - wy) <= n.r/kgZoom * 1.6) return n; } return null; }
+  cv.addEventListener('mousedown', e => { const w = wXY(e), n = nAt(w.x, w.y); if(n){ kgDragging = n; } else { kgPanning = true; kgPanStart = {x:e.clientX, y:e.clientY}; kgPanOrigin = {x:kgPanX, y:kgPanY}; } });
+  cv.addEventListener('mousemove', e => { const w = wXY(e); if(kgDragging){ kgDragging.x = w.x; kgDragging.y = w.y; kgDragging.vx = 0; kgDragging.vy = 0; return; } if(kgPanning){ kgPanX = kgPanOrigin.x + (e.clientX - kgPanStart.x); kgPanY = kgPanOrigin.y + (e.clientY - kgPanStart.y); return; } const n = nAt(w.x, w.y); kgHovered = n; cv.style.cursor = n ? 'pointer' : 'grab'; });
+  cv.addEventListener('mouseup', e => { const w = wXY(e); if(kgDragging && Math.hypot(kgDragging.x - w.x, kgDragging.y - w.y) < 4){ if(kgSelected === kgDragging){ kgSelected = null; closeKGDetail(); } else { kgSelected = kgDragging; showKGDetail(kgDragging); } } kgDragging = null; kgPanning = false; });
+  cv.addEventListener('mouseleave', () => { kgDragging = null; kgPanning = false; kgHovered = null; });
+  cv.addEventListener('wheel', e => { e.preventDefault(); const factor = e.deltaY < 0 ? 1.12 : 0.89; const rect = cv.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top; kgPanX = mx - (mx - kgPanX) * factor; kgPanY = my - (my - kgPanY) * factor; kgZoom = Math.max(0.15, Math.min(4, kgZoom * factor)); }, {passive:false});
+}
+
+function resetKGView(){ kgZoom = 1; kgPanX = 0; kgPanY = 0; }
+
+function showKGDetail(n){
+  document.getElementById('kgd-dot').style.background = n.color;
+  document.getElementById('kgd-type').textContent = n.type;
+  document.getElementById('kgd-id').textContent = pickLabel(n.node);
+  document.getElementById('kgd-props').innerHTML = Object.entries(n.node.p || {}).map(e =>
+    `<div class="kgd-prop"><div class="kgd-pk">${escapeHTML(e[0])}</div><div class="kgd-pv">${escapeHTML(String(e[1]))}</div></div>`).join('');
+  const rels = kgSimEdges.filter(e => e.src.id === n.id || e.tgt.id === n.id);
+  document.getElementById('kgd-rels-list').innerHTML = rels.map(e => {
+    const out = e.src.id === n.id, other = out ? e.tgt : e.src;
+    return `<div class="kgd-rel-chip" onclick="selectKGNode('${other.id}')"><span class="kgd-rel-arrow">${out ? '→' : '←'}</span><span>${escapeHTML(e.rel)} &nbsp; ${escapeHTML(pickLabel(other.node))}</span></div>`;
+  }).join('') || '<div style="font-size:9px;color:var(--text3)">No relationships</div>';
+  document.getElementById('kgdetail').classList.add('visible');
+}
+function closeKGDetail(){ kgSelected = null; document.getElementById('kgdetail').classList.remove('visible'); }
+function selectKGNode(id){ const n = kgSimMap[id]; if(n){ kgSelected = n; showKGDetail(n); } }
+function toggleKGLegend(){ const el = document.getElementById('kglegend'), tog = document.getElementById('legtoggle'); el.classList.toggle('collapsed'); tog.innerHTML = el.classList.contains('collapsed') ? '▼' : '▲'; }
+
+// =============================================================================
+// QUERY GRAPH MODAL (pop-out from result Graph tab)
+// =============================================================================
+let gmFrame = null, gmZoom = 1, gmPanX = 0, gmPanY = 0;
+let gmPanning = false, gmPanStart = {x:0,y:0}, gmPanOrigin = {x:0,y:0};
+let gmSim = [], gmSimEdges = [], gmSimMap = {};
+
+function openGraphModal(){
+  if(!lastResult || !lastResult.nodeIds.length) return;
+  const modal = document.getElementById('graph-modal');
+  modal.classList.add('open');
+  const usedSet = new Set(lastResult.nodeIds);
+  const vis = NODES.filter(n => usedSet.has(n.id));
+  const _nlLabel = _lastPlainLabel || (currentMode === 'nl' ? document.getElementById('nl-input').value.trim() : '');
+  const _rq = lastResult.q.replace(/\s+/g, ' ').trim();
+  document.getElementById('gm-title').textContent = _nlLabel || (_rq.length > 70 ? _rq.slice(0, 70) + '…' : _rq);
+  document.getElementById('gm-info').textContent = vis.length + ' node' + (vis.length !== 1 ? 's' : '') + ' · ' + lastResult.edges.length + ' relationship' + (lastResult.edges.length !== 1 ? 's' : '');
+  const body = document.getElementById('gm-body');
+  const cv = document.getElementById('gm-canvas');
+  cv._gmReady = false;
+  requestAnimationFrame(() => {
+    const W = body.offsetWidth || window.innerWidth;
+    const H = body.offsetHeight || window.innerHeight - 52;
+    cv.width = W; cv.height = H;
+    drawModalGraph(lastResult, cv, W, H);
+  });
+}
+function closeGraphModal(){
+  document.getElementById('graph-modal').classList.remove('open');
+  if(gmFrame){ cancelAnimationFrame(gmFrame); gmFrame = null; }
+  gmSim = []; gmSimEdges = []; gmSimMap = {};
+}
+function drawModalGraph(res, cv, W, H){
+  if(gmFrame){ cancelAnimationFrame(gmFrame); gmFrame = null; }
+  gmZoom = 1; gmPanX = 0; gmPanY = 0;
+  gmSim = []; gmSimEdges = []; gmSimMap = {};
+  const ctx = cv.getContext('2d'), cx = W/2, cy = H/2;
+  const usedSet = new Set(res.nodeIds);
+  const vis = NODES.filter(n => usedSet.has(n.id));
+  if(!vis.length) return;
+  const GSZ2 = {WorkOrder:18, Equipment:22, ProductionLine:25, CompliancePolicy:20, Technician:17, IngestionAdapter:17};
+  gmSim = vis.map((n, i) => {
+    const a = (i / vis.length) * Math.PI * 2;
+    const rad = Math.min(W, H) * (vis.length < 4 ? 0.18 : 0.30);
+    const o = {id:n.id, type:n.type, node:n, x:cx + Math.cos(a)*rad, y:cy + Math.sin(a)*rad, vx:0, vy:0, r:GSZ2[n.type] || 17};
+    gmSimMap[n.id] = o;
+    return o;
+  });
+  gmSimEdges = res.edges.map(e => ({src:gmSimMap[e.s], tgt:gmSimMap[e.t], rel:e.rel})).filter(e => e.src && e.tgt);
+  const hasEdges = gmSimEdges.length > 0;
+  function tick(){
+    for(let i = 0; i < gmSim.length; i++) for(let j = i+1; j < gmSim.length; j++){
+      const a = gmSim[i], b = gmSim[j], dx = b.x - a.x, dy = b.y - a.y;
+      const d2 = Math.max(dx*dx + dy*dy, 1), l = Math.sqrt(d2), f = 3200/d2;
+      a.vx -= dx/l*f; a.vy -= dy/l*f; b.vx += dx/l*f; b.vy += dy/l*f;
+    }
+    gmSimEdges.forEach(e => {
+      const dx = e.tgt.x - e.src.x, dy = e.tgt.y - e.src.y, d = Math.sqrt(dx*dx + dy*dy) || 1, f = (d - 160) * 0.04;
+      e.src.vx += dx/d*f; e.src.vy += dy/d*f; e.tgt.vx -= dx/d*f; e.tgt.vy -= dy/d*f;
+    });
+    const g = hasEdges ? 0.002 : 0.008;
+    gmSim.forEach(n => { n.vx += (cx - n.x) * g; n.vy += (cy - n.y) * g; n.vx *= 0.82; n.vy *= 0.82; n.x += n.vx; n.y += n.vy; });
+    ctx.clearRect(0, 0, W, H);
+    ctx.save(); ctx.translate(gmPanX, gmPanY); ctx.scale(gmZoom, gmZoom);
+    gmSimEdges.forEach(e => {
+      const dx = e.tgt.x - e.src.x, dy = e.tgt.y - e.src.y, d = Math.sqrt(dx*dx + dy*dy) || 1, ux = dx/d, uy = dy/d;
+      ctx.beginPath(); ctx.moveTo(e.src.x, e.src.y); ctx.lineTo(e.tgt.x, e.tgt.y);
+      ctx.strokeStyle = 'rgba(0,196,184,.55)'; ctx.lineWidth = 1.5/gmZoom; ctx.stroke();
+      const ax = e.tgt.x - ux * (e.tgt.r + 5/gmZoom), ay = e.tgt.y - uy * (e.tgt.r + 5/gmZoom), aw = 5/gmZoom;
+      ctx.beginPath(); ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - ux*10/gmZoom + uy*aw, ay - uy*10/gmZoom - ux*aw);
+      ctx.lineTo(ax - ux*10/gmZoom - uy*aw, ay - uy*10/gmZoom + ux*aw);
+      ctx.closePath(); ctx.fillStyle = 'rgba(0,196,184,.65)'; ctx.fill();
+      const mx = (e.src.x + e.tgt.x)/2, my = (e.src.y + e.tgt.y)/2;
+      const fs = 11/gmZoom;
+      ctx.font = fs + 'px JetBrains Mono,monospace';
+      const tw = ctx.measureText(e.rel).width;
+      ctx.fillStyle = 'rgba(11,14,20,.9)';
+      ctx.fillRect(mx - tw/2 - 6/gmZoom, my - fs*0.75, tw + 12/gmZoom, fs*1.5);
+      ctx.fillStyle = '#00c4b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(e.rel, mx, my);
+    });
+    gmSim.forEach(n => {
+      const col = GCOL[n.type] || '#555';
+      const r = n.r/gmZoom;
+      ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = col + 'bb'; ctx.lineWidth = 2/gmZoom; ctx.stroke();
+      ctx.font = 'bold ' + 10/gmZoom + 'px JetBrains Mono,monospace';
+      ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(GICO[n.type] || '?', n.x, n.y);
+      ctx.font = 11/gmZoom + 'px Inter,sans-serif';
+      ctx.fillStyle = 'rgba(212,222,255,.9)'; ctx.textBaseline = 'top';
+      const lab = pickLabel(n.node);
+      const txt = lab.length > 16 ? lab.slice(0, 16) + '…' : lab;
+      ctx.fillText(txt, n.x, n.y + r + 4/gmZoom);
+    });
+    ctx.restore();
+    gmFrame = requestAnimationFrame(tick);
+  }
+  tick();
+  if(!cv._gmReady){
+    cv._gmReady = true;
+    cv.addEventListener('mousedown', e => { gmPanning = true; gmPanStart = {x:e.clientX, y:e.clientY}; gmPanOrigin = {x:gmPanX, y:gmPanY}; });
+    cv.addEventListener('mousemove', e => { if(gmPanning){ gmPanX = gmPanOrigin.x + (e.clientX - gmPanStart.x); gmPanY = gmPanOrigin.y + (e.clientY - gmPanStart.y); } cv.style.cursor = gmPanning ? 'grabbing' : 'grab'; });
+    cv.addEventListener('mouseup', () => { gmPanning = false; cv.style.cursor = 'grab'; });
+    cv.addEventListener('mouseleave', () => { gmPanning = false; });
+    cv.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 0.89; const rect = cv.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top; gmPanX = mx - (mx - gmPanX) * f; gmPanY = my - (my - gmPanY) * f; gmZoom = Math.max(0.1, Math.min(8, gmZoom * f)); }, {passive:false});
+  }
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeGraphModal(); });
+
+// =============================================================================
+// BOOT
+// =============================================================================
+(async function boot(){
+  renderStages({});
+  renderOntSteps({});
+  const ok = await loadGraph();
+  if(ok && NODES.length){
+    document.getElementById('kgpanel').classList.add('active');
+    document.getElementById('kgscrollhint').style.display = 'block';
+    setTimeout(initKGCanvas, 250);
+  }
+})();
+</script>
+</body>
+</html>

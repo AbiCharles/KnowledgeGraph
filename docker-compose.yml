@@ -1,0 +1,28 @@
+services:
+  neo4j:
+    # Pinned to 5.26.0 — n10s plugin auto-installer downloads neosemantics-5.26.0,
+    # which bundles an older jackson-annotations that crashes Enterprise's
+    # LinuxDeviceMapper on later 5.26.x patches. Keep image and plugin in sync.
+    image: neo4j:5.26.0-enterprise
+    container_name: kf-neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: eval
+      NEO4J_PLUGINS: '["apoc","n10s"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,n10s.*
+      NEO4J_dbms_security_procedures_allowlist: apoc.*,n10s.*
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
