@@ -76,14 +76,35 @@ def set_active(slug: str) -> UseCase:
     """Switch active bundle and return it. Validates the bundle loads first.
 
     Writes the .active marker atomically via os.replace to avoid torn reads
-    under concurrent activations.
+    under concurrent activations. If multi-database mode is available, also
+    ensures the bundle's Neo4j database exists and re-points the driver at it
+    — switching bundles is then instantaneous and previous bundles' data
+    survives untouched. Falls back to single-database mode silently if the
+    server is Community Edition.
     """
     uc = load(slug)
     USE_CASES_DIR.mkdir(parents=True, exist_ok=True)
     tmp = ACTIVE_FILE.with_suffix(".active.tmp")
     tmp.write_text(slug + "\n")
     os.replace(tmp, ACTIVE_FILE)
+    _activate_bundle_database(slug)
     return uc
+
+
+def _activate_bundle_database(slug: str) -> None:
+    """Best-effort: provision and switch to the per-bundle Neo4j database."""
+    try:
+        from db import db_name_for_slug, ensure_database, set_active_database, supports_multi_db
+        if not supports_multi_db():
+            set_active_database(None)
+            return
+        db_name = db_name_for_slug(slug)
+        if ensure_database(db_name):
+            set_active_database(db_name)
+        else:
+            set_active_database(None)
+    except Exception as exc:
+        log.warning("Could not switch active database for %s: %s", slug, exc)
 
 
 def register_uploaded(slug: str, ontology_bytes: bytes, data_bytes: bytes, manifest_bytes: bytes) -> UseCase:
@@ -149,6 +170,14 @@ def register_uploaded(slug: str, ontology_bytes: bytes, data_bytes: bytes, manif
         if had_prior:
             _archive_version(slug, backup_dir)
         shutil.rmtree(backup_dir, ignore_errors=True)
+
+    # Provision the bundle's Neo4j database eagerly so the first pipeline run
+    # against it doesn't pay the CREATE DATABASE WAIT cost. Best-effort.
+    try:
+        from db import db_name_for_slug, ensure_database
+        ensure_database(db_name_for_slug(slug))
+    except Exception as exc:
+        log.warning("Could not pre-provision database for %s: %s", slug, exc)
 
     return UseCase.from_dir(bundle_dir)
 
@@ -223,10 +252,23 @@ def restore_version(slug: str, stamp: str) -> UseCase:
 
 
 def delete(slug: str) -> None:
-    """Remove a bundle's directory. Refuses to delete the currently active one."""
+    """Remove a bundle's directory + its Neo4j database (if multi-db).
+
+    Refuses to delete the currently active bundle. The bundle's archived
+    versions under `<slug>.versions/` are also removed so a re-uploaded slug
+    starts fresh; if you need history-preserving deletion, archive manually
+    before calling.
+    """
     if get_active_slug() == slug:
         raise ValueError(f"Cannot delete active use case {slug!r}; switch active first.")
     bundle_dir = USE_CASES_DIR / slug
     if not bundle_dir.is_dir():
         raise FileNotFoundError(f"No bundle at {bundle_dir}")
     shutil.rmtree(bundle_dir)
+
+    # Best-effort drop of the bundle's database so disk space is reclaimed.
+    try:
+        from db import db_name_for_slug, drop_database
+        drop_database(db_name_for_slug(slug))
+    except Exception as exc:
+        log.warning("Could not drop database for %s: %s", slug, exc)

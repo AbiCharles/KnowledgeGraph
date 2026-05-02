@@ -20,9 +20,17 @@ s = get_settings()
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    # Startup is implicit (modules already imported); this just guarantees
-    # the Neo4j driver is closed on graceful shutdown so uvicorn --reload
-    # doesn't accumulate sockets.
+    # On startup, point the driver at the persisted active bundle's database
+    # so the first request after a restart hits the right one (without this
+    # the driver would route to Neo4j's default DB until a /use_cases/active
+    # POST switched it). Best-effort — Community Edition skips the switch.
+    try:
+        from pipeline import use_case_registry
+        slug = use_case_registry.get_active_slug()
+        if slug:
+            use_case_registry._activate_bundle_database(slug)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Startup DB activation skipped: %s", exc)
     yield
     close_driver()
 
@@ -76,6 +84,18 @@ app.include_router(usage.router,     prefix="/usage",     tags=["Usage"])
 @app.get("/health", tags=["Health"])
 def health():
     return {"status": "ok"}
+
+
+@app.get("/capabilities", tags=["Health"])
+def capabilities():
+    """Server-side feature flags the frontend renders against. Reports
+    whether the Neo4j server supports per-bundle databases and which
+    database the driver is currently pointing at."""
+    from db import supports_multi_db, get_active_database
+    return {
+        "multi_database": supports_multi_db(),
+        "active_database": get_active_database(),
+    }
 
 
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"

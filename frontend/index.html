@@ -385,7 +385,8 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 <div class="app">
 <header>
   <div class="logo" id="header-logo">KF<em>&middot;</em>GRAPH <em>// Knowledge Graph</em></div>
-  <div id="usage-chip" style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:3px 9px;border:1px solid var(--border);border-radius:10px;cursor:pointer" title="Today's LLM spend (refreshes every minute)" onclick="refreshUsage()">⟳ —</div>
+  <div id="db-chip" style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:3px 9px;border:1px solid var(--border);border-radius:10px" title="Active Neo4j database (one per bundle when multi-database is supported)"></div>
+  <div id="usage-chip" style="margin-left:8px;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:3px 9px;border:1px solid var(--border);border-radius:10px;cursor:pointer" title="Today's LLM spend (refreshes every minute)" onclick="refreshUsage()">⟳ —</div>
 </header>
 
 <div class="panel pl">
@@ -2894,6 +2895,25 @@ async function refreshUsage(){
 }
 setInterval(refreshUsage, 60_000);
 
+async function refreshDbChip(){
+  const chip = document.getElementById('db-chip');
+  if(!chip) return;
+  try {
+    const c = await api('/capabilities');
+    if(c.multi_database && c.active_database){
+      chip.textContent = `DB: ${c.active_database}`;
+      chip.style.color = 'var(--teal)';
+      chip.style.borderColor = 'rgba(0,196,184,.35)';
+    } else if(c.multi_database){
+      chip.textContent = 'DB: default';
+      chip.style.color = 'var(--text3)';
+    } else {
+      chip.textContent = 'DB: shared (single-DB mode)';
+      chip.style.color = 'var(--text3)';
+    }
+  } catch(_){ chip.textContent = ''; }
+}
+
 // =============================================================================
 // BOOT
 // =============================================================================
@@ -2912,6 +2932,7 @@ setInterval(refreshUsage, 60_000);
     showSnapshotBanner(`No data for use case "${MANIFEST?.slug || ''}". Run the Hydration Pipeline to populate.`);
   }
   refreshUsage();
+  refreshDbChip();
   // Honour a one-shot tab redirect (set by activateUseCase before reload).
   const wantedTab = sessionStorage.getItem('postActivateTab');
   if(wantedTab){

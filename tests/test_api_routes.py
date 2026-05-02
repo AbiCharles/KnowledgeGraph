@@ -102,6 +102,15 @@ def test_generate_data_count_validation(stub_db):
     assert r.status_code == 400
 
 
+def test_capabilities_route_returns_multi_db_flag(stub_db):
+    r = _client().get("/capabilities")
+    assert r.status_code == 200
+    body = r.json()
+    assert "multi_database" in body
+    assert "active_database" in body
+    assert isinstance(body["multi_database"], bool)
+
+
 def test_cors_safe_invariant():
     """If origins include '*', credentials must be disabled. Either way the
     app must never combine wildcard origins with credentials enabled."""
