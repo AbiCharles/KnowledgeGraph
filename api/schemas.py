@@ -9,6 +9,7 @@ class StageResultSchema(BaseModel):
     logs: list[str] = []
     duration_ms: int = 0
     error: str | None = None
+    remediation: str | None = None
 
 
 class PipelineRunResponse(BaseModel):

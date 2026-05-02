@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from config import get_settings
 from db import close_driver
 
-from api.routes import pipeline, query, agents, ontology, nl, use_cases
+from api.routes import pipeline, query, agents, ontology, nl, use_cases, usage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
@@ -70,6 +70,7 @@ app.include_router(agents.router,    prefix="/agents",    tags=["Agents"])
 app.include_router(ontology.router,  prefix="/ontology",  tags=["Ontology"])
 app.include_router(nl.router,        prefix="/nl",        tags=["NL"])
 app.include_router(use_cases.router, prefix="/use_cases", tags=["UseCases"])
+app.include_router(usage.router,     prefix="/usage",     tags=["Usage"])
 
 
 @app.get("/health", tags=["Health"])

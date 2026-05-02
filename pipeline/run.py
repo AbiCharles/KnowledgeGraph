@@ -35,6 +35,45 @@ class StageResult:
     logs: list[str] = field(default_factory=list)
     duration_ms: int = 0
     error: str | None = None
+    remediation: str | None = None
+
+
+# Best-effort substring-to-hint map. Keep this short and load-bearing — the
+# point is to put a useful pointer in front of the user without a Stack
+# Overflow tab.
+_REMEDIATIONS = [
+    ("n10s plugin not found",
+     "Enable the n10s plugin on your Neo4j instance (NEO4J_PLUGINS env var includes 'n10s')."),
+    ("APOC plugin not found",
+     "Enable the APOC plugin (NEO4J_PLUGINS env var includes 'apoc')."),
+    ("requires Neo4j Enterprise",
+     "Property-existence constraints need Neo4j Enterprise. The shipped docker-compose.yml uses neo4j:5.26.0-enterprise."),
+    ("ConstraintValidationFailed",
+     "The data violates a constraint the manifest declares. Re-upload the bundle with consistent data, or adjust stage2_constraints."),
+    ("terminationStatus",
+     "n10s import returned an error — verify the ontology / data files are valid Turtle and the n10s_unique_uri constraint exists."),
+    ("Manifest slug",
+     "Upload slug must match the manifest's slug field. Re-upload with matching values."),
+    ("Could not connect",
+     "Neo4j is unreachable. Confirm `docker compose ps` shows neo4j running and NEO4J_URI in .env points at the right port."),
+    ("authentication failure",
+     "Neo4j auth failed — check NEO4J_PASSWORD in .env matches the running container."),
+    ("forbidden keyword",
+     "Cypher contains a write/CALL keyword. Read-only queries only via /query — write operations must go through pipeline stages."),
+    ("UnknownPropertyKey",
+     "A property name in your query doesn't exist in the loaded data. Check spelling and that the pipeline ran successfully."),
+    ("UnknownLabel",
+     "A label in your query doesn't exist in the loaded data. Check the active manifest's in_scope_classes."),
+]
+
+
+def _suggest_remediation(error_message: str) -> str | None:
+    if not error_message:
+        return None
+    for needle, hint in _REMEDIATIONS:
+        if needle.lower() in error_message.lower():
+            return hint
+    return None
 
 
 STAGES = [
@@ -63,6 +102,7 @@ def run_pipeline(use_case: UseCase) -> Generator[StageResult, None, None]:
             log.exception("Stage %d (%s) failed", n, name)
             result.status = "fail"
             result.error = str(exc)
+            result.remediation = _suggest_remediation(result.error)
         finally:
             result.duration_ms = int((time.time() - t0) * 1000)
 

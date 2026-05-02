@@ -366,6 +366,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 <div class="app">
 <header>
   <div class="logo" id="header-logo">KF<em>&middot;</em>GRAPH <em>// Knowledge Graph</em></div>
+  <div id="usage-chip" style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:3px 9px;border:1px solid var(--border);border-radius:10px;cursor:pointer" title="Today's LLM spend (refreshes every minute)" onclick="refreshUsage()">⟳ —</div>
 </header>
 
 <div class="panel pl">
@@ -517,8 +518,11 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
       <div class="qbtns">
         <button class="qrun" onclick="runQuery()">&#9654; RUN</button>
         <button class="qclr" onclick="clearQ()">Clear</button>
+        <button class="qclr" id="qsave-btn" onclick="saveCurrentQuery()" title="Save the current question for this bundle">&#9734; Save</button>
+        <button class="qclr" id="qsaved-btn" onclick="toggleSavedQueries()" title="Show saved queries for this bundle"><span id="qsaved-count">0</span> saved &#9662;</button>
         <span class="qhint" id="qhint">Type a plain-English question</span>
       </div>
+      <div id="qsaved-panel" style="display:none;margin-top:6px;padding:7px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;max-height:160px;overflow-y:auto"></div>
     </div>
     <div class="exwrap">
       <div class="exstrip" id="strip-nl"><span class="exlbl">Examples:</span></div>
@@ -902,6 +906,9 @@ async function runPipeline(){
       }
       if(stage.error){
         addLog(la, 'ERROR', stage.error);
+        if(stage.remediation){
+          addLog(la, 'INFO', '↳ ' + stage.remediation);
+        }
       }
 
       states[stage.stage] = stage.status;
@@ -1469,6 +1476,85 @@ function showThinking(label){
 }
 function stopThinking(){ if(_qThinkTimer){ clearInterval(_qThinkTimer); _qThinkTimer = null; } }
 
+// ── Saved queries (per-bundle, localStorage) ────────────────────────────────
+const SAVED_KEY = 'kf-saved-queries';
+function _readSaved(){
+  try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '{}'); }
+  catch(_){ return {}; }
+}
+function _writeSaved(all){
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify(all)); } catch(_){}
+}
+function _bundleSaved(){
+  const slug = MANIFEST?.slug || '_default';
+  const all = _readSaved();
+  return {all, slug, list: all[slug] || []};
+}
+function _refreshSavedCount(){
+  const {list} = _bundleSaved();
+  const el = document.getElementById('qsaved-count');
+  if(el) el.textContent = String(list.length);
+}
+function saveCurrentQuery(){
+  const mode = currentMode;
+  const text = (mode === 'nl'
+    ? document.getElementById('nl-input').value
+    : document.getElementById('cypher-input').value).trim();
+  if(!text){ alert('Nothing to save — type a question or paste a Cypher query first.'); return; }
+  const label = prompt('Label for this saved query:', text.slice(0, 60));
+  if(!label) return;
+  const {all, slug, list} = _bundleSaved();
+  list.unshift({label: label.trim(), mode, text, ts: Date.now()});
+  // Cap at 25 per bundle to keep localStorage tidy.
+  all[slug] = list.slice(0, 25);
+  _writeSaved(all);
+  _refreshSavedCount();
+}
+function toggleSavedQueries(){
+  const panel = document.getElementById('qsaved-panel');
+  if(panel.style.display === 'none'){ _renderSavedQueries(); panel.style.display = 'block'; }
+  else { panel.style.display = 'none'; }
+}
+function _renderSavedQueries(){
+  const panel = document.getElementById('qsaved-panel');
+  const {list} = _bundleSaved();
+  if(!list.length){
+    panel.innerHTML = '<div style="font-size:9.5px;color:var(--text3)">No saved queries yet for this bundle. Click ☆ Save after a query to store one.</div>';
+    return;
+  }
+  panel.innerHTML = list.map((q, i) => {
+    const safeLabel = escapeHTML(q.label);
+    const safeText = escapeHTML(q.text.slice(0, 80) + (q.text.length > 80 ? '…' : ''));
+    return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">
+      <button class="exbtn" style="font-size:9.5px" onclick="loadSavedQuery(${i})" title="Load into editor">${safeLabel}</button>
+      <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeText}</span>
+      <span style="font-size:8.5px;color:var(--text3);font-family:'JetBrains Mono',monospace">${q.mode}</span>
+      <button class="qclr" style="font-size:9px;padding:2px 6px;color:var(--red);border-color:var(--border)" onclick="deleteSavedQuery(${i})" title="Delete">&times;</button>
+    </div>`;
+  }).join('');
+}
+function loadSavedQuery(i){
+  const {list} = _bundleSaved();
+  const q = list[i];
+  if(!q) return;
+  setMode(q.mode);
+  if(q.mode === 'nl'){
+    document.getElementById('nl-input').value = q.text;
+    document.getElementById('nl-input').dispatchEvent(new Event('input'));
+  } else {
+    document.getElementById('cypher-input').value = q.text;
+  }
+  document.getElementById('qsaved-panel').style.display = 'none';
+}
+function deleteSavedQuery(i){
+  const {all, slug, list} = _bundleSaved();
+  list.splice(i, 1);
+  all[slug] = list;
+  _writeSaved(all);
+  _refreshSavedCount();
+  _renderSavedQueries();
+}
+
 async function runQuery(){
   showThinking(currentMode === 'nl' ? 'Resolving plain English…' : 'Sending Cypher to Neo4j…');
   let active;
@@ -1572,7 +1658,14 @@ function renderTable(res){
     return;
   }
   const sq = res.q.replace(/\s+/g,' ').slice(0, 95) + (res.q.length > 95 ? '…' : '');
-  pane.innerHTML = `<div class="rcount">${res.rows.length} row${res.rows.length!==1?'s':''} &nbsp;·&nbsp; <span style="color:var(--teal)">${escapeHTML(sq)}</span></div>` +
+  pane.innerHTML =
+    `<div class="rcount" style="display:flex;align-items:center;gap:8px">` +
+      `<span>${res.rows.length} row${res.rows.length!==1?'s':''} &nbsp;·&nbsp; <span style="color:var(--teal)">${escapeHTML(sq)}</span></span>` +
+      `<span style="margin-left:auto;display:flex;gap:5px">` +
+        `<button class="qclr" style="font-size:9px;padding:3px 8px" onclick="exportResult('csv')" title="Download CSV">CSV</button>` +
+        `<button class="qclr" style="font-size:9px;padding:3px 8px" onclick="exportResult('json')" title="Download JSON">JSON</button>` +
+      `</span>` +
+    `</div>` +
     `<table class="rtable"><thead><tr>${res.cols.map(c => `<th>${escapeHTML(c)}</th>`).join('')}</tr></thead>` +
     `<tbody>${res.rows.map(row => `<tr>${res.cols.map(c => {
       const v = row[c];
@@ -1581,6 +1674,35 @@ function renderTable(res){
       const d = s === '' ? '' : s.length > 58 ? `<span title="${escapeHTML(s)}">${escapeHTML(s.slice(0, 58))}…</span>` : escapeHTML(s);
       return `<td>${cls ? `<span class="${cls}">${d}</span>` : d}</td>`;
     }).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+function exportResult(fmt){
+  if(!lastResult || !lastResult.rows || !lastResult.rows.length) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const slug = (MANIFEST?.slug || 'query');
+  let blob, name;
+  if(fmt === 'json'){
+    blob = new Blob([JSON.stringify({
+      bundle: slug, ranAt: new Date().toISOString(),
+      cypher: lastResult.q, columns: lastResult.cols, rows: lastResult.rows,
+    }, null, 2)], {type: 'application/json'});
+    name = `${slug}-query-${stamp}.json`;
+  } else {
+    // RFC-4180-ish CSV: double-quote everything, escape quotes by doubling.
+    const esc = v => {
+      const s = (v == null) ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+      return '"' + s.replace(/"/g, '""') + '"';
+    };
+    const lines = [lastResult.cols.map(esc).join(',')];
+    lastResult.rows.forEach(r => lines.push(lastResult.cols.map(c => esc(r[c])).join(',')));
+    blob = new Blob([lines.join('\n')], {type: 'text/csv'});
+    name = `${slug}-query-${stamp}.csv`;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function renderExplain(res){
@@ -2186,6 +2308,8 @@ function applyManifest(m){
   if(kgpt){ kgpt.textContent = `Full ${m.name} Knowledge Graph`; }
   // Legend rebuilt from manifest visualization + relationships.
   _renderLegend(m);
+  // Saved-query count refreshed for the now-active bundle.
+  if(typeof _refreshSavedCount === 'function') _refreshSavedCount();
   // Visualization
   GCOL = {};
   GSZ  = {};
@@ -2486,6 +2610,25 @@ async function submitUpload(){
 }
 
 // =============================================================================
+// LLM USAGE CHIP
+// =============================================================================
+async function refreshUsage(){
+  const chip = document.getElementById('usage-chip');
+  if(!chip) return;
+  try {
+    const u = await api('/usage/today');
+    const t = u.today || {};
+    const cap = u.daily_usd_cap;
+    const usd = (t.usd || 0).toFixed(4);
+    const pct = cap ? Math.min(100, Math.round((t.usd / cap) * 100)) : 0;
+    const calls = t.calls || 0;
+    chip.textContent = `LLM today: ${calls} calls · $${usd}` + (cap ? ` / $${cap.toFixed(2)} (${pct}%)` : '');
+    chip.style.color = pct >= 90 ? 'var(--red)' : pct >= 60 ? 'var(--amber)' : 'var(--text3)';
+  } catch(_){ chip.textContent = '⟳ usage n/a'; }
+}
+setInterval(refreshUsage, 60_000);
+
+// =============================================================================
 // BOOT
 // =============================================================================
 (async function boot(){
@@ -2502,6 +2645,7 @@ async function submitUpload(){
     // after activate/reload. Tell the user to run the pipeline.
     showSnapshotBanner(`No data for use case "${MANIFEST?.slug || ''}". Run the Hydration Pipeline to populate.`);
   }
+  refreshUsage();
   // Honour a one-shot tab redirect (set by activateUseCase before reload).
   const wantedTab = sessionStorage.getItem('postActivateTab');
   if(wantedTab){
