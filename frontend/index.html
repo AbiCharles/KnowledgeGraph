@@ -683,6 +683,69 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
   </div>
 </div>
 
+<!-- Inline ontology editor modal -->
+<div class="uc-modal-bg" id="edit-onto-modal">
+  <div class="uc-modal" style="width:560px">
+    <div class="uc-modal-title">Edit ontology</div>
+    <div class="uc-modal-sub">Add a class, datatype property, or relationship to <code id="edit-onto-slug"></code>'s ontology. The prior ontology is auto-archived under Versions, so every edit is reversible. After applying, run the Hydration Pipeline (or upload data) to populate instances of the new shape.</div>
+    <div style="display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:14px">
+      <button class="ptab" id="eo-tab-class" onclick="setEditTab('class')">Class</button>
+      <button class="ptab" id="eo-tab-dt"    onclick="setEditTab('dt')">Datatype property</button>
+      <button class="ptab" id="eo-tab-op"    onclick="setEditTab('op')">Relationship</button>
+    </div>
+    <div id="eo-form-class">
+      <div class="uc-form-row"><div class="uc-form-label">Class name</div>
+        <input class="uc-form-input" id="eo-cls-name" placeholder="e.g. Vehicle (PascalCase, letters/digits/underscores)" /></div>
+      <div class="uc-form-row"><div class="uc-form-label">Description (optional)</div>
+        <input class="uc-form-input" id="eo-cls-desc" placeholder="Stored as skos:definition" /></div>
+      <div class="uc-modal-actions">
+        <button class="uc-modal-cancel" onclick="closeOntologyEditor()">Close</button>
+        <button class="uc-modal-submit" onclick="submitEdit('class')">Add class</button>
+      </div>
+    </div>
+    <div id="eo-form-dt" style="display:none">
+      <div class="uc-form-row"><div class="uc-form-label">Property name</div>
+        <input class="uc-form-input" id="eo-dt-name" placeholder="e.g. licensePlate (camelCase)" /></div>
+      <div style="display:flex;gap:14px">
+        <div class="uc-form-row" style="flex:1"><div class="uc-form-label">Domain class</div>
+          <select class="uc-form-input" id="eo-dt-domain"></select></div>
+        <div class="uc-form-row" style="flex:1"><div class="uc-form-label">XSD range</div>
+          <select class="uc-form-input" id="eo-dt-range">
+            <option value="string">string</option>
+            <option value="integer">integer</option>
+            <option value="decimal">decimal</option>
+            <option value="boolean">boolean</option>
+            <option value="date">date</option>
+            <option value="dateTime">dateTime</option>
+          </select></div>
+      </div>
+      <div class="uc-modal-actions">
+        <button class="uc-modal-cancel" onclick="closeOntologyEditor()">Close</button>
+        <button class="uc-modal-submit" onclick="submitEdit('datatype_property')">Add property</button>
+      </div>
+    </div>
+    <div id="eo-form-op" style="display:none">
+      <div class="uc-form-row"><div class="uc-form-label">Relationship name</div>
+        <input class="uc-form-input" id="eo-op-name" placeholder="e.g. ownedBy (camelCase)" /></div>
+      <div style="display:flex;gap:14px">
+        <div class="uc-form-row" style="flex:1"><div class="uc-form-label">Domain (from)</div>
+          <select class="uc-form-input" id="eo-op-domain"></select></div>
+        <div class="uc-form-row" style="flex:1"><div class="uc-form-label">Range (to)</div>
+          <select class="uc-form-input" id="eo-op-range"></select></div>
+      </div>
+      <div class="uc-form-row" style="flex-direction:row;align-items:center;gap:8px">
+        <input type="checkbox" id="eo-op-functional" />
+        <label for="eo-op-functional" style="font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace">Functional (max one outgoing edge per node — adds owl:FunctionalProperty)</label>
+      </div>
+      <div class="uc-modal-actions">
+        <button class="uc-modal-cancel" onclick="closeOntologyEditor()">Close</button>
+        <button class="uc-modal-submit" onclick="submitEdit('object_property')">Add relationship</button>
+      </div>
+    </div>
+    <div id="edit-onto-result" style="display:none;margin-top:10px;padding:9px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:5px"></div>
+  </div>
+</div>
+
 <!-- Agent conversation history modal -->
 <div class="uc-modal-bg" id="agent-history-modal">
   <div class="uc-modal" style="width:780px;max-width:96vw">
@@ -2936,6 +2999,7 @@ function _renderUcCards(data){
           ${agentChip}${tags}
         </div>
         <div class="uc-card-actions">
+          <button class="uc-btn uc-btn-versions" data-action="edit-ontology" data-slug="" title="Add a class, datatype property, or relationship to this bundle's ontology">Edit ontology</button>
           <button class="uc-btn uc-btn-versions" data-action="compare" data-slug="" title="Compare this bundle's graph side-by-side with another">Compare</button>
           <button class="uc-btn uc-btn-versions" data-action="gen" data-slug="" title="Synthesise plausible instance data from the bundle's ontology">Generate data</button>
           <button class="uc-btn uc-btn-versions" data-action="versions" data-slug="" title="View prior uploads of this bundle">Versions</button>
@@ -2966,7 +3030,84 @@ document.addEventListener('click', (e) => {
   else if(btn.dataset.action === 'versions') toggleVersionsPanel(slug, btn);
   else if(btn.dataset.action === 'gen') openGenDataModal(slug);
   else if(btn.dataset.action === 'compare') openCompareModal(slug);
+  else if(btn.dataset.action === 'edit-ontology') openOntologyEditor(slug);
 });
+
+// =============================================================================
+// INLINE ONTOLOGY EDITOR
+// =============================================================================
+let _editSlug = null;
+let _editClasses = [];   // populated from the bundle's manifest
+
+async function openOntologyEditor(slug){
+  _editSlug = slug;
+  document.getElementById('edit-onto-slug').textContent = slug;
+  document.getElementById('edit-onto-result').innerHTML = '';
+  document.getElementById('edit-onto-result').style.display = 'none';
+  // Populate the class selectors from the bundle's manifest.
+  try {
+    const m = await api(`/use_cases/${encodeURIComponent(slug)}`);
+    _editClasses = m.in_scope_classes || [];
+  } catch(_){ _editClasses = []; }
+  _renderClassOptions();
+  setEditTab('class');
+  document.getElementById('edit-onto-modal').classList.add('open');
+}
+function closeOntologyEditor(){ document.getElementById('edit-onto-modal').classList.remove('open'); }
+
+function _renderClassOptions(){
+  const opts = _editClasses.map(c => `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('');
+  ['eo-dt-domain','eo-op-domain','eo-op-range'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.innerHTML = opts || '<option disabled>No classes yet — add one first</option>';
+  });
+}
+
+function setEditTab(tab){
+  ['class','dt','op'].forEach(t => {
+    document.getElementById('eo-tab-' + t).classList.toggle('active', t === tab);
+    document.getElementById('eo-form-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+}
+
+async function submitEdit(kind){
+  const payload = {kind};
+  if(kind === 'class'){
+    payload.name = document.getElementById('eo-cls-name').value.trim();
+    payload.description = document.getElementById('eo-cls-desc').value.trim();
+  } else if(kind === 'datatype_property'){
+    payload.name   = document.getElementById('eo-dt-name').value.trim();
+    payload.domain = document.getElementById('eo-dt-domain').value;
+    payload.range  = document.getElementById('eo-dt-range').value;
+  } else if(kind === 'object_property'){
+    payload.name       = document.getElementById('eo-op-name').value.trim();
+    payload.domain     = document.getElementById('eo-op-domain').value;
+    payload.range      = document.getElementById('eo-op-range').value;
+    payload.functional = document.getElementById('eo-op-functional').checked;
+  }
+  if(!payload.name){ alert('Name is required.'); return; }
+  const result = document.getElementById('edit-onto-result');
+  result.style.display = 'block';
+  result.innerHTML = '<div style="font-size:10px;color:var(--text3)">Applying…</div>';
+  try {
+    const res = await fetch(`/use_cases/${encodeURIComponent(_editSlug)}/ontology/add`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    result.innerHTML = `<div style="font-size:10.5px;color:#7eea9e">✓ Added ${escapeHTML(body.summary.added)}: <b>${escapeHTML(body.summary.name)}</b></div>` +
+      `<div style="font-size:9.5px;color:var(--text3);margin-top:5px">The prior ontology has been archived under Versions; the schema cache has been invalidated so autocomplete and the NL→Cypher prompt see the new element on the next request.</div>`;
+    // Refresh classes list so subsequent edits see the new class.
+    if(payload.kind === 'class'){ _editClasses.push(payload.name); _renderClassOptions(); }
+    _invalidateUseCasesCache();
+    // Schema cache for the editor — bust it too.
+    _schemaCache = null;
+    loadSchemaForEditor();
+  } catch(err){
+    result.innerHTML = `<div class="errbox" style="margin:0">${escapeHTML(err.message)}</div>`;
+  }
+}
 
 // =============================================================================
 // FEDERATION — side-by-side bundle compare

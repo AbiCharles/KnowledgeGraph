@@ -102,6 +102,16 @@ def test_generate_data_count_validation(stub_db):
     assert r.status_code == 400
 
 
+def test_ontology_edit_route_400_on_bad_kind(stub_db):
+    r = _client().post("/use_cases/kf-mfg-workorder/ontology/add", json={"kind": "garbage"})
+    assert r.status_code == 400
+
+
+def test_ontology_edit_route_404_on_unknown_bundle(stub_db):
+    r = _client().post("/use_cases/no-such/ontology/add", json={"kind": "class", "name": "X"})
+    assert r.status_code == 404
+
+
 def test_agent_conversations_list_returns_empty_initially(stub_db):
     r = _client().get("/agents/conversations")
     assert r.status_code == 200

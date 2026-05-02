@@ -195,6 +195,53 @@ def diff_bundle_version(slug: str, stamp: str):
     return {"slug": slug, "from": stamp, "to": "current", "diff": diff_snapshots(old, new)}
 
 
+@router.post("/{slug}/ontology/add")
+async def edit_ontology(slug: str, edit: dict):
+    """Apply a single ontology edit (add class / datatype prop / object prop)
+    to a bundle. Routes through register_uploaded so the change is atomic
+    and the prior ontology is archived under <slug>.versions/.
+
+    Body: {kind: 'class'|'datatype_property'|'object_property', name, ...}
+    """
+    bundle_dir = use_case_registry.USE_CASES_DIR / slug
+    if not bundle_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No bundle {slug!r}")
+
+    from pipeline.ontology_editor import apply_edit
+    try:
+        uc = use_case_registry.load(slug)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not load bundle: {exc}")
+
+    ontology_text = (bundle_dir / "ontology.ttl").read_text(encoding="utf-8")
+    data_text     = (bundle_dir / "data.ttl").read_text(encoding="utf-8")
+    manifest_text = (bundle_dir / "manifest.yaml").read_text(encoding="utf-8")
+    try:
+        new_ttl, summary = apply_edit(ontology_text, uc.manifest.namespace, edit or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Edit failed: {exc}")
+
+    async with acquire_or_409(locks.active_lock, "ontology edit"):
+        try:
+            use_case_registry.register_uploaded(
+                slug,
+                new_ttl.encode("utf-8"),
+                data_text.encode("utf-8"),
+                manifest_text.encode("utf-8"),
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Could not write modified ontology: {exc}")
+        try:
+            from pipeline.schema_introspection import invalidate_schema_cache
+            invalidate_schema_cache()
+        except Exception:
+            pass
+
+    return {"slug": slug, "summary": summary}
+
+
 @router.post("/{slug}/generate-data")
 async def generate_test_data(slug: str, count: int = 10, seed: int = 42, replace: bool = False):
     """Synthesise plausible instance data from the bundle's ontology.
