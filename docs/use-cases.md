@@ -301,6 +301,11 @@ Click the chip any time to manually refresh.
 
 ## Datasources sub-tab
 
+> **First time setting up Postgres ingestion?** The
+> [Datasources quick-start](datasources-quickstart.md) walks through
+> the entire flow from `pip install` to seeing your rows as graph
+> nodes. The reference below covers the UI controls in detail.
+
 Switch to the **Datasources** sub-tab at the top of the Use Cases pane to
 manage external connectors and the pull adapters that use them. Each
 bundle gets its own card showing:
