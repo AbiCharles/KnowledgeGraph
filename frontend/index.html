@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>KF WorkOrder Knowledge Graph</title>
+<title>KF Knowledge Graph</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -319,7 +319,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 <div id="snapshot-banner" class="snapshot-banner"></div>
 <div class="app">
 <header>
-  <div class="logo">KF<em>&middot;</em>GRAPH <em>// WorkOrder Knowledge Graph</em></div>
+  <div class="logo" id="header-logo">KF<em>&middot;</em>GRAPH <em>// Knowledge Graph</em></div>
 </header>
 
 <div class="panel pl">
@@ -498,7 +498,7 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 <!-- ── Full Knowledge Graph panel (below the fold) ──────────────────────── -->
 <div class="kgpanel" id="kgpanel">
   <div class="kgph">
-    <span class="kgptitle">Full WorkOrder Knowledge Graph</span>
+    <span class="kgptitle" id="kgptitle">Full Knowledge Graph</span>
     <span class="kgpstats" id="kgpstats">Loading&hellip;</span>
     <div class="kgpbtns">
       <button class="kgpbtn" onclick="resetKGView()">Reset</button>
@@ -512,27 +512,8 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
         <span class="kgleg-hdr-title">Legend</span>
         <button class="kgleg-toggle" id="legtoggle">&#9650;</button>
       </div>
-      <div class="kgleg-body">
-        <div class="kgleg-section">
-          <div class="kgleg-section-title">Node Types</div>
-          <div class="kgleg-item"><div class="kgleg-dot" style="background:#1F6B8C"></div><div><div class="kgleg-label">WorkOrder</div><div class="kgleg-desc">A maintenance job &mdash; preventive, corrective or inspection.</div></div></div>
-          <div class="kgleg-item"><div class="kgleg-dot" style="background:#5B4A8C"></div><div><div class="kgleg-label">Equipment</div><div class="kgleg-desc">Physical asset: CNC mill, press, conveyor, robot, laser.</div></div></div>
-          <div class="kgleg-item"><div class="kgleg-dot" style="background:#0E7C7B"></div><div><div class="kgleg-label">ProductionLine</div><div class="kgleg-desc">Manufacturing line that owns equipment assets.</div></div></div>
-          <div class="kgleg-item"><div class="kgleg-dot" style="background:#7A3B2E"></div><div><div class="kgleg-label">CompliancePolicy</div><div class="kgleg-desc">OSHA 29 CFR 1910 and ISO 55000.</div></div></div>
-          <div class="kgleg-item"><div class="kgleg-dot" style="background:#2A6B3C"></div><div><div class="kgleg-label">Technician</div><div class="kgleg-desc">Operative assigned to carry out the work.</div></div></div>
-          <div class="kgleg-item"><div class="kgleg-dot" style="background:#3a3f47"></div><div><div class="kgleg-label">IngestionAdapter</div><div class="kgleg-desc">SAP-PM (OData) and MES-PROD (REST).</div></div></div>
-        </div>
-        <div class="kgleg-divider"></div>
-        <div class="kgleg-section">
-          <div class="kgleg-section-title">Relationships</div>
-          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">assignedToEquipment</div></div></div>
-          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">onProductionLine</div></div></div>
-          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">assignedToTechnician</div></div></div>
-          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">governedBy</div></div></div>
-          <div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">sourcedFrom</div></div></div>
-        </div>
-        <div class="kgleg-divider"></div>
-        <div class="kgleg-note">Click any node to inspect. Scroll to zoom, drag to pan.</div>
+      <div class="kgleg-body" id="kgleg-body">
+        <div class="kgleg-note">Loading legend&hellip;</div>
       </div>
     </div>
     <div class="kgdetail" id="kgdetail">
@@ -662,6 +643,9 @@ async function loadGraph(){
     NODES.forEach(n => { NM[n.id] = n; });
     window.GRAPH = {NODES, EDGES, NM};
     updateSnapshotChips();
+    // Re-render the legend now that EDGES are populated so the relationship
+    // section shows live link types (was placeholder text before this).
+    if(MANIFEST){ _renderLegend(MANIFEST); }
     // Self-correcting: any successful load with nodes clears a stale
     // "no data for this bundle" banner left over from boot.
     if(NODES.length){ hideSnapshotBanner(); }
@@ -875,7 +859,11 @@ async function runPipeline(){
 
     if(data.overall === 'pass'){
       showValidationReport(data.stages);
-      await loadGraph();
+      // loadGraph also fetches via /query — keep _pRunning true so the user
+      // can't kick off a second pipeline while we're still settling.
+      try {
+        await loadGraph();
+      } catch(_){ /* loadGraph already surfaces its own errors */ }
       document.getElementById('kgscrollhint').style.display = 'block';
       document.getElementById('kgpanel').classList.add('active');
       setTimeout(initKGCanvas, 250);
@@ -1109,11 +1097,14 @@ function makePhase(parent, label, color, subtitle){
   return wrap;
 }
 
-function typewriter(el, text, speed){
+function typewriter(el, text, speed, signal){
   return new Promise(resolve => {
     let i = 0;
     el.textContent = '';
+    function done(){ resolve(); }
+    if(signal){ signal.addEventListener('abort', done, {once:true}); }
     (function step(){
+      if(signal && signal.aborted){ resolve(); return; }
       if(i >= text.length){ resolve(); return; }
       el.textContent += text[i++];
       const con = document.getElementById('agent-console');
@@ -1144,11 +1135,19 @@ async function runAgent(){
   const taskEl = document.createElement('div');
   taskEl.className = 'agent-task';
   p1.appendChild(taskEl);
-  await typewriter(taskEl, ag.task, 12);
+  await typewriter(taskEl, ag.task, 12, _agentAbort.signal);
+  if(_agentAbort.signal.aborted){
+    aBtn.disabled = false; aBtn.innerHTML = aOrig; _agentRunning = false; _agentAbort = null;
+    return;
+  }
   const cyphEl = document.createElement('div');
   cyphEl.className = 'agent-cypher';
   p1.appendChild(cyphEl);
-  await typewriter(cyphEl, ag.cypher, 8);
+  await typewriter(cyphEl, ag.cypher, 8, _agentAbort.signal);
+  if(_agentAbort.signal.aborted){
+    aBtn.disabled = false; aBtn.innerHTML = aOrig; _agentRunning = false; _agentAbort = null;
+    return;
+  }
 
   // Phase 2: EXECUTING — fire the real /agents/run, animate pulse during fetch
   const p2 = makePhase(con, 'EXECUTING', 'var(--teal)', '⚡ Running ReAct loop against knowledge graph…');
@@ -1635,8 +1634,44 @@ function drawQueryGraph(res){
 }
 
 function pickLabel(n){
+  // Generic property-name ladder: prefer the first *Id-suffixed property
+  // (typical for primary keys), then a name/title, then a short fallback.
+  // Works on any bundle without manifest hints.
   const p = n.p || {};
-  return p.workOrderId || p.equipmentId || p.lineId || p.policyId || p.technicianId || p.adapterId || p.name || (n.id || '').slice(-8);
+  for(const k of Object.keys(p)){
+    if(/(^|_)id$/i.test(k) && typeof p[k] === 'string' && p[k].length < 64) return p[k];
+  }
+  return p.name || p.title || p.label || (n.id || '').slice(-8);
+}
+
+function _buildTopology(nodes){
+  // Order classes by edge degree DESC (most-connected → inner ring).
+  const counts = {};
+  nodes.forEach(n => { counts[n.type] = (counts[n.type] || 0) + 1; });
+  const types = Object.keys(counts);
+  if(!types.length) return {};
+  // Edge degree per type (count edges where either endpoint is this type).
+  const deg = {};
+  types.forEach(t => deg[t] = 0);
+  EDGES.forEach(e => {
+    const sn = NM[e.s], tn = NM[e.t];
+    if(sn) deg[sn.type] = (deg[sn.type] || 0) + 1;
+    if(tn) deg[tn.type] = (deg[tn.type] || 0) + 1;
+  });
+  // Hubs first (highest degree), then by class size.
+  types.sort((a, b) => (deg[b] - deg[a]) || (counts[b] - counts[a]));
+  const TC = {};
+  const ringRadius = (i, total) => 90 + (i * 80);  // 90, 170, 250, …
+  // Distribute classes around the ring uniformly so multi-bundle layouts
+  // don't all stack at the same angle.
+  types.forEach((t, i) => {
+    TC[t] = {
+      a:  -Math.PI / 2 + (i * 2 * Math.PI / Math.max(types.length, 1)),
+      r:  ringRadius(i, types.length),
+      sp: Math.max(0.4, Math.min(2.8, counts[t] * 0.15)),
+    };
+  });
+  return TC;
 }
 
 // =============================================================================
@@ -1671,7 +1706,11 @@ function drawFullGraph(){
     ctx.fillText('Graph is empty — run the Hydration Pipeline first', W/2, H/2);
     return;
   }
-  const TC = {ProductionLine:{a:-Math.PI/2,r:90,sp:0.6},Equipment:{a:-Math.PI/2+0.1,r:190,sp:0.9},WorkOrder:{a:Math.PI*0.5,r:310,sp:2.8},CompliancePolicy:{a:Math.PI*1.15,r:200,sp:0.4},Technician:{a:-Math.PI*0.05,r:220,sp:0.5},IngestionAdapter:{a:Math.PI*0.5,r:380,sp:0.4}};
+  // Ring topology — derived from manifest classes. Each declared class gets
+  // a slot on its own ring at an evenly-distributed angle. The class with
+  // the most edges (densest hub) sits on the inner ring; least-connected
+  // classes go to the outer rings.
+  const TC = _buildTopology(NODES);
   NODES.forEach(n => {
     const cfg = TC[n.type] || {a:0, r:250, sp:1};
     const same = NODES.filter(x => x.type === n.type);
@@ -1839,11 +1878,14 @@ function drawModalGraph(res, cv, W, H){
   const usedSet = new Set(res.nodeIds);
   const vis = NODES.filter(n => usedSet.has(n.id));
   if(!vis.length) return;
-  const GSZ2 = {WorkOrder:18, Equipment:22, ProductionLine:25, CompliancePolicy:20, Technician:17, IngestionAdapter:17};
+  // Modal nodes are 30% larger than the inline canvas for readability — but
+  // colour/icon/relative size all come from the manifest-derived GSZ map so
+  // a non-manufacturing bundle gets the right per-class sizing.
   gmSim = vis.map((n, i) => {
     const a = (i / vis.length) * Math.PI * 2;
     const rad = Math.min(W, H) * (vis.length < 4 ? 0.18 : 0.30);
-    const o = {id:n.id, type:n.type, node:n, x:cx + Math.cos(a)*rad, y:cy + Math.sin(a)*rad, vx:0, vy:0, r:GSZ2[n.type] || 17};
+    const baseSize = GSZ[n.type] || 13;
+    const o = {id:n.id, type:n.type, node:n, x:cx + Math.cos(a)*rad, y:cy + Math.sin(a)*rad, vx:0, vy:0, r: Math.round(baseSize * 1.3)};
     gmSimMap[n.id] = o;
     return o;
   });
@@ -1909,7 +1951,17 @@ function drawModalGraph(res, cv, W, H){
     cv.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 0.89; const rect = cv.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top; gmPanX = mx - (mx - gmPanX) * f; gmPanY = my - (my - gmPanY) * f; gmZoom = Math.max(0.1, Math.min(8, gmZoom * f)); }, {passive:false});
   }
 }
-document.addEventListener('keydown', e => { if(e.key === 'Escape') closeGraphModal(); });
+document.addEventListener('keydown', e => {
+  if(e.key !== 'Escape') return;
+  // Close whichever modal is currently open.
+  const ucBg = document.getElementById('uc-modal-bg');
+  if(ucBg && ucBg.classList.contains('open')){ closeUploadModal(); return; }
+  closeGraphModal();
+});
+// Click on the dim backdrop (not the modal body itself) closes the upload modal.
+document.getElementById('uc-modal-bg').addEventListener('click', e => {
+  if(e.target.id === 'uc-modal-bg') closeUploadModal();
+});
 
 // =============================================================================
 // USE CASE MANIFEST — fetched on boot, drives GCOL/EXAMPLES/AGENTS/banner
@@ -1931,6 +1983,16 @@ function applyManifest(m){
   // Banner
   document.getElementById('banner-title').textContent = `⧫ ${m.name}`;
   document.getElementById('banner-desc').textContent = m.description || '';
+  // Page title + header logo + KG-panel heading derive from manifest so a
+  // non-manufacturing bundle doesn't show the legacy "WorkOrder Knowledge Graph"
+  // copy anywhere visible.
+  document.title = `KF · ${m.name}`;
+  const logo = document.getElementById('header-logo');
+  if(logo){ logo.innerHTML = `KF<em>&middot;</em>GRAPH <em>// ${escapeHTML(m.name)}</em>`; }
+  const kgpt = document.getElementById('kgptitle');
+  if(kgpt){ kgpt.textContent = `Full ${m.name} Knowledge Graph`; }
+  // Legend rebuilt from manifest visualization + relationships.
+  _renderLegend(m);
   // Visualization
   GCOL = {};
   GSZ  = {};
@@ -1954,6 +2016,33 @@ function applyManifest(m){
     task: a.task, cypher: a.cypher_hint || ''
   }));
   renderAgentCards();
+}
+
+function _renderLegend(m){
+  const body = document.getElementById('kgleg-body');
+  if(!body || !m) return;
+  const classes = m.in_scope_classes || [];
+  const viz = m.visualization || {};
+  // Node Types section — driven by manifest visualization, falls back to the
+  // FALLBACK_PALETTE for classes without an explicit colour.
+  const nodeItems = classes.map((cls, i) => {
+    const v = viz[cls] || {};
+    const colour = v.color || FALLBACK_PALETTE[i % FALLBACK_PALETTE.length];
+    return `<div class="kgleg-item"><div class="kgleg-dot" style="background:${escapeHTML(colour)}"></div>` +
+      `<div><div class="kgleg-label">${escapeHTML(cls)}</div></div></div>`;
+  }).join('');
+  // Relationship section — pulled from the live EDGES once loadGraph has run;
+  // empty on first paint, populated once data is in.
+  const relTypes = [...new Set((window.GRAPH?.EDGES || EDGES).map(e => e.rel))].sort();
+  const relItems = relTypes.length
+    ? relTypes.map(r => `<div class="kgleg-item"><span class="kgleg-arrow">&#8594;</span><div><div class="kgleg-label">${escapeHTML(r)}</div></div></div>`).join('')
+    : '<div class="kgleg-note" style="font-size:9px">Run the Hydration Pipeline to populate relationships.</div>';
+  body.innerHTML =
+    '<div class="kgleg-section"><div class="kgleg-section-title">Node Types</div>' + nodeItems + '</div>' +
+    '<div class="kgleg-divider"></div>' +
+    '<div class="kgleg-section"><div class="kgleg-section-title">Relationships</div>' + relItems + '</div>' +
+    '<div class="kgleg-divider"></div>' +
+    '<div class="kgleg-note">Click any node to inspect. Scroll to zoom, drag to pan.</div>';
 }
 
 function renderExampleChips(){
@@ -2143,7 +2232,10 @@ function openUploadModal(){
   document.getElementById('uc-upload-ontology').value = '';
   document.getElementById('uc-upload-data').value = '';
   document.getElementById('uc-upload-error').classList.remove('show');
-  document.getElementById('uc-modal-bg').classList.add('open');
+  const bg = document.getElementById('uc-modal-bg');
+  bg.classList.add('open');
+  // Focus the first input so keyboard users can start typing immediately.
+  setTimeout(() => document.getElementById('uc-upload-slug').focus(), 30);
 }
 
 // Toggle a small inline panel inside the modal showing the agent template.

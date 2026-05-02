@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any
 
 
@@ -27,7 +27,13 @@ class QueryResponse(BaseModel):
 
 
 class AgentRunRequest(BaseModel):
-    agent: str   # "maintenance_planner" | "compliance_monitor" | "root_cause_analyst"
+    """Body for POST /agents/run.
+
+    `agent` is the manifest-declared agent id (e.g. 'supply_risk_analyst').
+    Validation that the id exists in the active manifest happens in the route,
+    so we get 404 with available-list rather than a generic 500.
+    """
+    agent: str = Field(..., min_length=1, max_length=128)
 
 
 class AgentRunResponse(BaseModel):

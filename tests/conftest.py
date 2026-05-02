@@ -21,14 +21,34 @@ sys.path.insert(0, str(REPO_ROOT))
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
-    """Set the env vars Settings() requires so importing config doesn't blow up."""
+    """Set the env vars Settings() requires so importing config doesn't blow up.
+
+    Also clears the lru_cache on get_settings so monkeypatched env vars take
+    effect even if a prior test or import-time side-effect already populated
+    the cache with real values from a developer's .env. And resets the
+    module-level asyncio Locks so a test that errored mid-acquire doesn't
+    poison the next test with a 409.
+    """
     monkeypatch.setenv("NEO4J_URI", "bolt://localhost:7687")
     monkeypatch.setenv("NEO4J_USERNAME", "neo4j")
     monkeypatch.setenv("NEO4J_PASSWORD", "test-password")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
-    # Force CORS lockdown default so we can assert behaviour.
     monkeypatch.delenv("CORS_ORIGINS", raising=False)
+
+    from config import get_settings
+    get_settings.cache_clear()
+
+    # Reset state-mutating route locks. Importing api.locks creates fresh
+    # Lock instances we can swap in; cheaper than building an event loop just
+    # to release a held lock.
+    import asyncio
+    from api import locks
+    for name in ("pipeline_lock", "curation_lock", "active_lock"):
+        setattr(locks, name, asyncio.Lock())
+
     yield
+
+    get_settings.cache_clear()
 
 
 @pytest.fixture

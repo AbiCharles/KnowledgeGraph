@@ -116,3 +116,38 @@ def test_delete_removes_inactive(tmp_use_cases_dir):
     reg.set_active("keep")
     reg.delete("drop")
     assert not (tmp_use_cases_dir / "drop").exists()
+
+
+def test_register_uploaded_replacement_keeps_prior_when_new_invalid(tmp_use_cases_dir):
+    """Re-uploading a slug with a broken manifest must not destroy the prior
+    good bundle on disk — atomic-replace contract."""
+    from pipeline import use_case_registry as reg
+    # Seed an initial good bundle.
+    reg.register_uploaded(
+        "atomic-test",
+        MINIMAL_TTL.encode(),
+        b"# data\n",
+        MINIMAL_MANIFEST.format(slug="atomic-test").encode(),
+    )
+    # Now re-upload with a manifest whose slug field doesn't match — fails validation.
+    bad = MINIMAL_MANIFEST.format(slug="WRONG").encode()
+    with pytest.raises(Exception):
+        reg.register_uploaded("atomic-test", b"new ttl", b"new data", bad)
+    # Prior good content must still be present and loadable.
+    uc = reg.load("atomic-test")
+    assert uc.slug == "atomic-test"
+    # Original ontology bytes are intact (not overwritten by the failed upload).
+    assert (tmp_use_cases_dir / "atomic-test" / "ontology.ttl").read_text() == MINIMAL_TTL
+
+
+def test_register_uploaded_cleans_up_staging_after_success(tmp_use_cases_dir):
+    from pipeline import use_case_registry as reg
+    reg.register_uploaded(
+        "cleanup-test",
+        MINIMAL_TTL.encode(),
+        b"# data\n",
+        MINIMAL_MANIFEST.format(slug="cleanup-test").encode(),
+    )
+    # No leftover staging or backup directories after a successful upload.
+    assert not (tmp_use_cases_dir / "cleanup-test.staging").exists()
+    assert not (tmp_use_cases_dir / "cleanup-test.old").exists()

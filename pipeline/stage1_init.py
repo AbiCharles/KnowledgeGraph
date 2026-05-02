@@ -1,6 +1,17 @@
-"""Stage 1 — Wipe + n10s Init: clear database and configure n10s namespaces."""
+"""Stage 1 — Wipe + n10s Init: clear database and configure n10s namespaces.
+
+Schema-level constraints/indexes from prior pipeline runs of OTHER bundles
+are dropped so the new bundle's stage 2 can install its own without conflict.
+We target ONLY constraints/indexes whose names don't match what the active
+bundle's stage 2 is about to create — this preserves operator-managed schema
+that lives outside the manifest workflow.
+"""
+import re
 
 from db import run_query, run_write
+
+
+_BUNDLE_NAME_RE = re.compile(r"^([a-z0-9_-]+)_[A-Za-z0-9_]+_[A-Za-z0-9_]+(_idx)?$")
 
 
 def wipe_and_init(ctx: dict) -> list[str]:
@@ -10,33 +21,16 @@ def wipe_and_init(ctx: dict) -> list[str]:
     run_write("MATCH (n) DETACH DELETE n")
     logs.append("PASS  Database cleared")
 
-    # Drop schema left by previous bundles so a different bundle's manifest
-    # can install its own constraints/indexes without conflict. The n10s
-    # uniqueness constraint and any other reserved-name constraint are
-    # recreated below as needed.
-    dropped_c = 0
-    try:
-        rows = run_query("SHOW CONSTRAINTS YIELD name") or []
-        for r in rows:
-            name = r.get("name")
-            if not name:
-                continue
-            run_write(f"DROP CONSTRAINT `{name}` IF EXISTS")
-            dropped_c += 1
-    except Exception as exc:
-        logs.append(f"WARN  Could not enumerate constraints to drop: {exc}")
-    dropped_i = 0
-    try:
-        rows = run_query("SHOW INDEXES YIELD name, type WHERE type <> 'LOOKUP'") or []
-        for r in rows:
-            name = r.get("name")
-            if not name:
-                continue
-            run_write(f"DROP INDEX `{name}` IF EXISTS")
-            dropped_i += 1
-    except Exception as exc:
-        logs.append(f"WARN  Could not enumerate indexes to drop: {exc}")
-    logs.append(f"PASS  Dropped {dropped_c} constraint(s) and {dropped_i} index(es) from prior bundles")
+    # Drop bundle-owned schema (anything named like `<slug>_<class>_<prop>` or
+    # `<slug>_<class>_<prop>_idx`) so a different bundle's manifest can install
+    # its own constraints. Operator-added constraints with non-bundle names are
+    # left alone.
+    dropped_c = _drop_bundle_schema("CONSTRAINTS", logs)
+    dropped_i = _drop_bundle_schema("INDEXES",     logs, extra_filter=" WHERE type <> 'LOOKUP'")
+    logs.append(
+        f"PASS  Dropped {dropped_c} bundle constraint(s) and {dropped_i} bundle index(es); "
+        f"operator-managed schema preserved"
+    )
 
     run_write(
         "CREATE CONSTRAINT n10s_unique_uri IF NOT EXISTS "
@@ -65,3 +59,26 @@ def wipe_and_init(ctx: dict) -> list[str]:
     logs.append(f"PASS  {len(prefixes)}/{len(prefixes)} namespace prefixes registered")
 
     return logs
+
+
+def _drop_bundle_schema(kind: str, logs: list, extra_filter: str = "") -> int:
+    """Drop only schema items whose names match the bundle <slug>_<class>_<prop>(_idx)?
+    pattern. Returns the count of items actually dropped. `kind` is "CONSTRAINTS"
+    or "INDEXES"."""
+    drop_kw = "CONSTRAINT" if kind == "CONSTRAINTS" else "INDEX"
+    dropped = 0
+    try:
+        rows = run_query(f"SHOW {kind} YIELD name{extra_filter}") or []
+    except Exception as exc:
+        logs.append(f"WARN  Could not enumerate {kind.lower()}: {exc}")
+        return 0
+    for r in rows:
+        name = r.get("name")
+        if not name or not _BUNDLE_NAME_RE.match(name):
+            continue
+        try:
+            run_write(f"DROP {drop_kw} `{name}` IF EXISTS")
+            dropped += 1
+        except Exception as exc:
+            logs.append(f"WARN  Could not drop {drop_kw.lower()} {name}: {exc}")
+    return dropped

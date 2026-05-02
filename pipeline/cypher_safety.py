@@ -51,14 +51,26 @@ def strip_literals(cypher: str) -> str:
 
 
 def find_forbidden_tokens(cypher: str) -> list[str]:
-    """Return the set of forbidden uppercase tokens present in the (stripped) query."""
+    """Return the set of forbidden uppercase tokens present in the (stripped) query.
+
+    Tokens that immediately follow `.` are property accesses (e.g. `n.show`,
+    `node.start`) and never refer to Cypher keywords — those are skipped to
+    avoid false positives on legitimate read queries.
+    """
     stripped = strip_literals(cypher)
     upper = stripped.upper()
     found = []
     for m in _TOKEN_RE.finditer(upper):
         tok = m.group(0)
-        if tok in _FORBIDDEN and tok not in found:
-            found.append(tok)
+        if tok not in _FORBIDDEN or tok in found:
+            continue
+        # Look one char back, skipping whitespace, for a `.` — property access.
+        i = m.start() - 1
+        while i >= 0 and upper[i].isspace():
+            i -= 1
+        if i >= 0 and upper[i] == ".":
+            continue
+        found.append(tok)
     return found
 
 

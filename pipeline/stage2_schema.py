@@ -50,8 +50,12 @@ def load_schema(ctx: dict) -> list[str]:
     for spec in manifest.stage2_indexes:
         label = use_case.label(spec.label)
         prop = use_case.prop(spec.property)
+        # Name indexes explicitly with the bundle slug so stage 1 can target
+        # them precisely on next pipeline run instead of dropping every index
+        # in the database.
+        iname = _constraint_name(use_case.slug, spec.label, spec.property) + "_idx"
         run_write(
-            f"CREATE INDEX IF NOT EXISTS FOR (n:`{label}`) ON (n.`{prop}`)"
+            f"CREATE INDEX {iname} IF NOT EXISTS FOR (n:`{label}`) ON (n.`{prop}`)"
         )
     logs.append(f"PASS  {len(manifest.stage2_indexes)}/{len(manifest.stage2_indexes)} indexes created")
 

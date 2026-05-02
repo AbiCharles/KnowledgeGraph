@@ -2,15 +2,14 @@
 
 Used as a fallback in the frontend's plain-English query mode when the
 client-side regex rules don't recognise a question. The schema portion of the
-prompt is built by introspecting the ACTIVE use case's ontology with rdflib
-(via pipeline.schema_introspection.schema_description), so the LLM always sees
-the live bundle's labels and properties.
+prompt comes from `pipeline.schema_introspection.schema_description()`,
+which is cached centrally on (slug, ontology_mtime, data_mtime) so the same
+introspection is shared with agents/dynamic.py.
 """
 from __future__ import annotations
 import json
 import logging
 import re
-from functools import lru_cache
 
 from fastapi import APIRouter, HTTPException
 from langchain_openai import ChatOpenAI
@@ -26,15 +25,8 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 
-@lru_cache(maxsize=16)
-def _schema_for_slug(slug: str, ontology_mtime_ns: int) -> str:
-    """Build the schema-aware system prompt for a given use case.
-
-    Cached on (slug, ontology mtime) so reloads after editing the TTL pick up
-    changes without restart. Cleared when bundles are deleted (by the
-    /use_cases route).
-    """
-    uc = use_case_registry.load(slug)
+def _active_schema_prompt() -> str:
+    uc = use_case_registry.get_active()
     schema = schema_description(uc)
     return (
         f"You translate plain-English questions about the '{uc.manifest.name}' knowledge graph "
@@ -44,12 +36,6 @@ def _schema_for_slug(slug: str, ontology_mtime_ns: int) -> str:
         f"Respond in strict JSON with two keys:\n"
         f'{{"cypher": "<cypher>", "explanation": "<one short sentence>"}}'
     )
-
-
-def _active_schema_prompt() -> str:
-    uc = use_case_registry.get_active()
-    mtime = uc.ontology_path.stat().st_mtime_ns if uc.ontology_path.exists() else 0
-    return _schema_for_slug(uc.slug, mtime)
 
 
 @router.post("", response_model=NLResponse)

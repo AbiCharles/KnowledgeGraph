@@ -87,34 +87,66 @@ def set_active(slug: str) -> UseCase:
 
 
 def register_uploaded(slug: str, ontology_bytes: bytes, data_bytes: bytes, manifest_bytes: bytes) -> UseCase:
-    """Persist an uploaded bundle to disk.
+    """Persist an uploaded bundle to disk atomically.
 
-    Validates the slug, parses the manifest, writes all three files, then
-    returns the loaded UseCase. If the slug already exists, it is overwritten —
-    callers should check existence first if they need conflict semantics.
+    Stages files in a sibling `<slug>.staging/` directory and validates the
+    manifest there. If validation passes the staging dir replaces the live one
+    via os.rename (atomic on the same filesystem); the previous bundle's files
+    are kept in `<slug>.old/` until the next successful upload, so a re-upload
+    of a broken manifest never destroys the prior good content.
     """
     if not SLUG_RE.match(slug):
         raise ValueError(f"Invalid slug {slug!r}: must match {SLUG_RE.pattern}")
-    bundle_dir = USE_CASES_DIR / slug
-    bundle_dir.mkdir(parents=True, exist_ok=True)
 
-    (bundle_dir / "ontology.ttl").write_bytes(ontology_bytes)
-    (bundle_dir / "data.ttl").write_bytes(data_bytes)
-    (bundle_dir / "manifest.yaml").write_bytes(manifest_bytes)
+    USE_CASES_DIR.mkdir(parents=True, exist_ok=True)
+    bundle_dir   = USE_CASES_DIR / slug
+    staging_dir  = USE_CASES_DIR / f"{slug}.staging"
+    backup_dir   = USE_CASES_DIR / f"{slug}.old"
 
+    # Clean up any leftover staging from a crashed prior call.
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+    staging_dir.mkdir()
+
+    (staging_dir / "ontology.ttl").write_bytes(ontology_bytes)
+    (staging_dir / "data.ttl").write_bytes(data_bytes)
+    (staging_dir / "manifest.yaml").write_bytes(manifest_bytes)
+
+    # Validate against the staged manifest — UseCase.from_dir checks slug
+    # consistency via bundle_dir.name, but staging_dir.name has the .staging
+    # suffix so we read+parse manually here.
+    import yaml
     try:
-        uc = UseCase.from_dir(bundle_dir)
+        with open(staging_dir / "manifest.yaml", "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+        from pipeline.use_case import Manifest
+        manifest = Manifest(**data)
+        if manifest.slug != slug:
+            raise ValueError(
+                f"Manifest slug {manifest.slug!r} does not match upload slug {slug!r}"
+            )
     except Exception:
-        # Roll back partial writes so the caller doesn't see a half-baked bundle.
-        # Only refuse to delete if THIS slug is explicitly marked active (so we
-        # don't nuke the live working bundle out from under a running pipeline).
-        explicit_active = (
-            ACTIVE_FILE.read_text().strip() if ACTIVE_FILE.exists() else None
-        )
-        if explicit_active != slug:
-            shutil.rmtree(bundle_dir, ignore_errors=True)
+        shutil.rmtree(staging_dir, ignore_errors=True)
         raise
-    return uc
+
+    # Atomic swap: move existing bundle aside, promote staging, then drop the
+    # backup. If the live dir doesn't exist this is just a rename.
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
+    if bundle_dir.exists():
+        os.replace(bundle_dir, backup_dir)
+    try:
+        os.replace(staging_dir, bundle_dir)
+    except Exception:
+        # Replace failed — restore the backup so the caller isn't left with
+        # an empty bundle.
+        if backup_dir.exists():
+            os.replace(backup_dir, bundle_dir)
+        raise
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
+    return UseCase.from_dir(bundle_dir)
 
 
 def delete(slug: str) -> None:

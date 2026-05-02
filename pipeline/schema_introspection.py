@@ -6,10 +6,18 @@ no manufacturing-domain bias when running on a different bundle.
 
 Also samples enum-shaped property values from live Neo4j so the LLM picks
 correct literals (e.g. 'URGENT' not 'urgent', 'PREVENTIVE' not 'preventive').
+
+Top-level `schema_description(use_case)` is cached on
+(slug, ontology_mtime_ns, data_mtime_ns) so agents and the NL endpoint don't
+pay the rdflib parse + N enum-sample queries on every call. The data mtime
+is part of the key so a pipeline re-run (which rewrites data via n10s)
+invalidates stale enum literals — call `invalidate_schema_cache()` to nuke
+the cache explicitly (e.g. after a bundle delete).
 """
 from __future__ import annotations
 import logging
 import re
+from functools import lru_cache
 
 from rdflib import Graph, OWL, RDF, RDFS, URIRef
 
@@ -19,11 +27,20 @@ from pipeline.use_case import UseCase
 log = logging.getLogger(__name__)
 
 # Property names that typically carry enum-shaped string values worth surfacing
-# to the LLM. Matched as a suffix on the local name (case-insensitive).
-_ENUM_SUFFIX = re.compile(r"(status|type|priority|mode|category|kind|severity|state|protocol)$", re.IGNORECASE)
+# to the LLM. Matched as a suffix on the local name (case-insensitive). Trimmed
+# from a broader earlier set — `category` and `kind` and `mode` were dropped
+# because they sometimes carry free-text or PII-adjacent values; `protocol`
+# kept because it's almost always a short technical token (REST-JSON etc.).
+_ENUM_SUFFIX = re.compile(r"(status|type|priority|severity|state|protocol)$", re.IGNORECASE)
+
 # Cap the number of distinct values shown per property — keeps the prompt
 # focused and avoids leaking high-cardinality fields.
 _MAX_VALUES_PER_PROP = 10
+# Skip a property entirely if any sampled value exceeds this length. A real
+# enum value is short (URGENT, PREVENTIVE, etc.); long values almost always
+# mean the field carries free-text or descriptions that we don't want to ship
+# to the LLM. Defence against accidental PII leaks via OpenAI prompts.
+_MAX_VALUE_CHAR_LEN = 32
 
 
 def _local(uri: URIRef) -> str:
@@ -40,7 +57,30 @@ def schema_description(use_case: UseCase) -> str:
     Lists every OWL class with its datatype properties, then every object
     property with prefixed name, domain, range. Always uses the active
     bundle's prefix so generated Cypher matches the live Neo4j labels.
+
+    Cached on (slug, ontology mtime, data mtime). Pipeline reruns rewrite
+    data, so the data mtime in the key invalidates stale enum samples; an
+    edit to the TTL invalidates structural classes/properties.
     """
+    o_mtime = use_case.ontology_path.stat().st_mtime_ns if use_case.ontology_path.exists() else 0
+    d_mtime = use_case.data_path.stat().st_mtime_ns if use_case.data_path.exists() else 0
+    return _schema_description_cached(use_case.slug, o_mtime, d_mtime)
+
+
+def invalidate_schema_cache() -> None:
+    """Drop every cached schema description. Call after destructive ops
+    (bundle delete, manual TTL replacement, etc.) where the (slug, mtime)
+    key would otherwise serve a stale entry."""
+    _schema_description_cached.cache_clear()
+
+
+@lru_cache(maxsize=16)
+def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns: int) -> str:
+    """Inner cached worker. Re-loads the use case from the registry so the
+    cache key fully captures inputs (loading a fresh UseCase here is cheap
+    compared to the rdflib parse + enum-sample queries we'd otherwise repeat)."""
+    from pipeline.use_case_registry import load
+    use_case = load(slug)
     g = Graph()
     g.parse(str(use_case.ontology_path), format="turtle")
     prefix = use_case.manifest.prefix
@@ -99,7 +139,16 @@ def _sample_enum_values(use_case: UseCase, classes: list[str], dt_props: dict[st
 
     Returns an ordered dict-like mapping (class, prop_local_name) -> [values].
     Failures are logged and skipped — schema description still emits structure.
+
+    Privacy:
+      * Manifest field `sample_enum_values: false` opts out entirely.
+      * Properties whose sampled values include any string longer than
+        _MAX_VALUE_CHAR_LEN are silently skipped (signal: free-text / PII risk).
+      * Non-string sampled values are also skipped (mixed-type fields).
     """
+    if not use_case.manifest.sample_enum_values:
+        return {}
+
     # Imported locally to avoid forcing a Neo4j connection at module import
     # time (e.g. during test collection).
     from db import run_query
@@ -121,6 +170,11 @@ def _sample_enum_values(use_case: UseCase, classes: list[str], dt_props: dict[st
                 continue
             values = [r["v"] for r in rows if r.get("v") not in (None, "")]
             if not values:
+                continue
+            # Privacy guard: skip the whole property if any value smells like
+            # free-text (long string) or isn't a plain string.
+            if any(not isinstance(v, str) or len(v) > _MAX_VALUE_CHAR_LEN for v in values):
+                log.debug("skipping enum sample for %s.%s — value(s) non-string or too long", cls, prop)
                 continue
             # Drop the last one as a "and more…" hint if we hit the cap.
             if len(values) > _MAX_VALUES_PER_PROP:

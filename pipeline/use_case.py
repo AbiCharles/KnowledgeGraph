@@ -108,9 +108,23 @@ class CheckSpec(BaseModel):
 
 
 class ExampleSpec(BaseModel):
-    """Hard example shown as a chip in the Query Console."""
+    """Hard example shown as a chip in the Query Console.
+
+    The cypher is never auto-executed by the backend, but the frontend pastes
+    it into the query box for the user. Defending here prevents a malicious
+    bundle from luring an unsuspecting user into clicking a destructive query.
+    """
     label: str
     cypher: str
+
+    @field_validator("cypher")
+    @classmethod
+    def _safe_cypher(cls, v: str) -> str:
+        try:
+            assert_read_only(v, source="example cypher")
+        except UnsafeCypherError as exc:
+            raise ValueError(str(exc)) from exc
+        return v
 
 
 class NLRuleSpec(BaseModel):
@@ -128,6 +142,18 @@ class AgentSpec(BaseModel):
     task: str
     system_prompt: str
     cypher_hint: str = ""
+
+    @field_validator("cypher_hint")
+    @classmethod
+    def _safe_cypher_hint(cls, v: str) -> str:
+        # Empty is fine; otherwise hold to the same read-only standard as
+        # ER rules and validation checks since the hint is shown to the user.
+        if v.strip() and "MATCH" in v.upper():
+            try:
+                assert_read_only(v, source="agent cypher_hint")
+            except UnsafeCypherError as exc:
+                raise ValueError(str(exc)) from exc
+        return v
 
 
 class Manifest(BaseModel):
@@ -153,6 +179,12 @@ class Manifest(BaseModel):
     stage4_adapters: list[AdapterSpec] = Field(default_factory=list)
     stage5_er_rules: list[ERRuleSpec] = Field(default_factory=list)
     stage6_checks: list[CheckSpec] = Field(default_factory=list)
+
+    # Privacy: schema_introspection samples enum-shaped property values from
+    # live Neo4j and embeds them in the LLM prompt. Set to False (or omit
+    # the property type from your enum-suffix list) for any class whose
+    # enum-named properties may carry PII.
+    sample_enum_values: bool = True
 
     # Frontend customisation
     examples: list[ExampleSpec] = Field(default_factory=list)

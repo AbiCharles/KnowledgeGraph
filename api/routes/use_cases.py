@@ -6,7 +6,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from config import get_settings
 from pipeline import use_case_registry
-from api.locks import active_lock
+from api import locks
+from api.locks import acquire_or_409
 from api.schemas import (
     SetActiveRequest, UseCaseSummary, UseCaseListResponse,
 )
@@ -65,9 +66,7 @@ def get_use_case_manifest(slug: str):
 
 @router.post("/active")
 async def set_active_use_case(req: SetActiveRequest):
-    if active_lock.locked():
-        raise HTTPException(status_code=409, detail="An activation is already in progress.")
-    async with active_lock:
+    async with acquire_or_409(locks.active_lock, "activation"):
         try:
             uc = use_case_registry.set_active(req.slug)
         except FileNotFoundError as exc:
@@ -125,6 +124,13 @@ async def upload_bundle(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Upload failed: {exc}")
 
+    # Re-uploading replaces files; bust any cached schema for this slug.
+    try:
+        from pipeline.schema_introspection import invalidate_schema_cache
+        invalidate_schema_cache()
+    except Exception:
+        pass
+
     return _summary(uc, use_case_registry.get_active_slug())
 
 
@@ -137,11 +143,11 @@ def delete_use_case(slug: str):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    # Drop any cached NL prompt schema for the deleted bundle.
+    # Drop any cached schema description for the deleted bundle.
     try:
-        from api.routes.nl import _schema_for_slug
-        _schema_for_slug.cache_clear()
+        from pipeline.schema_introspection import invalidate_schema_cache
+        invalidate_schema_cache()
     except Exception as exc:
-        log.warning("Could not clear NL cache after deleting %s: %s", slug, exc)
+        log.warning("Could not clear schema cache after deleting %s: %s", slug, exc)
 
     return {"deleted": slug}
