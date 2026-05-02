@@ -123,10 +123,15 @@ In the dashboard:
 
 The four left-panel tabs each have a dedicated guide in [docs/](docs/):
 
-> **Want to load data from Postgres instead of `data.ttl`?** Start with
-> the [Datasources quick-start](docs/datasources-quickstart.md) — a
-> step-by-step walkthrough from `pip install` through `▶ Run` to seeing
-> your rows as graph nodes.
+> **Loading data from a database instead of `data.ttl`?**
+> - [Quick-start](docs/datasources-quickstart.md) — first-time setup
+>   walkthrough using a throwaway docker Postgres.
+> - [Datasources in production](docs/using-datasources.md) — operator
+>   guide for TLS hardening + setting up a least-privilege read-only
+>   role before pointing at real data.
+> - [Extending datasources](docs/extending-datasources.md) — developer
+>   guide for adding a new database engine (MySQL, SQLite, MSSQL, etc.)
+>   as a connector kind.
 
 
 - **[Use Cases](docs/use-cases.md)** — bundle CRUD, activation/deactivation,

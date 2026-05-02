@@ -1,5 +1,11 @@
 # Datasources quick-start: Postgres instead of `data.ttl`
 
+> First-time setup using a throwaway docker Postgres. For production
+> hardening (TLS + read-only role), continue with
+> [Datasources in production](using-datasources.md). For adding a
+> different database engine, see [Extending datasources](extending-datasources.md).
+
+
 A bundle's `data.ttl` is fine for static / shipped reference data, but it
 locks you into manual file edits whenever the source data changes. For
 operational data — the kind that lives in a real database that gets new
