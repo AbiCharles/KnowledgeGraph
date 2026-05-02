@@ -141,6 +141,23 @@ def _session(driver):
     return driver.session()
 
 
+def run_on_database(db_name: str | None, cypher: str, params: dict = None) -> list[dict]:
+    """One-shot query against a specific database without mutating module state.
+
+    Pass `db_name=None` to fall through to the driver default. Used by the
+    federation view to fetch one bundle's graph while the active bundle stays
+    pointed elsewhere — single-DB mode just ignores the name.
+    """
+    driver = get_driver()
+    if db_name and supports_multi_db():
+        with driver.session(database=db_name) as session:
+            result = session.run(cypher, params or {})
+            return [dict(record) for record in result]
+    with _session(driver) as session:
+        result = session.run(cypher, params or {})
+        return [dict(record) for record in result]
+
+
 # ── Query helpers ─────────────────────────────────────────────────────────────
 
 def run_query(cypher: str, params: dict = None) -> list[dict]:

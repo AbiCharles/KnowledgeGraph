@@ -111,6 +111,38 @@ def test_capabilities_route_returns_multi_db_flag(stub_db):
     assert isinstance(body["multi_database"], bool)
 
 
+def test_graph_snapshot_unknown_slug_404(stub_db, monkeypatch):
+    # supports_multi_db() returns False with the stub DB so we never try to
+    # talk to Neo4j; the 404 comes from registry.load() not finding the slug.
+    r = _client().get("/graph/snapshot?slug=does-not-exist")
+    assert r.status_code == 404
+
+
+def test_graph_snapshot_returns_payload_shape(stub_db, monkeypatch):
+    """Stub run_on_database to return one node and one edge so we can assert
+    the route serialises them correctly (prefix-stripping, manifest echo)."""
+    import db
+    monkeypatch.setattr(db, "supports_multi_db", lambda: False)
+
+    def _fake_run(_db, cypher, params=None):
+        if "RETURN elementId(n) AS id" in cypher:
+            return [{"id": "n1", "type": "kf-mfg__WorkOrder", "p": {"uri": "x", "kf-mfg__woStatus": "OPEN"}}]
+        if "RETURN elementId(a) AS source" in cypher:
+            return [{"source": "n1", "target": "n2", "rel": "kf-mfg__assignedToEquipment"}]
+        return []
+
+    monkeypatch.setattr("api.routes.graph.run_on_database", _fake_run)
+    r = _client().get("/graph/snapshot?slug=kf-mfg-workorder")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["slug"] == "kf-mfg-workorder"
+    assert body["nodes"][0]["type"] == "WorkOrder"
+    assert "uri" not in body["nodes"][0]["p"]
+    assert body["nodes"][0]["p"]["woStatus"] == "OPEN"
+    assert body["edges"][0]["rel"] == "assignedToEquipment"
+    assert body["manifest"]["prefix"] == "kf-mfg"
+
+
 def test_cors_safe_invariant():
     """If origins include '*', credentials must be disabled. Either way the
     app must never combine wildcard origins with credentials enabled."""
