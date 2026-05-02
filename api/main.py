@@ -6,17 +6,22 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from config import get_settings
 from db import close_driver
 
 from api.routes import pipeline, query, agents, ontology, nl, use_cases, usage, graph, schema
 from api.security import APIKeyAuthMiddleware, RateLimitMiddleware
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
+from api.observability import (
+    MetricsMiddleware, RequestIDMiddleware, configure_logging, render_prometheus_metrics,
+)
 
 s = get_settings()
+
+# Replace the default basicConfig with our observability-aware setup. JSON
+# format opt-in via LOG_FORMAT=json env var.
+configure_logging(fmt=s.log_format, level=s.log_level)
 
 
 @asynccontextmanager
@@ -97,14 +102,17 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
-# Auth + rate-limit. Both no-op when their corresponding setting is empty/0
-# so local dev stays frictionless. Order: auth first (cheap header check),
-# rate limit second (fends off abusers who can't authenticate either way).
-# Starlette runs middleware in REVERSE registration order, so add rate
-# limit first then auth — auth runs outermost and rejects bad keys before
-# the rate-limit bucket is even consulted.
+# Auth + rate-limit + observability. All no-op when their corresponding
+# setting is unset / 0 so local dev stays frictionless. Starlette runs
+# middleware in REVERSE registration order, so the order of effect is:
+#   RequestIDMiddleware (outermost — must wrap everything so logs get rid)
+#   → APIKeyAuthMiddleware (rejects bad keys before any other work)
+#   → RateLimitMiddleware (fends off abusers who pass auth too)
+#   → MetricsMiddleware  (innermost — only counts requests that got served)
+app.add_middleware(MetricsMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(APIKeyAuthMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 app.include_router(pipeline.router,  prefix="/pipeline",  tags=["Pipeline"])
 app.include_router(query.router,     prefix="/query",     tags=["Query"])
@@ -132,6 +140,14 @@ def capabilities():
         "multi_database": supports_multi_db(),
         "active_database": get_active_database(),
     }
+
+
+@app.get("/metrics", tags=["Health"])
+def metrics():
+    """Prometheus text exposition format. Scrape with a Prometheus server
+    or read manually for spot-checking. Counter set is small + bounded
+    by routes — no high-cardinality labels."""
+    return PlainTextResponse(render_prometheus_metrics(), media_type="text/plain; version=0.0.4")
 
 
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"

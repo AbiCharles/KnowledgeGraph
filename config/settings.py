@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     # minutes — way too long.
     openai_timeout_seconds: int = 60
 
+    # Log output format. 'text' = the existing human-readable single-line
+    # format (default for local dev). 'json' = one JSON object per line,
+    # ready to ship to Datadog/ELK/Loki/jq.
+    log_format: str = "text"
+    log_level:  str = "INFO"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
