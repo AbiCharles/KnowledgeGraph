@@ -54,6 +54,7 @@ def nl_to_cypher(req: NLRequest):
         model=s.openai_model,
         api_key=s.openai_api_key,
         temperature=0,
+        timeout=s.openai_timeout_seconds,
         model_kwargs={"response_format": {"type": "json_object"}},
     )
 
