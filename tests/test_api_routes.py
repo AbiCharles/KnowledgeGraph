@@ -65,6 +65,24 @@ def test_get_unknown_use_case_404(stub_db):
     assert r.status_code == 404
 
 
+def test_versions_list_route_404_on_unknown_bundle(stub_db):
+    r = _client().get("/use_cases/no-such-bundle/versions")
+    assert r.status_code == 404
+
+
+def test_versions_list_route_returns_empty_when_no_archives(stub_db):
+    r = _client().get("/use_cases/kf-mfg-workorder/versions")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["slug"] == "kf-mfg-workorder"
+    assert isinstance(body["versions"], list)
+
+
+def test_diff_route_404_on_unknown_stamp(stub_db):
+    r = _client().get("/use_cases/kf-mfg-workorder/versions/20260101T000000Z/diff")
+    assert r.status_code == 404
+
+
 def test_cors_safe_invariant():
     """If origins include '*', credentials must be disabled. Either way the
     app must never combine wildcard origins with credentials enabled."""

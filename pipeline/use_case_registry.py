@@ -129,11 +129,13 @@ def register_uploaded(slug: str, ontology_bytes: bytes, data_bytes: bytes, manif
         shutil.rmtree(staging_dir, ignore_errors=True)
         raise
 
-    # Atomic swap: move existing bundle aside, promote staging, then drop the
-    # backup. If the live dir doesn't exist this is just a rename.
+    # Atomic swap: move existing bundle aside, promote staging, then file the
+    # outgoing version under <slug>.versions/<utc-timestamp>/ so the operator
+    # can roll back or diff against any prior upload.
     if backup_dir.exists():
         shutil.rmtree(backup_dir)
-    if bundle_dir.exists():
+    had_prior = bundle_dir.exists()
+    if had_prior:
         os.replace(bundle_dir, backup_dir)
     try:
         os.replace(staging_dir, bundle_dir)
@@ -144,9 +146,80 @@ def register_uploaded(slug: str, ontology_bytes: bytes, data_bytes: bytes, manif
             os.replace(backup_dir, bundle_dir)
         raise
     if backup_dir.exists():
+        if had_prior:
+            _archive_version(slug, backup_dir)
         shutil.rmtree(backup_dir, ignore_errors=True)
 
     return UseCase.from_dir(bundle_dir)
+
+
+def _archive_version(slug: str, source_dir: Path) -> None:
+    """Move source_dir contents into use_cases/<slug>.versions/<utc-stamp>/.
+
+    Best-effort: if archiving fails, log and let the caller's success path
+    proceed — losing one historical snapshot is preferable to failing the
+    upload that just succeeded.
+    """
+    from datetime import datetime, timezone
+    versions_dir = USE_CASES_DIR / f"{slug}.versions"
+    versions_dir.mkdir(parents=True, exist_ok=True)
+    # Millisecond resolution + collision suffix — back-to-back restores within
+    # the same wall-clock millisecond would otherwise lose snapshots.
+    now = datetime.now(timezone.utc)
+    base = now.strftime("%Y%m%dT%H%M%S") + f"{now.microsecond // 1000:03d}Z"
+    target = versions_dir / base
+    suffix = 1
+    while target.exists():
+        target = versions_dir / f"{base}-{suffix}"
+        suffix += 1
+    try:
+        shutil.copytree(source_dir, target)
+    except Exception as exc:
+        log.warning("Could not archive prior version of %s: %s", slug, exc)
+
+
+def list_versions(slug: str) -> list[dict]:
+    """Return archived version snapshots for a bundle, newest first."""
+    versions_dir = USE_CASES_DIR / f"{slug}.versions"
+    if not versions_dir.is_dir():
+        return []
+    out = []
+    for child in sorted(versions_dir.iterdir(), reverse=True):
+        if not child.is_dir():
+            continue
+        manifest = child / "manifest.yaml"
+        out.append({
+            "stamp": child.name,
+            "size_bytes": sum(p.stat().st_size for p in child.rglob("*") if p.is_file()),
+            "has_manifest": manifest.exists(),
+        })
+    return out
+
+
+def load_version(slug: str, stamp: str) -> dict:
+    """Read the three files of an archived version into memory."""
+    src = USE_CASES_DIR / f"{slug}.versions" / stamp
+    if not src.is_dir():
+        raise FileNotFoundError(f"No archived version {stamp} for bundle {slug}")
+    return {
+        "manifest": (src / "manifest.yaml").read_text(encoding="utf-8") if (src / "manifest.yaml").exists() else "",
+        "ontology": (src / "ontology.ttl").read_text(encoding="utf-8") if (src / "ontology.ttl").exists() else "",
+        "data":     (src / "data.ttl").read_text(encoding="utf-8")     if (src / "data.ttl").exists()     else "",
+    }
+
+
+def restore_version(slug: str, stamp: str) -> UseCase:
+    """Promote an archived version back to live, archiving the current first."""
+    src = USE_CASES_DIR / f"{slug}.versions" / stamp
+    if not src.is_dir():
+        raise FileNotFoundError(f"No archived version {stamp} for bundle {slug}")
+    payload = load_version(slug, stamp)
+    return register_uploaded(
+        slug,
+        payload["ontology"].encode("utf-8"),
+        payload["data"].encode("utf-8"),
+        payload["manifest"].encode("utf-8"),
+    )
 
 
 def delete(slug: str) -> None:

@@ -328,6 +328,25 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 .uc-btn-activate:hover{background:#00dfd2}
 .uc-btn-delete{background:transparent;border:1px solid var(--border2);color:var(--text3)}
 .uc-btn-delete:hover{border-color:var(--red);color:var(--red)}
+.uc-btn-versions{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.uc-btn-versions:hover{border-color:var(--teal);color:var(--teal)}
+.uc-versions{display:none;margin-top:9px;border-top:1px dashed var(--border);padding-top:9px}
+.uc-versions.open{display:block}
+.uc-ver-row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-radius:4px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2)}
+.uc-ver-row:hover{background:rgba(255,255,255,.02)}
+.uc-ver-stamp{flex:1}
+.uc-ver-size{color:var(--text3);font-size:9px}
+.uc-ver-btn{padding:3px 9px;border-radius:3px;font-size:9.5px;background:transparent;border:1px solid var(--border2);color:var(--text2);cursor:pointer;font-family:'JetBrains Mono',monospace}
+.uc-ver-btn:hover{border-color:var(--teal);color:var(--teal)}
+.uc-ver-btn.uc-ver-restore:hover{border-color:var(--amber);color:var(--amber)}
+.uc-diff-section{margin-bottom:14px}
+.uc-diff-h{font-size:10px;font-weight:600;color:var(--teal);font-family:'JetBrains Mono',monospace;margin-bottom:5px;letter-spacing:.5px}
+.uc-diff-list{font-size:10px;font-family:'JetBrains Mono',monospace;line-height:1.65;padding-left:6px}
+.uc-diff-add{color:#7eea9e}
+.uc-diff-rem{color:var(--red)}
+.uc-diff-meta{color:var(--text3);font-style:italic}
+.uc-diff-empty{color:var(--text3);font-style:italic;font-size:10px}
+.uc-diff-pre{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:9.5px;line-height:1.5;color:var(--text2);max-height:240px;overflow:auto;white-space:pre}
 
 /* Upload modal */
 .uc-modal-bg{display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,9,14,.75);align-items:center;justify-content:center}
@@ -603,6 +622,18 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
     <div class="uc-modal-actions">
       <button class="uc-modal-cancel" onclick="closeUploadModal()">Cancel</button>
       <button class="uc-modal-submit" id="uc-upload-submit" onclick="submitUpload()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bundle version diff modal -->
+<div class="uc-modal-bg" id="uc-diff-modal">
+  <div class="uc-modal" style="width:640px">
+    <div class="uc-modal-title">Bundle diff</div>
+    <div class="uc-modal-sub" id="uc-diff-title" style="color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:10.5px"></div>
+    <div id="uc-diff-body"></div>
+    <div class="uc-modal-actions">
+      <button class="uc-modal-cancel" onclick="closeDiffModal()">Close</button>
     </div>
   </div>
 </div>
@@ -887,46 +918,79 @@ async function runPipeline(){
   STAGES.forEach(s => states[s.n] = 'idle');
   window._lastPipelineStates = states;
   renderStages(states);
-  addLog(la, 'INFO', 'POST /pipeline/run — awaiting backend (this may take 5–10s)…');
+  addLog(la, 'INFO', 'POST /pipeline/run?stream=true — streaming stages as they complete…');
 
+  // Streamed via Server-Sent Events. Each `event: stage` arrives the moment
+  // the backend finishes a stage; `event: done` carries the overall result.
+  const allStages = [];
+  let overall = null;
   try {
-    const data = await api('/pipeline/run', {}, _pAbort.signal);
-    addDiv(la, '── Pipeline returned ' + data.stages.length + ' stages ──', 'ldiv');
+    const res = await fetch('/pipeline/run?stream=true', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: '{}',
+      signal: _pAbort.signal,
+    });
+    if(!res.ok){
+      let msg = 'HTTP ' + res.status;
+      try { const j = await res.json(); msg = j.detail || JSON.stringify(j); } catch(_){}
+      throw new Error(msg);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    let activeStageNum = null;
+    while(true){
+      const {value, done} = await reader.read();
+      if(done) break;
+      buf += decoder.decode(value, {stream: true});
+      // SSE messages are separated by a blank line.
+      let idx;
+      while((idx = buf.indexOf('\n\n')) >= 0){
+        const raw = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const lines = raw.split('\n');
+        let evt = 'message', data = '';
+        for(const l of lines){
+          if(l.startsWith('event:')) evt = l.slice(6).trim();
+          else if(l.startsWith('data:')) data += l.slice(5).trim();
+        }
+        if(!data) continue;
+        let payload;
+        try { payload = JSON.parse(data); } catch(_){ continue; }
 
-    for(let i = 0; i < data.stages.length; i++){
-      const stage = data.stages[i];
-      states[stage.stage] = 'active';
-      renderStages(states);
-      addDiv(la, `── Stage ${stage.stage}: ${stage.name} ──`, 'ldiv');
-      await sleep(150);
-
-      for(const line of (stage.logs || [])){
-        addLog(la, inferLevel(line), trimLevel(line));
-        await sleep(40);
-      }
-      if(stage.error){
-        addLog(la, 'ERROR', stage.error);
-        if(stage.remediation){
-          addLog(la, 'INFO', '↳ ' + stage.remediation);
+        if(evt === 'stage'){
+          const stage = payload;
+          allStages.push(stage);
+          // Mark as active first (briefly) for the pulse animation, then settle.
+          if(activeStageNum !== null && activeStageNum !== stage.stage){
+            // Previous stage settled by being skipped past — happens when
+            // backend finishes one and starts the next instantly.
+          }
+          activeStageNum = stage.stage;
+          addDiv(la, `── Stage ${stage.stage}: ${stage.name} ──`, 'ldiv');
+          for(const line of (stage.logs || [])){
+            addLog(la, inferLevel(line), trimLevel(line));
+          }
+          if(stage.error){
+            addLog(la, 'ERROR', stage.error);
+            if(stage.remediation) addLog(la, 'INFO', '↳ ' + stage.remediation);
+          }
+          states[stage.stage] = stage.status;
+          const tim = document.getElementById('tim' + stage.stage);
+          if(tim) tim.textContent = (stage.duration_ms || 0) + 'ms';
+          renderStages(states);
+        } else if(evt === 'done'){
+          overall = payload.overall;
         }
       }
-
-      states[stage.stage] = stage.status;
-      const tim = document.getElementById('tim' + stage.stage);
-      if(tim) tim.textContent = (stage.duration_ms || 0) + 'ms';
-      renderStages(states);
-      await sleep(120);
     }
+    if(overall === null) overall = (allStages.length && allStages[allStages.length-1].status === 'fail') ? 'fail' : 'pass';
+    addDiv(la, '── Overall: ' + overall.toUpperCase() + ' ──', 'ldiv');
 
-    addDiv(la, '── Overall: ' + data.overall.toUpperCase() + ' ──', 'ldiv');
-
-    if(data.overall === 'pass'){
-      showValidationReport(data.stages);
-      // loadGraph also fetches via /query — keep _pRunning true so the user
-      // can't kick off a second pipeline while we're still settling.
-      try {
-        await loadGraph();
-      } catch(_){ /* loadGraph already surfaces its own errors */ }
+    if(overall === 'pass'){
+      showValidationReport(allStages);
+      try { await loadGraph(); } catch(_){}
       document.getElementById('kgscrollhint').style.display = 'block';
       document.getElementById('kgpanel').classList.add('active');
       setTimeout(initKGCanvas, 250);
@@ -2471,13 +2535,16 @@ function _renderUcCards(data){
           ${agentChip}${tags}
         </div>
         <div class="uc-card-actions">
+          <button class="uc-btn uc-btn-versions" data-action="versions" data-slug="" title="View prior uploads of this bundle">Versions</button>
           <button class="uc-btn uc-btn-delete" data-action="delete" data-slug="" data-active="${b.is_active}"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
           ${b.is_active ? '' : '<button class="uc-btn uc-btn-activate" data-action="activate" data-slug="">Activate</button>'}
-        </div>`;
+        </div>
+        <div class="uc-versions" data-versions-panel data-slug=""></div>`;
       // Fill text-only slots safely.
       card.querySelector('.uc-slug').textContent = b.slug;
       card.querySelector('.uc-prefix').textContent = b.prefix;
       card.querySelectorAll('[data-slug]').forEach(btn => { btn.dataset.slug = b.slug; });
+      card.querySelector('[data-versions-panel]').dataset.slug = b.slug;
       list.appendChild(card);
     });
   } catch(err){
@@ -2493,7 +2560,130 @@ document.addEventListener('click', (e) => {
   if(!slug) return;
   if(btn.dataset.action === 'activate') activateUseCase(slug);
   else if(btn.dataset.action === 'delete') deleteUseCase(slug, btn.dataset.active === 'true');
+  else if(btn.dataset.action === 'versions') toggleVersionsPanel(slug, btn);
 });
+
+async function toggleVersionsPanel(slug, btn){
+  const card = btn.closest('.uc-card');
+  const panel = card && card.querySelector(`[data-versions-panel][data-slug="${CSS.escape(slug)}"]`);
+  if(!panel) return;
+  if(panel.classList.contains('open')){
+    panel.classList.remove('open');
+    return;
+  }
+  panel.classList.add('open');
+  panel.innerHTML = '<div style="font-size:10px;color:var(--text3)">Loading versions…</div>';
+  try {
+    const res = await api(`/use_cases/${encodeURIComponent(slug)}/versions`);
+    const versions = res.versions || [];
+    if(!versions.length){
+      panel.innerHTML = '<div style="font-size:10px;color:var(--text3)">No prior uploads archived yet. The next upload of this bundle will create the first snapshot.</div>';
+      return;
+    }
+    panel.innerHTML = '';
+    versions.forEach(v => {
+      const row = document.createElement('div');
+      row.className = 'uc-ver-row';
+      row.innerHTML = `
+        <span class="uc-ver-stamp"></span>
+        <span class="uc-ver-size"></span>
+        <button class="uc-ver-btn" data-vaction="diff">Diff</button>
+        <button class="uc-ver-btn uc-ver-restore" data-vaction="restore">Restore</button>`;
+      row.querySelector('.uc-ver-stamp').textContent = _formatStamp(v.stamp);
+      row.querySelector('.uc-ver-size').textContent = `${(v.size_bytes/1024).toFixed(1)} KiB`;
+      row.querySelectorAll('[data-vaction]').forEach(b => {
+        b.dataset.slug = slug;
+        b.dataset.stamp = v.stamp;
+      });
+      panel.appendChild(row);
+    });
+  } catch(err){
+    panel.innerHTML = `<div class="errbox" style="margin:0;font-size:10px">Could not load versions: ${escapeHTML(err.message)}</div>`;
+  }
+}
+
+function _formatStamp(stamp){
+  // "20260501T130045123Z" or "...Z-1" → "2026-05-01 13:00:45.123 UTC"
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})?Z(?:-\d+)?$/.exec(stamp);
+  if(!m) return stamp;
+  const ms = m[7] ? '.' + m[7] : '';
+  return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}${ms} UTC`;
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('#uc-list [data-vaction]');
+  if(!btn) return;
+  const {slug, stamp, vaction} = btn.dataset;
+  if(!slug || !stamp) return;
+  if(vaction === 'diff') openDiffModal(slug, stamp);
+  else if(vaction === 'restore') restoreVersion(slug, stamp);
+});
+
+async function restoreVersion(slug, stamp){
+  if(!confirm(`Restore "${slug}" to snapshot ${_formatStamp(stamp)}?\n\nThe current bundle will be archived first, so this is reversible. Active selection is preserved.`)) return;
+  try {
+    await api(`/use_cases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(stamp)}/restore`, {});
+    _invalidateUseCasesCache();
+    renderUseCases(true);
+    alert(`Restored "${slug}" from ${_formatStamp(stamp)}.\n\nIf this bundle is active, run the Hydration Pipeline to load the restored data into Neo4j.`);
+  } catch(err){
+    alert('Restore failed: ' + err.message);
+  }
+}
+
+async function openDiffModal(slug, stamp){
+  const bg = document.getElementById('uc-diff-modal');
+  const body = document.getElementById('uc-diff-body');
+  const title = document.getElementById('uc-diff-title');
+  title.textContent = `${slug} — ${_formatStamp(stamp)} → current`;
+  body.innerHTML = '<div style="font-size:10px;color:var(--text3)">Computing diff…</div>';
+  bg.classList.add('open');
+  try {
+    const res = await api(`/use_cases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(stamp)}/diff`);
+    body.innerHTML = _renderDiff(res.diff);
+  } catch(err){
+    body.innerHTML = `<div class="errbox" style="margin:0">Diff failed: ${escapeHTML(err.message)}</div>`;
+  }
+}
+
+function closeDiffModal(){ document.getElementById('uc-diff-modal').classList.remove('open'); }
+
+function _renderDiff(d){
+  const sec = (title, set) => {
+    const a = set.added || [], r = set.removed || [];
+    if(!a.length && !r.length){
+      return `<div class="uc-diff-section"><div class="uc-diff-h">${escapeHTML(title)}</div><div class="uc-diff-empty">No changes</div></div>`;
+    }
+    const items = [
+      ...a.map(x => `<div class="uc-diff-add">+ ${escapeHTML(x)}</div>`),
+      ...r.map(x => `<div class="uc-diff-rem">− ${escapeHTML(x)}</div>`),
+    ].join('');
+    return `<div class="uc-diff-section"><div class="uc-diff-h">${escapeHTML(title)} <span style="color:var(--text3);font-weight:400">(+${a.length} / −${r.length})</span></div><div class="uc-diff-list">${items}</div></div>`;
+  };
+  const meta = d.manifest && d.manifest.metadata_changed && Object.keys(d.manifest.metadata_changed).length
+    ? `<div class="uc-diff-section"><div class="uc-diff-h">Manifest metadata</div><div class="uc-diff-list">` +
+      Object.entries(d.manifest.metadata_changed).map(([k,v]) =>
+        `<div class="uc-diff-meta">${escapeHTML(k)}: ${escapeHTML(String(v.old))} → ${escapeHTML(String(v.new))}</div>`
+      ).join('') + `</div></div>`
+    : '';
+  const dataInfo = `<div class="uc-diff-section"><div class="uc-diff-h">data.ttl size</div><div class="uc-diff-list uc-diff-meta">${(d.data_size_old/1024).toFixed(1)} KiB → ${(d.data_size_new/1024).toFixed(1)} KiB</div></div>`;
+  const unified = d.manifest_unified_diff
+    ? `<div class="uc-diff-section"><div class="uc-diff-h">manifest.yaml unified diff</div><pre class="uc-diff-pre">${escapeHTML(d.manifest_unified_diff)}</pre></div>`
+    : '';
+  return [
+    sec('Ontology — classes', d.ontology.classes),
+    sec('Ontology — object properties', d.ontology.object_properties),
+    sec('Ontology — datatype properties', d.ontology.datatype_properties),
+    sec('Manifest — in-scope classes', d.manifest.in_scope_classes),
+    sec('Manifest — agents', d.manifest.agents),
+    sec('Manifest — ER rules (stage 5)', d.manifest.stage5_er_rules),
+    sec('Manifest — validation checks (stage 6)', d.manifest.stage6_checks),
+    sec('Manifest — examples', d.manifest.examples),
+    meta,
+    dataInfo,
+    unified,
+  ].join('');
+}
 
 async function activateUseCase(slug){
   try {

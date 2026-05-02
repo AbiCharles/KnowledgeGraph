@@ -26,7 +26,7 @@ def wipe_and_init(ctx: dict) -> list[str]:
     # its own constraints. Operator-added constraints with non-bundle names are
     # left alone.
     dropped_c = _drop_bundle_schema("CONSTRAINTS", logs)
-    dropped_i = _drop_bundle_schema("INDEXES",     logs, extra_filter=" WHERE type <> 'LOOKUP'")
+    dropped_i = _drop_bundle_schema("INDEXES",     logs, extra_yield=", type", extra_filter=" WHERE type <> 'LOOKUP'")
     logs.append(
         f"PASS  Dropped {dropped_c} bundle constraint(s) and {dropped_i} bundle index(es); "
         f"operator-managed schema preserved"
@@ -61,14 +61,15 @@ def wipe_and_init(ctx: dict) -> list[str]:
     return logs
 
 
-def _drop_bundle_schema(kind: str, logs: list, extra_filter: str = "") -> int:
+def _drop_bundle_schema(kind: str, logs: list, extra_yield: str = "", extra_filter: str = "") -> int:
     """Drop only schema items whose names match the bundle <slug>_<class>_<prop>(_idx)?
     pattern. Returns the count of items actually dropped. `kind` is "CONSTRAINTS"
-    or "INDEXES"."""
+    or "INDEXES". `extra_yield`/`extra_filter` let the caller fold additional
+    columns into the YIELD clause (Neo4j 5 requires WHERE columns be yielded)."""
     drop_kw = "CONSTRAINT" if kind == "CONSTRAINTS" else "INDEX"
     dropped = 0
     try:
-        rows = run_query(f"SHOW {kind} YIELD name{extra_filter}") or []
+        rows = run_query(f"SHOW {kind} YIELD name{extra_yield}{extra_filter}") or []
     except Exception as exc:
         logs.append(f"WARN  Could not enumerate {kind.lower()}: {exc}")
         return 0

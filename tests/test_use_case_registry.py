@@ -151,3 +151,49 @@ def test_register_uploaded_cleans_up_staging_after_success(tmp_use_cases_dir):
     # No leftover staging or backup directories after a successful upload.
     assert not (tmp_use_cases_dir / "cleanup-test.staging").exists()
     assert not (tmp_use_cases_dir / "cleanup-test.old").exists()
+
+
+def test_versioning_archives_prior_uploads_and_can_restore(tmp_use_cases_dir):
+    """Each successful re-upload archives the prior version; restore promotes
+    an archived snapshot back to live (archiving the current first)."""
+    from pipeline import use_case_registry as reg
+
+    # Upload v1 — no prior version, so no archive yet.
+    reg.register_uploaded(
+        "ver-test",
+        MINIMAL_TTL.encode(),
+        b"# v1 data\n",
+        MINIMAL_MANIFEST.format(slug="ver-test").encode(),
+    )
+    assert reg.list_versions("ver-test") == []
+
+    # Upload v2 — v1 should now be archived.
+    reg.register_uploaded(
+        "ver-test",
+        MINIMAL_TTL.encode(),
+        b"# v2 data\n",
+        MINIMAL_MANIFEST.format(slug="ver-test").encode(),
+    )
+    versions = reg.list_versions("ver-test")
+    assert len(versions) == 1
+    v1_stamp = versions[0]["stamp"]
+    assert versions[0]["has_manifest"]
+
+    # Round-trip the archived payload through load_version.
+    payload = reg.load_version("ver-test", v1_stamp)
+    assert payload["data"] == "# v1 data\n"
+
+    # Live should still be v2.
+    live_data = (tmp_use_cases_dir / "ver-test" / "data.ttl").read_text()
+    assert live_data == "# v2 data\n"
+
+    # Restore v1 — current (v2) gets archived first, then v1 is promoted.
+    reg.restore_version("ver-test", v1_stamp)
+    assert (tmp_use_cases_dir / "ver-test" / "data.ttl").read_text() == "# v1 data\n"
+    assert len(reg.list_versions("ver-test")) == 2  # v1 archive + v2 archive
+
+
+def test_load_version_missing_raises(tmp_use_cases_dir):
+    from pipeline import use_case_registry as reg
+    with pytest.raises(FileNotFoundError):
+        reg.load_version("nope", "20260101T000000Z")
