@@ -1560,31 +1560,45 @@ function initCypherEditor(){
     autoCloseBrackets: true,
     matchBrackets: true,
     extraKeys: {
-      'Ctrl-Space': 'autocomplete',
-      'Cmd-Space': 'autocomplete',
+      'Ctrl-Space': triggerCypherHint,
+      'Cmd-Space':  triggerCypherHint,
       'Ctrl-Enter': () => runQuery(),
-      'Cmd-Enter': () => runQuery(),
-    },
-    hintOptions: {
-      completeSingle: false,
-      hint: cypherHint,
+      'Cmd-Enter':  () => runQuery(),
     },
   });
-  // Sync changes back to the underlying textarea so legacy .value reads still work.
+  // Auto-trigger the menu on `:` / `.` / `[` / `(` so suggestions appear as
+  // the user types — no need to remember Ctrl-Space.
+  _cypherCM.on('inputRead', (cm, change) => {
+    if(!change.text || change.text.length !== 1) return;
+    const ch = change.text[0];
+    if(/[.:[(]/.test(ch)) setTimeout(() => triggerCypherHint(cm), 0);
+  });
   _cypherCM.on('change', () => _cypherCM.save());
+  // Expose for console debugging.
+  window.__cypherCM = _cypherCM;
+  window.__cypherHint = cypherHint;
 }
 
-// Schema-driven autocomplete. Suggestions are scoped by token context:
-//   - inside :Label   → labels
-//   - inside [:REL]   → relationship types
-//   - after a "."     → properties
-//   - otherwise       → labels + rels + Cypher keywords
+function triggerCypherHint(cm){
+  if(!cm.showHint){
+    console.error('CodeMirror show-hint addon failed to load.');
+    return;
+  }
+  cm.showHint({hint: cypherHint, completeSingle: false});
+}
+
+// Schema-driven autocomplete. ALWAYS returns a categorised menu — context
+// detection only re-orders the categories, never hides them, so a missed
+// context still leaves useful items visible. Each entry's displayText
+// labels its category (label / rel / property / keyword) so the user can
+// pick the right one even when the cursor is in an ambiguous spot.
 function cypherHint(cm){
   const cur = cm.getCursor();
   const line = cm.getLine(cur.line);
   const upTo = line.slice(0, cur.ch);
-  const tokenMatch = upTo.match(/[A-Za-z_][A-Za-z0-9_]*$/);
+  const tokenMatch = upTo.match(/`?[A-Za-z_][A-Za-z0-9_]*$/);
   const token = tokenMatch ? tokenMatch[0] : '';
+  const tokenBare = token.replace(/^`/, '').toLowerCase();
   const start = cur.ch - token.length;
   const s = _schemaCache || {labels: [], relationship_types: [], properties_by_label: {}, prefix: ''};
   const pfx = s.prefix ? s.prefix + '__' : '';
@@ -1593,31 +1607,48 @@ function cypherHint(cm){
   )).sort();
   const KEYWORDS = ['MATCH','OPTIONAL MATCH','WHERE','WITH','RETURN','ORDER BY','LIMIT','SKIP','AND','OR','NOT','AS','IN','IS NULL','IS NOT NULL','DISTINCT','COUNT','COLLECT','UNWIND','CASE','WHEN','THEN','ELSE','END'];
 
-  let pool = [];
-  // Inside a :Label or [:Rel] bracket — narrow.
-  const labelCtx = /[:(]\s*[`]?[A-Za-z0-9_]*$/.test(upTo) && !/\[\s*[`]?[A-Za-z0-9_]*$/.test(upTo);
-  const relCtx   = /\[\s*:?[`]?[A-Za-z0-9_]*$/.test(upTo);
-  const propCtx  = /\.[`]?[A-Za-z0-9_]*$/.test(upTo);
+  // Context detection — wider regexes that tolerate aliases and whitespace.
+  const tail = upTo.slice(-40);
+  const propCtx  = /\.[`]?[A-Za-z0-9_]*$/.test(tail);
+  const relCtx   = !propCtx && /\[[^\]]*$/.test(tail);   // anywhere inside [...
+  const labelCtx = !propCtx && !relCtx && /\([^)]*:[`]?[A-Za-z0-9_]*$/.test(tail);
 
-  if(propCtx){
-    pool = allProps.map(p => ({text: '`' + pfx + p + '`', displayText: p}));
-  } else if(relCtx){
-    pool = (s.relationship_types || []).map(r => ({text: '`' + pfx + r + '`', displayText: r}));
-  } else if(labelCtx){
-    pool = (s.labels || []).map(l => ({text: '`' + pfx + l + '`', displayText: l}));
-  } else {
-    pool = [
-      ...(s.labels || []).map(l => ({text: l, displayText: l + '  (label)'})),
-      ...(s.relationship_types || []).map(r => ({text: r, displayText: r + '  (relationship)'})),
-      ...allProps.map(p => ({text: p, displayText: p + '  (property)'})),
-      ...KEYWORDS.map(k => ({text: k, displayText: k + '  (keyword)'})),
-    ];
+  // Build category pools — backtick-prefixed text for label/rel/property in
+  // schema contexts so the inserted token is valid Cypher; bare text outside
+  // schema contexts so generic typing isn't disruptive.
+  const labelItems = (s.labels || []).map(l => ({
+    text: (labelCtx || relCtx || propCtx) ? '`' + pfx + l + '`' : l,
+    displayText: l + '  · label',
+    cat: 'label',
+  }));
+  const relItems = (s.relationship_types || []).map(r => ({
+    text: (labelCtx || relCtx || propCtx) ? '`' + pfx + r + '`' : r,
+    displayText: r + '  · relationship',
+    cat: 'rel',
+  }));
+  const propItems = allProps.map(p => ({
+    text: (labelCtx || relCtx || propCtx) ? '`' + pfx + p + '`' : p,
+    displayText: p + '  · property',
+    cat: 'prop',
+  }));
+  const kwItems = KEYWORDS.map(k => ({text: k, displayText: k + '  · keyword', cat: 'kw'}));
+
+  // Order by context: matching category first, others after.
+  let groups;
+  if(propCtx)       groups = [propItems, labelItems, relItems, kwItems];
+  else if(relCtx)   groups = [relItems, labelItems, propItems, kwItems];
+  else if(labelCtx) groups = [labelItems, relItems, propItems, kwItems];
+  else              groups = [kwItems, labelItems, relItems, propItems];
+
+  const all = [].concat(...groups);
+  const list = all
+    .filter(item => !tokenBare || item.displayText.toLowerCase().startsWith(tokenBare))
+    .slice(0, 60);
+
+  if(window.__hintDebug){
+    console.log('[cypherHint]', {upTo, tail, token, propCtx, relCtx, labelCtx,
+      schemaLoaded: !!_schemaCache, listLen: list.length, head: list.slice(0,3).map(i=>i.displayText)});
   }
-
-  const list = pool
-    .filter(item => !token || item.displayText.toLowerCase().startsWith(token.toLowerCase()))
-    .slice(0, 50);
-
   return {list, from: CodeMirror.Pos(cur.line, start), to: cur};
 }
 
