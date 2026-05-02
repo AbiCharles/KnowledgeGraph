@@ -99,6 +99,29 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 .no-rel-box b{color:var(--blue)}
 .graphwrap{flex:1;position:relative;overflow:hidden;width:100%;height:100%;min-height:200px}
 .graphwrap canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+/* Query-result graph legend (top-left, compact) */
+.qg-legend{position:absolute;top:8px;left:8px;background:var(--bg2);border:1px solid var(--border2);border-radius:5px;padding:6px 9px;font-size:9px;font-family:'JetBrains Mono',monospace;max-width:200px;z-index:5;line-height:1.5;color:var(--text2)}
+.qg-leg-row{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.qg-leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.qg-leg-arrow{color:var(--teal);flex-shrink:0;font-size:10px}
+.qg-leg-divider{height:1px;background:var(--border);margin:4px 0}
+/* Query-result detail panel (right edge, compact) */
+.qg-detail{position:absolute;top:0;right:0;bottom:0;width:240px;background:var(--bg2);border-left:1px solid var(--border);display:none;flex-direction:column;z-index:6;box-shadow:-3px 0 9px rgba(0,0,0,.35)}
+.qg-detail.visible{display:flex}
+.qg-d-hdr{padding:9px 11px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.qg-d-dot{width:13px;height:13px;border-radius:50%;flex-shrink:0}
+.qg-d-type{font-size:9px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.qg-d-id{font-size:11px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace;word-break:break-all;line-height:1.2}
+.qg-d-close{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:0 4px}
+.qg-d-close:hover{color:var(--text)}
+.qg-d-props{flex:1;overflow-y:auto;padding:9px 11px}
+.qg-d-prop{margin-bottom:7px}
+.qg-d-pk{font-size:8.5px;color:var(--purple);font-family:'JetBrains Mono',monospace;margin-bottom:1px}
+.qg-d-pv{font-size:10px;color:var(--text);background:var(--bg3);border-radius:3px;padding:2px 6px;word-break:break-all}
+.qg-d-rels{padding:8px 11px;border-top:1px solid var(--border);flex-shrink:0;max-height:35%;overflow-y:auto}
+.qg-d-rels-title{font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:5px;font-family:'JetBrains Mono',monospace}
+.qg-d-rel{font-size:9.5px;color:var(--text2);padding:2px 0;font-family:'JetBrains Mono',monospace}
+.qg-d-rel-arrow{color:var(--teal);margin-right:4px}
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:7px;color:var(--text3);font-size:11.5px;text-align:center;padding:20px}
 .eico{font-size:26px;opacity:.25}
 .errbox{background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.28);border-radius:5px;padding:11px 13px;font-size:10.5px;color:var(--red);font-family:'JetBrains Mono',monospace;line-height:1.65}
@@ -1568,7 +1591,27 @@ function drawQueryGraph(res){
     wrap.innerHTML = `<div class="empty"><div class="eico">❖</div><div>No nodes matched in graph<br><small style="color:var(--text3)">${res.nodeIds.length} ids returned, ${NODES.length} loaded — open DevTools console for details</small></div></div>`;
     return;
   }
-  wrap.innerHTML = '<canvas style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>';
+  // Build legend (types in this subgraph + relationship types) and detail
+  // panel scaffolding alongside the canvas.
+  const visTypes = [...new Set(vis.map(n => n.type))].sort();
+  const visRels  = [...new Set(res.edges.map(e => e.rel))].sort();
+  const legendHTML =
+    '<div class="qg-legend">' +
+      visTypes.map(t => `<div class="qg-leg-row"><div class="qg-leg-dot" style="background:${escapeHTML(GCOL[t]||'#555')}"></div><span>${escapeHTML(t)}</span></div>`).join('') +
+      (visRels.length ? '<div class="qg-leg-divider"></div>' + visRels.map(r => `<div class="qg-leg-row"><span class="qg-leg-arrow">&rarr;</span><span>${escapeHTML(r)}</span></div>`).join('') : '') +
+    '</div>';
+  const detailHTML =
+    '<div class="qg-detail" id="qg-detail">' +
+      '<div class="qg-d-hdr">' +
+        '<div class="qg-d-dot" id="qg-d-dot"></div>' +
+        '<div style="min-width:0"><div class="qg-d-type" id="qg-d-type"></div><div class="qg-d-id" id="qg-d-id"></div></div>' +
+        '<button class="qg-d-close" id="qg-d-close" title="Close">&times;</button>' +
+      '</div>' +
+      '<div class="qg-d-props" id="qg-d-props"></div>' +
+      '<div class="qg-d-rels"><div class="qg-d-rels-title">Relationships</div><div id="qg-d-rels-list"></div></div>' +
+    '</div>';
+  wrap.innerHTML = '<canvas style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>' + legendHTML + detailHTML;
+  document.getElementById('qg-d-close').onclick = () => document.getElementById('qg-detail').classList.remove('visible');
   const cv = wrap.querySelector('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d'), cx = W/2, cy = H/2;
@@ -1633,6 +1676,50 @@ function drawQueryGraph(res){
     gFrame = requestAnimationFrame(tick);
   }
   tick();
+  _setupQueryGraphInteraction(cv, sn, se, res);
+}
+
+function _setupQueryGraphInteraction(cv, sn, se, res){
+  // Hit-test in canvas world coords (this graph has no pan/zoom transform).
+  function hit(e){
+    const rect = cv.getBoundingClientRect();
+    const x = e.clientX - rect.left, y = e.clientY - rect.top;
+    for(let i = sn.length - 1; i >= 0; i--){
+      const n = sn[i];
+      if(Math.hypot(n.x - x, n.y - y) <= n.r * 1.4) return n;
+    }
+    return null;
+  }
+  cv.addEventListener('mousemove', e => {
+    cv.style.cursor = hit(e) ? 'pointer' : 'default';
+  });
+  cv.addEventListener('click', e => {
+    const n = hit(e);
+    if(!n) return;
+    const node = NM[n.id];
+    if(!node) return;
+    _showQueryGraphDetail(node, res);
+  });
+}
+
+function _showQueryGraphDetail(node, res){
+  const detail = document.getElementById('qg-detail');
+  if(!detail) return;
+  document.getElementById('qg-d-dot').style.background = GCOL[node.type] || '#555';
+  document.getElementById('qg-d-type').textContent = node.type;
+  document.getElementById('qg-d-id').textContent = pickLabel(node);
+  document.getElementById('qg-d-props').innerHTML = Object.entries(node.p || {}).map(([k, v]) =>
+    `<div class="qg-d-prop"><div class="qg-d-pk">${escapeHTML(k)}</div><div class="qg-d-pv">${escapeHTML(String(v))}</div></div>`
+  ).join('') || '<div style="font-size:9px;color:var(--text3)">No properties</div>';
+  // Show relationships connected to this node within the current subgraph.
+  const rels = res.edges.filter(e => e.s === node.id || e.t === node.id);
+  document.getElementById('qg-d-rels-list').innerHTML = rels.length ? rels.map(e => {
+    const out = e.s === node.id;
+    const other = NM[out ? e.t : e.s];
+    const otherLabel = other ? pickLabel(other) : '?';
+    return `<div class="qg-d-rel"><span class="qg-d-rel-arrow">${out ? '&rarr;' : '&larr;'}</span>${escapeHTML(e.rel)} &nbsp; ${escapeHTML(otherLabel)}</div>`;
+  }).join('') : '<div style="font-size:9px;color:var(--text3)">None in this view</div>';
+  detail.classList.add('visible');
 }
 
 function pickLabel(n){
