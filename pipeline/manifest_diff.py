@@ -22,18 +22,38 @@ def _local(uri: URIRef) -> str:
 
 
 def _ontology_summary(ttl: str) -> dict:
-    """Summarise an ontology TTL into class/object-prop/datatype-prop sets."""
+    """Summarise an ontology TTL into class/object-prop/datatype-prop sets
+    plus the (domain, prop, range) triples needed to render a graph diff."""
+    empty = {
+        "classes": set(),
+        "object_properties": set(),
+        "datatype_properties": set(),
+        "edges": set(),
+    }
     if not ttl.strip():
-        return {"classes": set(), "object_properties": set(), "datatype_properties": set()}
+        return empty
     g = Graph()
     try:
         g.parse(data=ttl, format="turtle")
     except Exception:
-        return {"classes": set(), "object_properties": set(), "datatype_properties": set()}
+        return empty
+    edges = set()
+    from rdflib import RDFS
+    for p in g.subjects(RDF.type, OWL.ObjectProperty):
+        if not isinstance(p, URIRef):
+            continue
+        d = next(g.objects(p, RDFS.domain), None)
+        r = next(g.objects(p, RDFS.range), None)
+        edges.add((
+            _local(d) if d else "?",
+            _local(p),
+            _local(r) if r else "?",
+        ))
     return {
         "classes": {_local(c) for c in g.subjects(RDF.type, OWL.Class) if isinstance(c, URIRef)},
         "object_properties":   {_local(p) for p in g.subjects(RDF.type, OWL.ObjectProperty)   if isinstance(p, URIRef)},
         "datatype_properties": {_local(p) for p in g.subjects(RDF.type, OWL.DatatypeProperty) if isinstance(p, URIRef)},
+        "edges": edges,
     }
 
 
@@ -65,6 +85,37 @@ def _set_diff(old: set, new: set) -> dict:
     }
 
 
+def _topology_diff(old_edges: set, new_edges: set, old_classes: set, new_classes: set) -> dict:
+    """Build the per-element status lists the visual diff renders.
+
+    Each class is tagged 'added' / 'removed' / 'common'. Each edge (object
+    property with domain + range) gets the same tag, plus the names of its
+    domain and range classes so the frontend can position arrows correctly.
+    """
+    all_classes = sorted(old_classes | new_classes)
+    nodes = []
+    for c in all_classes:
+        if c in old_classes and c in new_classes:
+            status = "common"
+        elif c in new_classes:
+            status = "added"
+        else:
+            status = "removed"
+        nodes.append({"name": c, "status": status})
+
+    all_edges = old_edges | new_edges
+    edges = []
+    for d, p, r in sorted(all_edges):
+        if (d, p, r) in old_edges and (d, p, r) in new_edges:
+            status = "common"
+        elif (d, p, r) in new_edges:
+            status = "added"
+        else:
+            status = "removed"
+        edges.append({"domain": d, "property": p, "range": r, "status": status})
+    return {"nodes": nodes, "edges": edges}
+
+
 def diff_snapshots(old: dict, new: dict) -> dict:
     """`old` and `new` each have keys 'manifest', 'ontology', 'data' (raw text).
 
@@ -80,6 +131,8 @@ def diff_snapshots(old: dict, new: dict) -> dict:
             "classes":             _set_diff(o_sum["classes"],             n_sum["classes"]),
             "object_properties":   _set_diff(o_sum["object_properties"],   n_sum["object_properties"]),
             "datatype_properties": _set_diff(o_sum["datatype_properties"], n_sum["datatype_properties"]),
+            "topology":            _topology_diff(o_sum["edges"], n_sum["edges"],
+                                                  o_sum["classes"], n_sum["classes"]),
         },
         "manifest": {
             "in_scope_classes": _set_diff(set(o_man.get("in_scope_classes") or []), set(n_man.get("in_scope_classes") or [])),
