@@ -1,6 +1,6 @@
 """Stage 0 — Preflight Check: verify Neo4j connectivity, plugins, and bundle files."""
 
-from db import get_driver, run_query
+from db import get_active_database, get_driver, run_query, supports_multi_db
 
 
 def preflight(ctx: dict) -> list[str]:
@@ -11,6 +11,14 @@ def preflight(ctx: dict) -> list[str]:
     with driver.session() as session:
         version = session.run("CALL dbms.components() YIELD versions RETURN versions[0] AS v").single()["v"]
     logs.append(f"PASS  Neo4j connected — version {version}")
+
+    active_db = get_active_database()
+    if active_db:
+        logs.append(f"PASS  Active database: `{active_db}` (per-bundle isolation)")
+    elif supports_multi_db():
+        logs.append("INFO  Multi-DB available but no per-bundle DB set yet")
+    else:
+        logs.append("INFO  Single-database mode (Community Edition or shared default DB)")
 
     try:
         run_query("CALL n10s.graphconfig.show()")
