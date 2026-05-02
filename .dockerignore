@@ -1,0 +1,39 @@
+# Don't ship dev/test artefacts into the image.
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Editor / VCS noise
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Local env — secrets must come in via container env vars, not baked-in.
+.env
+.env.local
+
+# Documentation / scripts that don't belong in a runtime image.
+docs/
+README.md
+LICENSE
+.github/
+scripts/
+
+# Runtime state from local dev. Bind-mount or volume in prod.
+use_cases/.active
+use_cases/.llm_usage.json
+use_cases/*.versions/
+use_cases/*.staging/
+use_cases/*.old/
+
+# Test data + venv if it leaked in.
+tests/
+venv/
+.venv/
