@@ -18,6 +18,9 @@ from config import get_settings
 from pipeline import use_case_registry
 from pipeline.schema_introspection import schema_description
 from pipeline.cypher_safety import assert_read_only, UnsafeCypherError
+from api.llm_usage import (
+    assert_within_daily_cap, record_call, extract_token_counts,
+)
 from api.schemas import NLRequest, NLResponse
 
 
@@ -41,6 +44,7 @@ def _active_schema_prompt() -> str:
 @router.post("", response_model=NLResponse)
 def nl_to_cypher(req: NLRequest):
     s = get_settings()
+    assert_within_daily_cap()
     try:
         system_prompt = _active_schema_prompt()
     except RuntimeError as exc:
@@ -61,6 +65,9 @@ def nl_to_cypher(req: NLRequest):
     except Exception as exc:
         log.warning("LLM invocation failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}")
+
+    in_t, out_t = extract_token_counts(response)
+    record_call(s.openai_model, in_t, out_t, kind="nl")
 
     try:
         payload = json.loads(response.content)

@@ -122,6 +122,31 @@ async def upload_bundle(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
+        # Surface Pydantic validation errors with their location chain so the
+        # uploader can see WHICH manifest field broke (not just "Upload failed").
+        try:
+            from pydantic import ValidationError as _PVE
+            if isinstance(exc, _PVE):
+                msgs = []
+                for err in exc.errors():
+                    loc = " > ".join(str(p) for p in err.get("loc", []))
+                    msgs.append(f"{loc}: {err.get('msg')}")
+                raise HTTPException(status_code=422, detail="Manifest validation: " + " ; ".join(msgs))
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+        # YAML parse errors carry .problem / .problem_mark with file position.
+        try:
+            import yaml as _y
+            if isinstance(exc, _y.YAMLError):
+                mark = getattr(exc, "problem_mark", None)
+                where = f" at line {mark.line+1}, column {mark.column+1}" if mark else ""
+                raise HTTPException(status_code=422, detail=f"Manifest YAML error{where}: {getattr(exc,'problem',str(exc))}")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
         raise HTTPException(status_code=422, detail=f"Upload failed: {exc}")
 
     # Re-uploading replaces files; bust any cached schema for this slug.

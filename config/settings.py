@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Max accepted upload size for /use_cases/upload (per file, bytes).
     upload_max_bytes: int = 5 * 1024 * 1024  # 5 MiB
 
+    # Daily LLM spend cap in USD across /nl + /agents/run, refreshed at UTC
+    # midnight via use_cases/.llm_usage.json. Set to 0 to disable. Estimates
+    # use rough public-pricing tables; treat as a soft guardrail, not billing.
+    llm_daily_usd_cap: float = 5.0
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
