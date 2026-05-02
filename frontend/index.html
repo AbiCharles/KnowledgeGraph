@@ -1558,12 +1558,14 @@ const FALLBACK_PALETTE = ['#1F6B8C','#5B4A8C','#0E7C7B','#7A3B2E','#2A6B3C','#3a
 function drawQueryGraph(res){
   if(gFrame){ cancelAnimationFrame(gFrame); gFrame = null; }
   const wrap = document.getElementById('graphwrap');
+  if(!wrap){ console.warn('drawQueryGraph: graphwrap not found'); return; }
   const W = wrap.offsetWidth, H = wrap.offsetHeight;
   if(!W || !H){ gFrame = requestAnimationFrame(() => drawQueryGraph(res)); return; }
   const usedSet = new Set(res.nodeIds);
   const vis = NODES.filter(n => usedSet.has(n.id));
+  console.debug('[drawQueryGraph] nodeIds:', res.nodeIds.length, 'NODES total:', NODES.length, 'visible:', vis.length, 'edges:', res.edges.length);
   if(!vis.length){
-    wrap.innerHTML = '<div class="empty"><div class="eico">❖</div><div>No nodes in this result</div></div>';
+    wrap.innerHTML = `<div class="empty"><div class="eico">❖</div><div>No nodes matched in graph<br><small style="color:var(--text3)">${res.nodeIds.length} ids returned, ${NODES.length} loaded — open DevTools console for details</small></div></div>`;
     return;
   }
   wrap.innerHTML = '<canvas style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>';
