@@ -84,9 +84,57 @@ Fails if the data references classes/properties not in the ontology
 
 ### Stage 4 — Adapters
 
-Runs ingestion adapters declared in `manifest.stage4_adapters`. An
-adapter is a Cypher MERGE pattern that links external system identifiers
-to the freshly-loaded data (e.g. SAP-PM IDs, MES record IDs).
+Two phases run in order:
+
+**Phase 1: metadata.** For every adapter in `manifest.stage4_adapters`,
+MERGEs an `:IngestionAdapter` provenance node and links existing
+`target_class` instances whose `match_property` value matches the
+adapter's `source_system`. Both writes happen inside a single
+transaction so a failed link rolls the whole batch back.
+
+**Phase 2: pulls (optional).** For every adapter that declares `pull:`,
+fetches rows from the named datasource and MERGEs each row as a node of
+`pull.label` keyed on `pull.key_property`. Each row's other columns
+become Neo4j properties (auto-prefixed via `use_case.prop()`).
+
+Manifest example with a Postgres pull:
+
+```yaml
+datasources:
+  - id: orders_db
+    kind: postgres
+    dsn_env: ORDERS_PG_DSN
+
+stage4_adapters:
+  - adapter_id: PG-ORDERS-001
+    source_system: ORDERS_DB
+    protocol: postgres
+    sync_mode: FULL
+    target_class: Order
+    match_property: sourceSystem
+    pull:
+      datasource: orders_db
+      sql: |
+        SELECT order_id   AS "orderId",
+               customer   AS "customerName",
+               status     AS "orderStatus"
+        FROM orders LIMIT 1000
+      label: Order
+      key_property: orderId
+```
+
+Logs:
+- `PASS  Adapter registered: ORDERS_DB (postgres)`
+- `PASS  Adapter PG-ORDERS-001: pulled 847 rows into :kf-mfg__Order`
+
+Pull failure modes (each becomes a `FAIL  ...` log line; phase 1 is NOT
+rolled back so re-running is safe):
+- Datasource id not found in `datasources:`
+- Env var unset for `dsn_env`
+- SQL contains a forbidden keyword (INSERT/UPDATE/DELETE/etc.)
+- SQL returns more than 100k rows (defensive cap — tighten the WHERE)
+- Postgres connection refused / auth failed
+- `psycopg` not installed (`pip install 'psycopg[binary]'`)
 
 If `manifest.stage4_adapters` is empty, the stage logs `INFO  No
 adapters declared, skipping` and reports `pass`.

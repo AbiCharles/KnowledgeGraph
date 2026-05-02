@@ -237,7 +237,31 @@ stage2_constraints:              # property-existence constraints (Enterprise)
 stage2_indexes:                  # range indexes
   - {label: Thing, property: thingId}
 
+datasources:                     # external connectors (Postgres today)
+  - id: orders_db
+    kind: postgres
+    dsn_env: ORDERS_PG_DSN       # recommended — never hardcode credentials in YAML
+    # dsn: postgresql://user:pass@host:5432/db   (dev only — leaks creds)
+
 stage4_adapters: []              # if empty, stage 4 is skipped
+# Adapter with a SQL pull from the orders_db datasource declared above:
+# stage4_adapters:
+#   - adapter_id: PG-ORDERS-001
+#     source_system: ORDERS_DB
+#     protocol: postgres
+#     sync_mode: FULL
+#     target_class: Order
+#     match_property: sourceSystem
+#     pull:
+#       datasource: orders_db
+#       sql: |
+#         SELECT order_id   AS "orderId",
+#                customer   AS "customerName",
+#                status     AS "orderStatus"
+#         FROM orders LIMIT 1000
+#       label: Order             # MERGE (n:`<prefix>__Order` {orderId: ...})
+#       key_property: orderId    # column name = unprefixed property name
+
 stage5_er_rules: []              # if empty, stage 5 is skipped
 stage6_checks:                   # if empty, generic count>0 check runs
   - {id: VC-C1, kind: count_at_least, label: Thing, threshold: 5}
