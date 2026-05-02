@@ -3025,7 +3025,11 @@ function _renderDiff(d){
   const unified = d.manifest_unified_diff
     ? `<div class="uc-diff-section"><div class="uc-diff-h">manifest.yaml unified diff</div><pre class="uc-diff-pre">${escapeHTML(d.manifest_unified_diff)}</pre></div>`
     : '';
+  const topology = d.ontology && d.ontology.topology
+    ? renderTopologyDiff(d.ontology.topology)
+    : '';
   return [
+    topology,
     sec('Ontology — classes', d.ontology.classes),
     sec('Ontology — object properties', d.ontology.object_properties),
     sec('Ontology — datatype properties', d.ontology.datatype_properties),
@@ -3038,6 +3042,78 @@ function _renderDiff(d){
     dataInfo,
     unified,
   ].join('');
+}
+
+// Render the ontology as a small SVG: each class a circle, each object
+// property an arrow. Colour-coded green/red/grey for added/removed/common
+// so the operator sees structural diffs at a glance, before drilling into
+// the per-category lists below.
+function renderTopologyDiff(topo){
+  const nodes = topo.nodes || [];
+  const edges = topo.edges || [];
+  if(!nodes.length){
+    return '<div class="uc-diff-section"><div class="uc-diff-h">Ontology graph</div><div class="uc-diff-empty">Both versions are empty</div></div>';
+  }
+  const W = 600, H = 320;
+  const COLOUR = {added: '#7eea9e', removed: '#f87171', common: '#3a4665'};
+  // Place classes around a circle ordered alphabetically — stable layout
+  // makes "the same class moved" easy to track between adjacent diffs.
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) * 0.38;
+  const pos = {};
+  nodes.forEach((n, i) => {
+    const a = (2 * Math.PI * i) / nodes.length - Math.PI / 2;
+    pos[n.name] = {x: cx + R * Math.cos(a), y: cy + R * Math.sin(a)};
+  });
+
+  // Edges first so node circles paint on top.
+  const edgeSvg = edges.map(e => {
+    const a = pos[e.domain], b = pos[e.range];
+    if(!a || !b) return '';
+    const stroke = COLOUR[e.status] || COLOUR.common;
+    const opacity = e.status === 'common' ? 0.35 : 0.9;
+    const width = e.status === 'common' ? 1 : 1.6;
+    // Arrow tip — a tiny triangle a few px back from the target.
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx*dx + dy*dy);
+    const tipBack = 8, ux = dx / len, uy = dy / len;
+    const tx = b.x - ux * tipBack, ty = b.y - uy * tipBack;
+    const perpX = -uy * 4, perpY = ux * 4;
+    return `<line x1="${a.x}" y1="${a.y}" x2="${tx}" y2="${ty}" stroke="${stroke}" stroke-width="${width}" stroke-opacity="${opacity}"/>` +
+           `<polygon points="${b.x},${b.y} ${tx+perpX},${ty+perpY} ${tx-perpX},${ty-perpY}" fill="${stroke}" fill-opacity="${opacity}"/>` +
+           `<title>${escapeHTML(e.domain)} —[${escapeHTML(e.property)}]→ ${escapeHTML(e.range)}  (${e.status})</title>`;
+  }).join('');
+
+  const nodeSvg = nodes.map(n => {
+    const p = pos[n.name];
+    const fill = COLOUR[n.status];
+    const stroke = n.status === 'removed' ? '#7c1d1d' : n.status === 'added' ? '#1e6a39' : '#1c2238';
+    const r = n.status === 'common' ? 6 : 8;
+    return `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"><title>${escapeHTML(n.name)} (${n.status})</title></circle>` +
+           `<text x="${p.x}" y="${p.y - 12}" fill="${fill}" font-size="9.5" font-family="monospace" text-anchor="middle">${escapeHTML(n.name)}</text>`;
+  }).join('');
+
+  const counts = (status) => nodes.filter(n => n.status === status).length;
+  const ecounts = (status) => edges.filter(e => e.status === status).length;
+
+  return `<div class="uc-diff-section">
+    <div class="uc-diff-h">Ontology graph
+      <span style="color:var(--text3);font-weight:400">·
+        classes: <span style="color:#7eea9e">+${counts('added')}</span>
+        <span style="color:var(--red)">−${counts('removed')}</span>
+        <span style="color:var(--text3)">${counts('common')} unchanged</span>
+        · rels: <span style="color:#7eea9e">+${ecounts('added')}</span>
+        <span style="color:var(--red)">−${ecounts('removed')}</span>
+        <span style="color:var(--text3)">${ecounts('common')} unchanged</span>
+      </span>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:5px;background:var(--bg);padding:6px">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:300px;display:block">${edgeSvg}${nodeSvg}</svg>
+    </div>
+    <div style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-top:5px">
+      <span style="color:#7eea9e">●</span> added &nbsp;
+      <span style="color:var(--red)">●</span> removed &nbsp;
+      <span style="color:#3a4665">●</span> unchanged &nbsp; · hover any element for its name + status
+    </div>
+  </div>`;
 }
 
 async function activateUseCase(slug){
