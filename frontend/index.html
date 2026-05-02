@@ -173,6 +173,25 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 .kgleg-desc{color:var(--text2);font-size:9px;line-height:1.4;margin-top:2px}
 .kgleg-divider{height:1px;background:var(--border);margin:8px 0}
 .kgleg-note{font-size:9px;color:var(--text3);line-height:1.55}
+/* Visual filter panel — bottom-left counterpart to the legend */
+.kgfilters{position:absolute;bottom:14px;left:14px;width:240px;background:var(--bg2);border:1px solid var(--border2);border-radius:7px;overflow:hidden;z-index:10}
+.kgfilters.collapsed .kgfilt-body{display:none}
+.kgfilt-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.kgfilt-hdr-title{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--text2)}
+.kgfilt-toggle{font-size:12px;color:var(--text3);background:none;border:none;cursor:pointer;padding:0}
+.kgfilt-body{padding:9px 11px;max-height:340px;overflow-y:auto}
+.kgfilt-search{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:5px 9px;color:var(--text);font-size:10.5px;font-family:'JetBrains Mono',monospace;outline:none;margin-bottom:9px}
+.kgfilt-search:focus{border-color:var(--teal)}
+.kgfilt-actions{display:flex;gap:5px;margin-bottom:8px}
+.kgfilt-action{flex:1;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--text3);font-size:9px;font-family:'JetBrains Mono',monospace;padding:3px 0;cursor:pointer;letter-spacing:.5px}
+.kgfilt-action:hover{border-color:var(--teal);color:var(--teal)}
+.kgfilt-chip{display:flex;align-items:center;gap:7px;padding:4px 7px;border-radius:4px;cursor:pointer;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2);user-select:none;margin-bottom:2px}
+.kgfilt-chip:hover{background:var(--bg3)}
+.kgfilt-chip.off{opacity:.45}
+.kgfilt-chip.off .kgfilt-dot{filter:grayscale(.7) brightness(.6)}
+.kgfilt-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.kgfilt-name{flex:1}
+.kgfilt-count{color:var(--text3);font-size:9px}
 .kgdetail{position:absolute;top:0;bottom:0;right:0;width:280px;background:var(--bg2);border-left:1px solid var(--border);display:none;flex-direction:column;z-index:20;box-shadow:-4px 0 12px rgba(0,0,0,.4)}
 .kgdetail.visible{display:flex}
 .kgd-hdr{padding:11px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:9px;flex-shrink:0}
@@ -599,6 +618,20 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
   </div>
   <div class="kgbody" id="kgbody">
     <canvas id="kgcanvas"></canvas>
+    <div class="kgfilters" id="kgfilters">
+      <div class="kgfilt-hdr" onclick="toggleKGFilters()">
+        <span class="kgfilt-hdr-title">Filters</span>
+        <button class="kgfilt-toggle" id="filttoggle">&#9650;</button>
+      </div>
+      <div class="kgfilt-body" id="kgfilt-body">
+        <input class="kgfilt-search" id="kgfilt-search" type="text" placeholder="Search nodes by label/id…" />
+        <div class="kgfilt-actions">
+          <button class="kgfilt-action" onclick="kgFilterAllOn()">Show all</button>
+          <button class="kgfilt-action" onclick="kgFilterAllOff()">Hide all</button>
+        </div>
+        <div id="kgfilt-classes"></div>
+      </div>
+    </div>
     <div class="kglegend" id="kglegend">
       <div class="kgleg-hdr" onclick="toggleKGLegend()">
         <span class="kgleg-hdr-title">Legend</span>
@@ -2191,6 +2224,60 @@ function _buildTopology(nodes){
 let kgFrame = null, kgZoom = 1, kgPanX = 0, kgPanY = 0;
 let kgDragging = null, kgPanning = false, kgPanStart = {x:0,y:0}, kgPanOrigin = {x:0,y:0};
 let kgSelected = null, kgHovered = null, kgSim = [], kgSimEdges = [], kgSimMap = {};
+let kgHiddenTypes = new Set();   // class names hidden by user toggle
+let kgSearchQ = '';              // current search filter (lowercased)
+
+function toggleKGFilters(){
+  document.getElementById('kgfilters').classList.toggle('collapsed');
+  document.getElementById('filttoggle').textContent =
+    document.getElementById('kgfilters').classList.contains('collapsed') ? '▼' : '▲';
+}
+
+function renderKGFilterChips(){
+  const root = document.getElementById('kgfilt-classes');
+  if(!root) return;
+  const counts = {};
+  NODES.forEach(n => { counts[n.type] = (counts[n.type] || 0) + 1; });
+  const types = Object.keys(counts).sort();
+  root.innerHTML = types.map(t => {
+    const off = kgHiddenTypes.has(t) ? ' off' : '';
+    const colour = GCOL[t] || '#555';
+    return `<div class="kgfilt-chip${off}" data-type="${escapeHTML(t)}">
+      <div class="kgfilt-dot" style="background:${escapeHTML(colour)}"></div>
+      <div class="kgfilt-name">${escapeHTML(t)}</div>
+      <div class="kgfilt-count">${counts[t]}</div>
+    </div>`;
+  }).join('') || '<div style="font-size:9.5px;color:var(--text3)">No nodes loaded</div>';
+  root.querySelectorAll('[data-type]').forEach(el => {
+    el.onclick = () => {
+      const t = el.dataset.type;
+      if(kgHiddenTypes.has(t)) kgHiddenTypes.delete(t); else kgHiddenTypes.add(t);
+      renderKGFilterChips();
+    };
+  });
+}
+
+function kgFilterAllOn(){ kgHiddenTypes.clear(); renderKGFilterChips(); }
+function kgFilterAllOff(){
+  const types = new Set(NODES.map(n => n.type));
+  types.forEach(t => kgHiddenTypes.add(t));
+  renderKGFilterChips();
+}
+
+// Wire the search box once the editor exists in the DOM (defer to next tick).
+setTimeout(() => {
+  const inp = document.getElementById('kgfilt-search');
+  if(inp) inp.addEventListener('input', () => { kgSearchQ = inp.value.trim().toLowerCase(); });
+}, 0);
+
+// Helper used by the render loop: a node is visible if its type is enabled
+// AND (no search active OR its label/id matches the search).
+function _kgNodeVisible(n){
+  if(kgHiddenTypes.has(n.type)) return false;
+  if(!kgSearchQ) return true;
+  const lab = (pickLabel(n.node) || '').toLowerCase();
+  return lab.includes(kgSearchQ) || String(n.id).toLowerCase().includes(kgSearchQ);
+}
 
 function initKGCanvas(){
   const cv = document.getElementById('kgcanvas');
@@ -2200,6 +2287,7 @@ function initKGCanvas(){
   if(!W || !H){ setTimeout(initKGCanvas, 200); return; }
   cv.width = W; cv.height = H;
   drawFullGraph();
+  renderKGFilterChips();   // populate filter chips once nodes are loaded
 }
 
 function drawFullGraph(){
@@ -2256,6 +2344,8 @@ function drawFullGraph(){
     }
     const hf = Object.keys(fids).length > 0;
     kgSimEdges.forEach(e => {
+      // Hide edges whose endpoints are filtered out — keeps the canvas clean.
+      if(kgHiddenTypes.has(e.src.type) || kgHiddenTypes.has(e.tgt.type)) return;
       const focused = hf && (fids[e.src.id] || fids[e.tgt.id]);
       const dim = hf && !focused;
       ctx.beginPath(); ctx.moveTo(e.src.x, e.src.y); ctx.lineTo(e.tgt.x, e.tgt.y);
@@ -2282,7 +2372,12 @@ function drawFullGraph(){
       }
     });
     kgSim.forEach(n => {
-      const isSel = n === kgSelected, isHov = n === kgHovered, dim = hf && !fids[n.id];
+      if(kgHiddenTypes.has(n.type)) return;   // class toggle off
+      const visible = _kgNodeVisible(n);
+      const isSel = n === kgSelected, isHov = n === kgHovered;
+      // Combine focus-dim and search-dim so the search just shrinks emphasis
+      // without reflowing layout (still a node, just faded).
+      const dim = (hf && !fids[n.id]) || !visible;
       const r = n.r/kgZoom * (isSel ? 1.3 : isHov ? 1.1 : 1);
       if(isSel || isHov){
         const g = ctx.createRadialGradient(n.x, n.y, r * .5, n.x, n.y, r * 2.8);
