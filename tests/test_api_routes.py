@@ -145,6 +145,31 @@ def test_agent_conversations_get_unknown_404(stub_db):
     assert r.status_code == 404
 
 
+def test_datasources_list_route_returns_per_bundle_groups(stub_db):
+    r = _client().get("/datasources")
+    assert r.status_code == 200
+    body = r.json()
+    assert "bundles" in body
+    # Each bundle entry has datasources + pull_adapters keys (may be empty).
+    for b in body["bundles"]:
+        assert "datasources" in b
+        assert "pull_adapters" in b
+
+
+def test_datasources_for_bundle_route_404(stub_db):
+    r = _client().get("/datasources/no-such-bundle")
+    assert r.status_code == 404
+
+
+def test_datasource_test_route_404_on_unknown_id(stub_db):
+    """test_connection never raises — bad id surfaces as ok=false."""
+    r = _client().post("/datasources/kf-mfg-workorder/no-such-ds/test")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "No datasource" in body["message"]
+
+
 def test_capabilities_route_returns_multi_db_flag(stub_db):
     r = _client().get("/capabilities")
     assert r.status_code == 200

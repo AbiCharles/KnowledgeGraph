@@ -11,7 +11,9 @@ from fastapi.staticfiles import StaticFiles
 from config import get_settings
 from db import close_driver
 
-from api.routes import pipeline, query, agents, ontology, nl, use_cases, usage, graph, schema
+from api.routes import (
+    pipeline, query, agents, ontology, nl, use_cases, usage, graph, schema, datasources,
+)
 from api.security import APIKeyAuthMiddleware, RateLimitMiddleware
 from api.observability import (
     MetricsMiddleware, RequestIDMiddleware, configure_logging, render_prometheus_metrics,
@@ -123,6 +125,7 @@ app.include_router(use_cases.router, prefix="/use_cases", tags=["UseCases"])
 app.include_router(usage.router,     prefix="/usage",     tags=["Usage"])
 app.include_router(graph.router,     prefix="/graph",     tags=["Graph"])
 app.include_router(schema.router,    prefix="/schema",    tags=["Schema"])
+app.include_router(datasources.router, prefix="/datasources", tags=["Datasources"])
 
 
 @app.get("/health", tags=["Health"])

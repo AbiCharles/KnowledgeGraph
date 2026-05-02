@@ -409,6 +409,26 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 .uc-diff-meta{color:var(--text3);font-style:italic}
 .uc-diff-empty{color:var(--text3);font-style:italic;font-size:10px}
 .uc-diff-pre{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-family:'JetBrains Mono',monospace;font-size:9.5px;line-height:1.5;color:var(--text2);max-height:240px;overflow:auto;white-space:pre}
+/* Datasources panel */
+.ds-bundle-card{border:1px solid var(--border);border-radius:6px;background:var(--bg3);margin-bottom:11px;overflow:hidden}
+.ds-bundle-hdr{display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--bg4);border-bottom:1px solid var(--border)}
+.ds-bundle-name{font-size:11px;font-weight:600;color:var(--text);flex:1}
+.ds-bundle-add{padding:3px 9px;border-radius:3px;font-size:9.5px;background:transparent;border:1px solid var(--border2);color:var(--text2);cursor:pointer;font-family:'JetBrains Mono',monospace}
+.ds-bundle-add:hover{border-color:var(--teal);color:var(--teal)}
+.ds-section{padding:9px 13px;border-bottom:1px dashed var(--border)}
+.ds-section:last-child{border-bottom:none}
+.ds-section-title{font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:7px;font-family:'JetBrains Mono',monospace}
+.ds-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text2);margin-bottom:4px;background:var(--bg2)}
+.ds-row-id{color:var(--text);font-weight:600}
+.ds-row-meta{color:var(--text3);font-size:9.5px}
+.ds-pill{font-size:8.5px;padding:1px 7px;border-radius:9px;font-family:'JetBrains Mono',monospace;letter-spacing:.5px;font-weight:600}
+.ds-pill-ok{background:rgba(0,196,184,.12);color:var(--teal);border:1px solid rgba(0,196,184,.4)}
+.ds-pill-err{background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.4)}
+.ds-pill-info{background:rgba(110,127,168,.1);color:var(--text3);border:1px solid var(--border)}
+.ds-btn{padding:3px 9px;border-radius:3px;font-size:9.5px;background:transparent;border:1px solid var(--border2);color:var(--text2);cursor:pointer;font-family:'JetBrains Mono',monospace}
+.ds-btn:hover{border-color:var(--teal);color:var(--teal)}
+.ds-btn-danger:hover{border-color:var(--red);color:var(--red)}
+.ds-empty{color:var(--text3);font-size:10px;font-style:italic}
 
 /* Upload modal */
 .uc-modal-bg{display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,9,14,.75);align-items:center;justify-content:center}
@@ -462,12 +482,32 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 
     <!-- ── Use Cases pane ─────────────────────────────────────────────────── -->
     <div class="pipe-pane" id="pipe-uc-pane">
-      <div class="uc-toolbar">
-        <button class="uc-upload-btn" onclick="openUploadModal()">&#8682; Upload bundle</button>
-        <span style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="uc-toolbar-info"></span>
+      <!-- Sub-tab strip: Bundles | Datasources -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0">
+        <button id="uc-subtab-bundles" class="ptab ptab-active" onclick="switchUcSubTab('bundles')" style="border-radius:0;border-bottom:none;padding:8px 16px;font-size:10px">Bundles</button>
+        <button id="uc-subtab-ds" class="ptab" onclick="switchUcSubTab('ds')" style="border-radius:0;border-bottom:none;padding:8px 16px;font-size:10px">Datasources</button>
       </div>
-      <div class="uc-list" id="uc-list">
-        <div class="empty"><div class="eico">&#9881;</div><div>Loading bundles…</div></div>
+
+      <!-- Bundles sub-pane (existing content) -->
+      <div id="uc-sub-bundles" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+        <div class="uc-toolbar">
+          <button class="uc-upload-btn" onclick="openUploadModal()">&#8682; Upload bundle</button>
+          <span style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="uc-toolbar-info"></span>
+        </div>
+        <div class="uc-list" id="uc-list">
+          <div class="empty"><div class="eico">&#9881;</div><div>Loading bundles…</div></div>
+        </div>
+      </div>
+
+      <!-- Datasources sub-pane -->
+      <div id="uc-sub-ds" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="uc-toolbar">
+          <span style="font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace">External datasource connectors per bundle. Today: Postgres.</span>
+          <span style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="ds-toolbar-info"></span>
+        </div>
+        <div class="uc-list" id="ds-list">
+          <div class="empty"><div class="eico">&#9881;</div><div>Loading datasources…</div></div>
+        </div>
       </div>
     </div>
 
@@ -764,6 +804,71 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
       </div>
     </div>
     <div id="edit-onto-result" style="display:none;margin-top:10px;padding:9px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:5px"></div>
+  </div>
+</div>
+
+<!-- Add datasource modal -->
+<div class="uc-modal-bg" id="add-ds-modal">
+  <div class="uc-modal" style="width:520px">
+    <div class="uc-modal-title">Add datasource</div>
+    <div class="uc-modal-sub">Adds a Postgres datasource to <code id="add-ds-slug"></code>'s manifest. The DSN itself comes from an environment variable on the host (recommended over inline) — never commit credentials to YAML.</div>
+    <div class="uc-form-row">
+      <div class="uc-form-label">Datasource id</div>
+      <input class="uc-form-input" id="add-ds-id" placeholder="e.g. orders_db (lowercase, snake_case)" />
+    </div>
+    <div class="uc-form-row">
+      <div class="uc-form-label">Env var holding the DSN</div>
+      <input class="uc-form-input" id="add-ds-env" placeholder="e.g. ORDERS_PG_DSN" />
+    </div>
+    <div class="uc-form-row" style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace">
+      Set the env var on the host BEFORE the next pipeline run:<br/>
+      <code>export ORDERS_PG_DSN='postgresql://user:pass@host:5432/db'</code><br/>
+      Then click "Test" on the new datasource to verify connectivity.
+    </div>
+    <div class="uc-modal-actions">
+      <button class="uc-modal-cancel" onclick="closeAddDsModal()">Close</button>
+      <button class="uc-modal-submit" onclick="submitAddDatasource()">Add datasource</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add pull adapter modal -->
+<div class="uc-modal-bg" id="add-pull-modal">
+  <div class="uc-modal" style="width:680px">
+    <div class="uc-modal-title">Add pull adapter</div>
+    <div class="uc-modal-sub">Adds a stage-4 adapter to <code id="add-pull-slug"></code> that pulls rows from the chosen datasource and MERGEs each row as a node. SQL must be read-only (SELECT / WITH ... SELECT only — INSERT/UPDATE/DELETE/etc. are refused at parse time).</div>
+    <div style="display:flex;gap:14px">
+      <div class="uc-form-row" style="flex:1">
+        <div class="uc-form-label">Adapter id</div>
+        <input class="uc-form-input" id="add-pull-aid" placeholder="e.g. PG-ORDERS-001" />
+      </div>
+      <div class="uc-form-row" style="flex:1">
+        <div class="uc-form-label">Source system</div>
+        <input class="uc-form-input" id="add-pull-source" placeholder="e.g. ORDERS_DB" />
+      </div>
+    </div>
+    <div style="display:flex;gap:14px">
+      <div class="uc-form-row" style="flex:1">
+        <div class="uc-form-label">Datasource</div>
+        <select class="uc-form-input" id="add-pull-ds"></select>
+      </div>
+      <div class="uc-form-row" style="flex:1">
+        <div class="uc-form-label">Target class</div>
+        <select class="uc-form-input" id="add-pull-label"></select>
+      </div>
+    </div>
+    <div class="uc-form-row">
+      <div class="uc-form-label">SQL (must start with SELECT or WITH)</div>
+      <textarea class="uc-form-input" id="add-pull-sql" rows="6" style="font-family:'JetBrains Mono',monospace;font-size:10.5px;resize:vertical">SELECT 1</textarea>
+    </div>
+    <div class="uc-form-row">
+      <div class="uc-form-label">Key property (column from SQL used as MERGE key)</div>
+      <input class="uc-form-input" id="add-pull-key" placeholder="e.g. orderId — must match an aliased column in the SQL" />
+    </div>
+    <div class="uc-modal-actions">
+      <button class="uc-modal-cancel" onclick="closeAddPullModal()">Close</button>
+      <button class="uc-modal-submit" onclick="submitAddPullAdapter()">Add pull adapter</button>
+    </div>
   </div>
 </div>
 
@@ -3009,8 +3114,18 @@ function renderAgentCards(){
 // =============================================================================
 let _ucListCache = null;        // last successful /use_cases response
 let _ucListInflight = null;     // dedupe concurrent fetches
+let _ucSubTab = 'bundles';      // 'bundles' or 'ds'
 
 function _invalidateUseCasesCache(){ _ucListCache = null; }
+
+function switchUcSubTab(which){
+  _ucSubTab = which;
+  document.getElementById('uc-subtab-bundles').classList.toggle('ptab-active', which === 'bundles');
+  document.getElementById('uc-subtab-ds').classList.toggle('ptab-active', which === 'ds');
+  document.getElementById('uc-sub-bundles').style.display = which === 'bundles' ? 'flex' : 'none';
+  document.getElementById('uc-sub-ds').style.display     = which === 'ds'      ? 'flex' : 'none';
+  if(which === 'ds') renderDatasourcesPanel();
+}
 
 async function renderUseCases(forceRefresh = false){
   const list = document.getElementById('uc-list');
@@ -3669,6 +3784,222 @@ async function submitUpload(){
   } finally {
     submit.disabled = false;
   }
+}
+
+// =============================================================================
+// DATASOURCES PANEL
+// =============================================================================
+async function renderDatasourcesPanel(){
+  const list = document.getElementById('ds-list');
+  const info = document.getElementById('ds-toolbar-info');
+  list.innerHTML = '<div class="empty"><div class="eico">⚙</div><div>Loading datasources…</div></div>';
+  try {
+    const data = await api('/datasources');
+    const bundles = data.bundles || [];
+    const totalDS = bundles.reduce((n,b) => n + (b.datasources?.length || 0), 0);
+    const totalPulls = bundles.reduce((n,b) => n + (b.pull_adapters?.length || 0), 0);
+    info.textContent = `${bundles.length} bundles · ${totalDS} datasource${totalDS!==1?'s':''} · ${totalPulls} pull adapter${totalPulls!==1?'s':''}`;
+    if(!bundles.length){
+      list.innerHTML = '<div class="empty"><div class="eico">⚙</div><div>No bundles found.</div></div>';
+      return;
+    }
+    list.innerHTML = bundles.map(_renderDsBundleCard).join('');
+    list.querySelectorAll('[data-ds-action]').forEach(btn => {
+      btn.onclick = () => _onDsAction(btn);
+    });
+  } catch(err){
+    list.innerHTML = `<div class="errbox" style="margin:14px">${escapeHTML(err.message)}</div>`;
+  }
+}
+
+function _renderDsBundleCard(b){
+  const dss = b.datasources || [];
+  const pulls = b.pull_adapters || [];
+  const escSlug = escapeHTML(b.slug);
+
+  const dsRows = dss.length
+    ? dss.map(ds => {
+        const envChip = ds.env_present
+          ? `<span class="ds-pill ds-pill-ok" title="${escapeHTML(ds.dsn_env || '')} is set in env">env ✓</span>`
+          : (ds.dsn_inline
+              ? '<span class="ds-pill ds-pill-info" title="Inline dsn — dev only">inline</span>'
+              : `<span class="ds-pill ds-pill-err" title="${escapeHTML(ds.dsn_env || '?')} unset">env ✗</span>`);
+        const usedBy = ds.used_by_adapters?.length
+          ? `used by ${ds.used_by_adapters.length} adapter${ds.used_by_adapters.length!==1?'s':''}`
+          : '<i>not used yet</i>';
+        return `<div class="ds-row">
+          <span class="ds-row-id">${escapeHTML(ds.id)}</span>
+          <span class="ds-row-meta">${escapeHTML(ds.kind)}</span>
+          ${envChip}
+          <span class="ds-row-meta">env: <code>${escapeHTML(ds.dsn_env || '—')}</code></span>
+          <span class="ds-row-meta" style="margin-left:auto">${usedBy}</span>
+          <button class="ds-btn" data-ds-action="test"   data-slug="${escSlug}" data-id="${escapeHTML(ds.id)}" title="Run SELECT 1 against this datasource">Test</button>
+          <button class="ds-btn ds-btn-danger" data-ds-action="rm-ds" data-slug="${escSlug}" data-id="${escapeHTML(ds.id)}">Remove</button>
+        </div>`;
+      }).join('')
+    : '<div class="ds-empty">No datasources declared.</div>';
+
+  const pullRows = pulls.length
+    ? pulls.map(p => `<div class="ds-row">
+        <span class="ds-row-id">${escapeHTML(p.adapter_id)}</span>
+        <span class="ds-row-meta">→ <code>:${escapeHTML(p.pull?.label || p.target_class)}</code></span>
+        <span class="ds-row-meta">via ${escapeHTML(p.pull?.datasource || '?')}</span>
+        <span class="ds-row-meta" title="MERGE key">key: ${escapeHTML(p.pull?.key_property || '?')}</span>
+        <button class="ds-btn" data-ds-action="run-pull" data-slug="${escSlug}" data-id="${escapeHTML(p.adapter_id)}" title="Run this pull now (locks pipeline)">▶ Run</button>
+        <button class="ds-btn ds-btn-danger" data-ds-action="rm-pull" data-slug="${escSlug}" data-id="${escapeHTML(p.adapter_id)}" style="margin-left:auto">Remove</button>
+      </div>`).join('')
+    : '<div class="ds-empty">No pull adapters declared.</div>';
+
+  return `<div class="ds-bundle-card">
+    <div class="ds-bundle-hdr">
+      <div class="ds-bundle-name">${escapeHTML(b.name)} <span style="color:var(--text3);font-weight:400">· ${escSlug}</span></div>
+      <button class="ds-bundle-add" data-ds-action="add-ds"   data-slug="${escSlug}">+ Datasource</button>
+      <button class="ds-bundle-add" data-ds-action="add-pull" data-slug="${escSlug}">+ Pull adapter</button>
+    </div>
+    <div class="ds-section">
+      <div class="ds-section-title">Datasources</div>
+      ${dsRows}
+    </div>
+    <div class="ds-section">
+      <div class="ds-section-title">Pull adapters</div>
+      ${pullRows}
+    </div>
+  </div>`;
+}
+
+async function _onDsAction(btn){
+  const action = btn.dataset.dsAction;
+  const slug = btn.dataset.slug;
+  const id = btn.dataset.id;
+  if(action === 'add-ds')    return openAddDatasourceModal(slug);
+  if(action === 'add-pull')  return openAddPullModal(slug);
+  if(action === 'test')      return testDatasource(slug, id, btn);
+  if(action === 'run-pull')  return runSinglePull(slug, id, btn);
+  if(action === 'rm-ds')     return removeDatasource(slug, id);
+  if(action === 'rm-pull')   return removePullAdapter(slug, id);
+}
+
+async function testDatasource(slug, id, btn){
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const res = await api(`/datasources/${encodeURIComponent(slug)}/${encodeURIComponent(id)}/test`, {});
+    alert((res.ok ? '✓ ' : '✗ ') + res.message + (res.rows_returned !== undefined ? ` (rows=${res.rows_returned})` : ''));
+  } catch(err){ alert('Test failed: ' + err.message); }
+  btn.disabled = false; btn.textContent = orig;
+}
+
+async function removeDatasource(slug, id){
+  if(!confirm(`Remove datasource "${id}" from "${slug}"?\n\nFails if any pull adapter still references it.`)) return;
+  try {
+    const res = await fetch(`/datasources/${encodeURIComponent(slug)}/${encodeURIComponent(id)}`, {method:'DELETE', headers:_withAuth({})});
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    renderDatasourcesPanel();
+  } catch(err){ alert('Remove failed: ' + err.message); }
+}
+
+async function removePullAdapter(slug, id){
+  if(!confirm(`Remove pull adapter "${id}" from "${slug}"?`)) return;
+  try {
+    const res = await fetch(`/datasources/${encodeURIComponent(slug)}/pulls/${encodeURIComponent(id)}`, {method:'DELETE', headers:_withAuth({})});
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    renderDatasourcesPanel();
+  } catch(err){ alert('Remove failed: ' + err.message); }
+}
+
+async function runSinglePull(slug, id, btn){
+  if(!confirm(`Run pull adapter "${id}" now?\n\nLocks the hydration pipeline while it runs (a concurrent full pipeline run will get 409). Use this to iterate on SQL without re-running stages 0–6.`)) return;
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '…running';
+  try {
+    const res = await api(`/datasources/${encodeURIComponent(slug)}/pulls/${encodeURIComponent(id)}/run`, {});
+    const status = res.ok ? '✓' : '✗';
+    alert(`${status} ${res.rows} rows\n\n${(res.log_lines || []).join('\n')}`);
+  } catch(err){ alert('Run failed: ' + err.message); }
+  btn.disabled = false; btn.textContent = orig;
+}
+
+// ── Add-datasource modal ─────────────────────────────────────────────────────
+let _addDsSlug = null;
+
+function openAddDatasourceModal(slug){
+  _addDsSlug = slug;
+  document.getElementById('add-ds-slug').textContent = slug;
+  document.getElementById('add-ds-id').value = '';
+  document.getElementById('add-ds-env').value = '';
+  document.getElementById('add-ds-modal').classList.add('open');
+}
+function closeAddDsModal(){ document.getElementById('add-ds-modal').classList.remove('open'); }
+
+async function submitAddDatasource(){
+  const id  = document.getElementById('add-ds-id').value.trim();
+  const env = document.getElementById('add-ds-env').value.trim();
+  if(!id || !env){ alert('id and dsn_env are both required.'); return; }
+  try {
+    await api(`/datasources/${encodeURIComponent(_addDsSlug)}`, {id, kind:'postgres', dsn_env: env});
+    closeAddDsModal();
+    renderDatasourcesPanel();
+  } catch(err){ alert('Add failed: ' + err.message); }
+}
+
+// ── Add-pull-adapter modal ──────────────────────────────────────────────────
+let _addPullSlug = null;
+
+async function openAddPullModal(slug){
+  _addPullSlug = slug;
+  document.getElementById('add-pull-slug').textContent = slug;
+  // Populate the datasource picker for this bundle.
+  const sel = document.getElementById('add-pull-ds');
+  sel.innerHTML = '<option disabled>Loading…</option>';
+  try {
+    const data = await api(`/datasources/${encodeURIComponent(slug)}`);
+    const dss = data.datasources || [];
+    sel.innerHTML = dss.length
+      ? dss.map(d => `<option value="${escapeHTML(d.id)}">${escapeHTML(d.id)} (${escapeHTML(d.kind)})</option>`).join('')
+      : '<option disabled>No datasources declared yet — add one first</option>';
+  } catch(_){ sel.innerHTML = '<option disabled>Could not load datasources</option>'; }
+  // Populate target_class from bundle in_scope_classes.
+  try {
+    const m = await api(`/use_cases/${encodeURIComponent(slug)}`);
+    const cls = m.in_scope_classes || [];
+    document.getElementById('add-pull-label').innerHTML = cls.map(c => `<option>${escapeHTML(c)}</option>`).join('');
+  } catch(_){ document.getElementById('add-pull-label').innerHTML = ''; }
+  // Reset other fields.
+  document.getElementById('add-pull-aid').value = '';
+  document.getElementById('add-pull-source').value = '';
+  document.getElementById('add-pull-sql').value = 'SELECT 1';
+  document.getElementById('add-pull-key').value = '';
+  document.getElementById('add-pull-modal').classList.add('open');
+}
+function closeAddPullModal(){ document.getElementById('add-pull-modal').classList.remove('open'); }
+
+async function submitAddPullAdapter(){
+  const aid    = document.getElementById('add-pull-aid').value.trim();
+  const source = document.getElementById('add-pull-source').value.trim();
+  const ds     = document.getElementById('add-pull-ds').value;
+  const sql    = document.getElementById('add-pull-sql').value.trim();
+  const label  = document.getElementById('add-pull-label').value;
+  const key    = document.getElementById('add-pull-key').value.trim();
+  if(!aid || !source || !ds || !sql || !label || !key){
+    alert('All fields are required.');
+    return;
+  }
+  const payload = {
+    adapter_id: aid,
+    source_system: source,
+    protocol: 'postgres',
+    sync_mode: 'FULL',
+    target_class: label,
+    match_property: 'sourceSystem',
+    pull: {datasource: ds, sql, label, key_property: key},
+  };
+  try {
+    await api(`/datasources/${encodeURIComponent(_addPullSlug)}/pulls`, payload);
+    closeAddPullModal();
+    renderDatasourcesPanel();
+  } catch(err){ alert('Add failed: ' + err.message); }
 }
 
 // =============================================================================

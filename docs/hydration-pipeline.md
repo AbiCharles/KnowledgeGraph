@@ -139,6 +139,31 @@ rolled back so re-running is safe):
 If `manifest.stage4_adapters` is empty, the stage logs `INFO  No
 adapters declared, skipping` and reports `pass`.
 
+#### End-to-end: adding a Postgres pull from the dashboard
+
+The fastest way to wire a Postgres source into the pipeline:
+
+1. **Set the env var** holding the DSN, e.g.
+   `export ORDERS_PG_DSN='postgresql://user:secret@host/db'`. Restart
+   uvicorn to pick it up.
+2. **Use Cases tab → Datasources sub-tab → + Datasource** on the bundle.
+   Id `orders_db`, env `ORDERS_PG_DSN`. Add. **Test**. Should be green.
+3. **+ Pull adapter** on the same bundle. Fill the form (adapter id,
+   datasource, SQL, target class, key property). The SQL editor accepts
+   only `SELECT` / `WITH ... SELECT` — INSERT/UPDATE/DELETE are rejected
+   at parse time.
+4. **▶ Run** on the new pull adapter to dry-run the SQL → MERGE outside
+   the full pipeline. Iterate on SQL until satisfied.
+5. **Hydration Pipeline → Run.** Stage 4 now includes the pull along
+   with any other adapters; rows are MERGEd into Neo4j and the prior
+   bundle version (with the previous adapters/datasources) is archived
+   under Versions in case you need to roll back.
+
+The full UI walkthrough lives in
+[docs/use-cases.md → Datasources sub-tab](use-cases.md#datasources-sub-tab).
+This pipeline doc covers what the stage actually does at runtime; that
+one covers how to set it up.
+
 ### Stage 5 — Entity Resolution
 
 Runs entity-resolution rules declared in `manifest.stage5_er_rules`.
