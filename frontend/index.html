@@ -627,6 +627,35 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
   </div>
 </div>
 
+<!-- Federation: side-by-side bundle compare modal -->
+<div class="uc-modal-bg" id="compare-modal">
+  <div class="uc-modal" style="width:1080px;max-width:96vw;padding:18px 20px">
+    <div class="uc-modal-title">Compare bundles</div>
+    <div class="uc-modal-sub">Two bundles' graphs rendered side-by-side from their own Neo4j databases. Nodes are clustered by class with each bundle's manifest colours; hover a node to see its properties. Useful for spotting structural overlap or schema drift between domains.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div style="border:1px solid var(--border);border-radius:5px;background:var(--bg3);padding:10px">
+        <div style="font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-bottom:6px">
+          <b>Left:</b> <span id="compare-left-label" style="color:var(--teal)"></span>
+        </div>
+        <svg id="compare-left-svg" viewBox="0 0 460 380" preserveAspectRatio="xMidYMid meet" style="width:100%;height:380px;background:var(--bg);border:1px solid var(--border);border-radius:4px;display:block"></svg>
+        <div id="compare-left-stats" style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-top:5px"></div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:5px;background:var(--bg3);padding:10px">
+        <div style="font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace;margin-bottom:6px;display:flex;align-items:center;gap:8px">
+          <b>Right:</b>
+          <span id="compare-right-label" style="color:var(--teal)"></span>
+          <select id="compare-right-pick" class="uc-form-input" style="margin-left:auto;padding:3px 8px;font-size:10px"></select>
+        </div>
+        <svg id="compare-right-svg" viewBox="0 0 460 380" preserveAspectRatio="xMidYMid meet" style="width:100%;height:380px;background:var(--bg);border:1px solid var(--border);border-radius:4px;display:block"></svg>
+        <div id="compare-right-stats" style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-top:5px"></div>
+      </div>
+    </div>
+    <div class="uc-modal-actions">
+      <button class="uc-modal-cancel" onclick="closeCompareModal()">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Generate test-data modal -->
 <div class="uc-modal-bg" id="gen-modal">
   <div class="uc-modal" style="width:520px">
@@ -2560,6 +2589,7 @@ function _renderUcCards(data){
           ${agentChip}${tags}
         </div>
         <div class="uc-card-actions">
+          <button class="uc-btn uc-btn-versions" data-action="compare" data-slug="" title="Compare this bundle's graph side-by-side with another">Compare</button>
           <button class="uc-btn uc-btn-versions" data-action="gen" data-slug="" title="Synthesise plausible instance data from the bundle's ontology">Generate data</button>
           <button class="uc-btn uc-btn-versions" data-action="versions" data-slug="" title="View prior uploads of this bundle">Versions</button>
           <button class="uc-btn uc-btn-delete" data-action="delete" data-slug="" data-active="${b.is_active}"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
@@ -2588,7 +2618,106 @@ document.addEventListener('click', (e) => {
   else if(btn.dataset.action === 'delete') deleteUseCase(slug, btn.dataset.active === 'true');
   else if(btn.dataset.action === 'versions') toggleVersionsPanel(slug, btn);
   else if(btn.dataset.action === 'gen') openGenDataModal(slug);
+  else if(btn.dataset.action === 'compare') openCompareModal(slug);
 });
+
+// =============================================================================
+// FEDERATION — side-by-side bundle compare
+// =============================================================================
+async function openCompareModal(leftSlug){
+  const modal = document.getElementById('compare-modal');
+  modal.classList.add('open');
+  // Populate the right-side picker from the bundle list (excluding leftSlug).
+  let bundles = [];
+  try { bundles = (await api('/use_cases')).bundles || []; } catch(_){ bundles = []; }
+  const picker = document.getElementById('compare-right-pick');
+  picker.innerHTML = bundles
+    .filter(b => b.slug !== leftSlug)
+    .map(b => `<option value="${escapeHTML(b.slug)}">${escapeHTML(b.name)} (${escapeHTML(b.slug)})</option>`)
+    .join('');
+  document.getElementById('compare-left-label').textContent = leftSlug;
+  document.getElementById('compare-right-label').textContent = picker.value || '—';
+  document.getElementById('compare-left-svg').innerHTML = '';
+  document.getElementById('compare-right-svg').innerHTML = '';
+  // Always render the left side; defer right until user picks.
+  renderCompareSide('left', leftSlug);
+  if(picker.value) renderCompareSide('right', picker.value);
+  picker.onchange = () => {
+    document.getElementById('compare-right-label').textContent = picker.value;
+    renderCompareSide('right', picker.value);
+  };
+}
+
+function closeCompareModal(){ document.getElementById('compare-modal').classList.remove('open'); }
+
+async function renderCompareSide(side, slug){
+  const svg = document.getElementById(`compare-${side}-svg`);
+  const stats = document.getElementById(`compare-${side}-stats`);
+  svg.innerHTML = '<text x="12" y="22" fill="#7e88a3" font-size="11" font-family="monospace">Loading…</text>';
+  stats.textContent = '';
+  try {
+    const data = await api(`/graph/snapshot?slug=${encodeURIComponent(slug)}`);
+    drawMiniGraph(svg, data);
+    stats.textContent = `${data.nodes.length} nodes · ${data.edges.length} edges${data.database ? ' · DB: ' + data.database : ''}`;
+  } catch(err){
+    svg.innerHTML = `<text x="12" y="22" fill="#f87171" font-size="11" font-family="monospace">${escapeHTML(err.message)}</text>`;
+  }
+}
+
+// Minimal class-clustered layout: group nodes by type into a grid of clusters,
+// space nodes within each cluster on a small ring. Doesn't aim for the full
+// physics fidelity of the main canvas — just enough to compare structure.
+function drawMiniGraph(svg, data){
+  const W = svg.clientWidth || 460, H = svg.clientHeight || 380;
+  const viz = (data.manifest && data.manifest.visualization) || {};
+  const byType = {};
+  data.nodes.forEach(n => { (byType[n.type] = byType[n.type] || []).push(n); });
+  const types = Object.keys(byType).sort();
+  if(!types.length){
+    svg.innerHTML = '<text x="12" y="22" fill="#7e88a3" font-size="11" font-family="monospace">No nodes — has the pipeline been run for this bundle?</text>';
+    return;
+  }
+  const cols = Math.ceil(Math.sqrt(types.length));
+  const rows = Math.ceil(types.length / cols);
+  const cellW = W / cols, cellH = H / rows;
+  const pos = {};   // node id -> [x,y]
+
+  let html = '';
+  types.forEach((t, ti) => {
+    const cx = (ti % cols) * cellW + cellW / 2;
+    const cy = Math.floor(ti / cols) * cellH + cellH / 2;
+    const ns = byType[t];
+    const ringR = Math.min(cellW, cellH) * 0.32;
+    const colour = (viz[t] && viz[t].color) || '#3a4665';
+    ns.forEach((n, ni) => {
+      const a = (2 * Math.PI * ni) / Math.max(ns.length, 1);
+      const x = cx + ringR * Math.cos(a);
+      const y = cy + ringR * Math.sin(a);
+      pos[n.id] = [x, y];
+    });
+    // Cluster label
+    html += `<text x="${cx}" y="${cy - ringR - 6}" fill="${colour}" font-size="10" font-family="monospace" text-anchor="middle" font-weight="600">${escapeHTML(t)} (${ns.length})</text>`;
+  });
+
+  // Edges first so nodes render on top.
+  let edgeHtml = '';
+  data.edges.forEach(e => {
+    const a = pos[e.s], b = pos[e.t];
+    if(!a || !b) return;
+    edgeHtml += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#3a4665" stroke-width="0.6" stroke-opacity="0.45"/>`;
+  });
+
+  let nodeHtml = '';
+  types.forEach(t => {
+    const colour = (viz[t] && viz[t].color) || '#3a4665';
+    byType[t].forEach(n => {
+      const [x, y] = pos[n.id];
+      nodeHtml += `<circle cx="${x}" cy="${y}" r="3" fill="${colour}" stroke="#0a0d14" stroke-width="0.5"><title>${escapeHTML(t)}: ${escapeHTML(JSON.stringify(n.p).slice(0, 200))}</title></circle>`;
+    });
+  });
+
+  svg.innerHTML = edgeHtml + nodeHtml + html;
+}
 
 let _genSlug = null;
 
