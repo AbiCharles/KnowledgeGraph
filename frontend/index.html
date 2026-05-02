@@ -426,7 +426,7 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 <div class="app">
 <header>
   <div class="logo" id="header-logo">KF<em>&middot;</em>GRAPH <em>// Knowledge Graph</em></div>
-  <div id="db-chip" style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:3px 9px;border:1px solid var(--border);border-radius:10px" title="Active Neo4j database (one per bundle when multi-database is supported)"></div>
+  <div id="db-chip" style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:3px 9px;border:1px solid var(--border);border-radius:10px;cursor:pointer" title="Active Neo4j database (click to refresh)" onclick="refreshDbChip()">DB: …</div>
   <div id="usage-chip" style="margin-left:8px;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;padding:3px 9px;border:1px solid var(--border);border-radius:10px;cursor:pointer" title="Today's LLM spend (refreshes every minute)" onclick="refreshUsage()">⟳ —</div>
 </header>
 
@@ -3004,7 +3004,7 @@ function _renderUcCards(data){
           <button class="uc-btn uc-btn-versions" data-action="gen" data-slug="" title="Synthesise plausible instance data from the bundle's ontology">Generate data</button>
           <button class="uc-btn uc-btn-versions" data-action="versions" data-slug="" title="View prior uploads of this bundle">Versions</button>
           <button class="uc-btn uc-btn-delete" data-action="delete" data-slug="" data-active="${b.is_active}"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
-          ${b.is_active ? '' : '<button class="uc-btn uc-btn-activate" data-action="activate" data-slug="">Activate</button>'}
+          ${b.is_active ? '<button class="uc-btn uc-btn-versions" data-action="deactivate" data-slug="" title="Stop showing this bundle in the dashboard (with optional database drop)">Deactivate</button>' : '<button class="uc-btn uc-btn-activate" data-action="activate" data-slug="">Activate</button>'}
         </div>
         <div class="uc-versions" data-versions-panel data-slug=""></div>`;
       // Fill text-only slots safely.
@@ -3031,7 +3031,41 @@ document.addEventListener('click', (e) => {
   else if(btn.dataset.action === 'gen') openGenDataModal(slug);
   else if(btn.dataset.action === 'compare') openCompareModal(slug);
   else if(btn.dataset.action === 'edit-ontology') openOntologyEditor(slug);
+  else if(btn.dataset.action === 'deactivate') deactivateBundle(slug);
 });
+
+async function deactivateBundle(slug){
+  // Three-way confirm so the operator picks the right scope explicitly:
+  // OK = bundle only (DB stays), Cancel = bundle + drop DB, Esc = abort.
+  // Browsers don't support a custom 3-button native dialog so we do two
+  // confirms in sequence — explicit, no surprises.
+  const wantDeactivate = confirm(
+    `Deactivate "${slug}"?\n\n` +
+    `OK to continue — you'll be asked next whether to also drop its Neo4j database.\n` +
+    `Cancel to abort.`
+  );
+  if(!wantDeactivate) return;
+  const dropDb = confirm(
+    `Also DROP the Neo4j database for "${slug}"?\n\n` +
+    `OK = drop the database (frees disk space; bundle files on disk are kept).\n` +
+    `Cancel = keep the database (just deactivate; data persists for the next activation).`
+  );
+  try {
+    const url = '/use_cases/deactivate' + (dropDb ? '?drop_database=true' : '');
+    const res = await fetch(url, {method: 'POST'});
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    _invalidateUseCasesCache();
+    alert(
+      `Deactivated "${slug}".\n\n` +
+      (body.dropped_database ? 'Database dropped — re-activate and run the pipeline to re-hydrate.\n\n' : 'Database kept — re-activate to resume with existing data.\n\n') +
+      'The dashboard will reload now.'
+    );
+    window.location.reload();
+  } catch(err){
+    alert('Deactivate failed: ' + err.message);
+  }
+}
 
 // =============================================================================
 // INLINE ONTOLOGY EDITOR
@@ -3604,7 +3638,13 @@ async function refreshDbChip(){
       chip.textContent = 'DB: shared (single-DB mode)';
       chip.style.color = 'var(--text3)';
     }
-  } catch(_){ chip.textContent = ''; }
+  } catch(err){
+    // Don't go invisible — surface the failure so the operator knows.
+    chip.textContent = 'DB: n/a';
+    chip.style.color = 'var(--red)';
+    chip.style.borderColor = 'rgba(248,113,113,.35)';
+    console.warn('refreshDbChip failed:', err);
+  }
 }
 
 // =============================================================================
@@ -3624,7 +3664,7 @@ async function refreshDbChip(){
   } else if(ok && !NODES.length){
     // Bundle is loaded but Neo4j is empty for this prefix — typically just
     // after activate/reload. Tell the user to run the pipeline.
-    showSnapshotBanner(`No data for use case "${MANIFEST?.slug || ''}". Run the Hydration Pipeline to populate.`);
+    showSnapshotBanner(`No data loaded for "${MANIFEST?.slug || ''}". To populate the graph: (1) run Ontology Curation to validate the bundle, then (2) run the Hydration Pipeline to load it into Neo4j.`);
   }
   refreshUsage();
   refreshDbChip();

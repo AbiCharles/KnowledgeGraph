@@ -53,10 +53,24 @@ def load(slug: str) -> UseCase:
 
 
 def get_active_slug() -> str | None:
+    """Return the active slug, or None.
+
+    `.active` semantics:
+      - Missing file       → first-boot / never explicitly set → fall back to
+                              the first alphabetical bundle (boot UX).
+      - Empty file         → explicitly deactivated → no bundle is active,
+                              no fallback. Lets the operator opt out of the
+                              auto-pick-first behaviour.
+      - File with a slug   → that slug if its manifest still exists; else
+                              fall through to the empty-file path (None).
+    """
     if ACTIVE_FILE.exists():
         slug = ACTIVE_FILE.read_text().strip()
-        if slug and (USE_CASES_DIR / slug / "manifest.yaml").exists():
+        if not slug:
+            return None
+        if (USE_CASES_DIR / slug / "manifest.yaml").exists():
             return slug
+        return None
     slugs = _discover_slugs()
     return slugs[0] if slugs else None
 
@@ -89,6 +103,41 @@ def set_active(slug: str) -> UseCase:
     os.replace(tmp, ACTIVE_FILE)
     _activate_bundle_database(slug)
     return uc
+
+
+def deactivate(drop_database: bool = False) -> dict:
+    """Clear the active selection so no bundle is loaded.
+
+    Removes the .active marker (so get_active_slug returns None and
+    /use_cases/active returns 404) and re-points the driver at Neo4j's
+    default database. With `drop_database=True`, also drops the bundle's
+    Neo4j database so its disk footprint is reclaimed — bundle files on
+    disk are kept either way, so re-activation rehydrates from scratch.
+    """
+    slug = get_active_slug()
+    out = {"slug": slug, "dropped_database": False}
+    # Write an empty .active to signal explicit deactivation — distinguishes
+    # "operator deliberately turned this off" from "never set yet". Atomic
+    # via os.replace so a concurrent reader can't see a torn file.
+    USE_CASES_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = ACTIVE_FILE.with_suffix(".active.tmp")
+    try:
+        tmp.write_text("")
+        os.replace(tmp, ACTIVE_FILE)
+    except Exception as exc:
+        log.warning("Could not write empty .active marker: %s", exc)
+    try:
+        from db import set_active_database
+        set_active_database(None)
+    except Exception as exc:
+        log.warning("Could not reset active database pointer: %s", exc)
+    if drop_database and slug:
+        try:
+            from db import db_name_for_slug, drop_database as _drop
+            out["dropped_database"] = _drop(db_name_for_slug(slug))
+        except Exception as exc:
+            log.warning("Could not drop database for %s: %s", slug, exc)
+    return out
 
 
 def _activate_bundle_database(slug: str) -> None:

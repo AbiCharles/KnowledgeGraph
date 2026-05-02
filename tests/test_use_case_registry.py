@@ -197,3 +197,31 @@ def test_load_version_missing_raises(tmp_use_cases_dir):
     from pipeline import use_case_registry as reg
     with pytest.raises(FileNotFoundError):
         reg.load_version("nope", "20260101T000000Z")
+
+
+def test_deactivate_clears_active_marker(tmp_use_cases_dir):
+    from pipeline import use_case_registry as reg
+    _seed(tmp_use_cases_dir, "bundle-a")
+    reg.set_active("bundle-a")
+    assert reg.get_active_slug() == "bundle-a"
+    out = reg.deactivate(drop_database=False)
+    assert out["slug"] == "bundle-a"
+    assert out["dropped_database"] is False
+    assert reg.get_active_slug() is None
+    # Bundle files on disk stay intact — re-activation must work.
+    assert (tmp_use_cases_dir / "bundle-a" / "manifest.yaml").exists()
+    reg.set_active("bundle-a")
+    assert reg.get_active_slug() == "bundle-a"
+
+
+def test_deactivate_with_drop_database_returns_status(tmp_use_cases_dir, monkeypatch):
+    from pipeline import use_case_registry as reg
+    _seed(tmp_use_cases_dir, "bundle-b")
+    reg.set_active("bundle-b")
+    # Stub multi-DB so drop_database returns True without needing real Neo4j.
+    import db
+    monkeypatch.setattr(db, "supports_multi_db", lambda: True)
+    monkeypatch.setattr(db, "drop_database", lambda name: True)
+    out = reg.deactivate(drop_database=True)
+    assert out["dropped_database"] is True
+    assert reg.get_active_slug() is None
