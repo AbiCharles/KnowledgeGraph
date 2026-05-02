@@ -72,6 +72,61 @@ def invalidate_schema_cache() -> None:
     (bundle delete, manual TTL replacement, etc.) where the (slug, mtime)
     key would otherwise serve a stale entry."""
     _schema_description_cached.cache_clear()
+    _schema_summary_cached.cache_clear()
+
+
+def schema_summary(use_case: UseCase) -> dict:
+    """Return a structured schema for the Cypher editor's autocomplete.
+
+    Shape:
+      {
+        prefix: "kf-mfg",
+        labels: ["WorkOrder", "Equipment", ...],
+        relationship_types: ["assignedToEquipment", ...],
+        properties_by_label: {"WorkOrder": ["woStatus", "woType", ...], ...},
+      }
+
+    Same caching contract as schema_description() — cached on
+    (slug, ontology_mtime). No live Neo4j hit (autocomplete latency budget
+    is tight; we trust the ontology to be authoritative).
+    """
+    o_mtime = use_case.ontology_path.stat().st_mtime_ns if use_case.ontology_path.exists() else 0
+    return _schema_summary_cached(use_case.slug, o_mtime)
+
+
+@lru_cache(maxsize=16)
+def _schema_summary_cached(slug: str, ontology_mtime_ns: int) -> dict:
+    from pipeline.use_case_registry import load
+    use_case = load(slug)
+    g = Graph()
+    g.parse(str(use_case.ontology_path), format="turtle")
+    labels = sorted({_local(c) for c in g.subjects(RDF.type, OWL.Class) if isinstance(c, URIRef)})
+    rel_types = sorted({_local(p) for p in g.subjects(RDF.type, OWL.ObjectProperty) if isinstance(p, URIRef)})
+    props_by_label: dict[str, list[str]] = {l: [] for l in labels}
+    unscoped: list[str] = []
+    for p in g.subjects(RDF.type, OWL.DatatypeProperty):
+        if not isinstance(p, URIRef):
+            continue
+        name = _local(p)
+        domain = next(g.objects(p, RDFS.domain), None)
+        if domain and isinstance(domain, URIRef):
+            cls = _local(domain)
+            props_by_label.setdefault(cls, []).append(name)
+        else:
+            unscoped.append(name)
+    # Unscoped properties are surfaced under every label so the autocompleter
+    # still suggests them in any MATCH context.
+    if unscoped:
+        for l in labels:
+            props_by_label[l].extend(unscoped)
+    for l in props_by_label:
+        props_by_label[l] = sorted(set(props_by_label[l]))
+    return {
+        "prefix": use_case.manifest.prefix,
+        "labels": labels,
+        "relationship_types": rel_types,
+        "properties_by_label": props_by_label,
+    }
 
 
 @lru_cache(maxsize=16)

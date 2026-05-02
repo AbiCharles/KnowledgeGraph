@@ -118,6 +118,19 @@ def test_graph_snapshot_unknown_slug_404(stub_db, monkeypatch):
     assert r.status_code == 404
 
 
+def test_schema_summary_returns_labels_and_rels(stub_db):
+    """Active bundle's schema summary feeds the Cypher editor's autocomplete.
+    Doesn't assume which bundle is active — just asserts the shape and that
+    each declared label has its property list keyed under it."""
+    r = _client().get("/schema/summary")
+    assert r.status_code == 200
+    body = r.json()
+    assert {"prefix", "labels", "relationship_types", "properties_by_label"} <= set(body)
+    assert body["labels"], "active bundle should declare at least one OWL class"
+    for label in body["labels"]:
+        assert label in body["properties_by_label"], f"missing property list for {label}"
+
+
 def test_graph_snapshot_returns_payload_shape(stub_db, monkeypatch):
     """Stub run_on_database to return one node and one edge so we can assert
     the route serialises them correctly (prefix-stripping, manifest echo)."""
