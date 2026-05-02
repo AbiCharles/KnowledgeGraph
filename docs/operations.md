@@ -23,6 +23,7 @@ The Python app reads its configuration from environment variables (or a
 | `LOG_FORMAT` | no | `text` | `json` for structured logs. |
 | `LOG_LEVEL` | no | `INFO` | DEBUG / INFO / WARNING / ERROR. |
 | `UPLOAD_MAX_BYTES` | no | `5242880` | Per-file cap on bundle upload (5 MiB). |
+| `<custom>_PG_DSN` | yes if used | — | Per-bundle Postgres DSN env vars. The exact name comes from each datasource's `dsn_env:` in the manifest. Format: `postgresql://user:pass@host:5432/db`. Never put credentials in YAML. |
 
 ### Generating a strong API key
 

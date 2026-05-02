@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 from pipeline.cypher_safety import assert_read_only, UnsafeCypherError
 
@@ -37,12 +37,72 @@ class IndexSpec(BaseModel):
     property: str
 
 
+class DataSourceSpec(BaseModel):
+    """External datasource declaration (Postgres today; mysql/mssql/etc. later).
+
+    DSN must come from an env var in production — `dsn_env: ORDERS_PG_DSN`.
+    Inline `dsn:` is allowed for dev convenience but discouraged because
+    bundles are world-readable on disk and would leak credentials. The
+    model validator below enforces that exactly one of the two is set.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    kind: Literal["postgres"]
+    dsn: str | None = None
+    dsn_env: str | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_dsn(self) -> "DataSourceSpec":
+        if bool(self.dsn) == bool(self.dsn_env):
+            raise ValueError(
+                f"Datasource {self.id!r}: provide exactly one of `dsn` (dev only) "
+                "or `dsn_env` (recommended for production)."
+            )
+        return self
+
+
+class PullSpec(BaseModel):
+    """SQL pull declaration on an adapter — fetches rows from a datasource and
+    MERGEs each row into Neo4j as a node of `label`.
+
+    Each row's `key_property` value is used as the MERGE key; remaining
+    columns are written as node properties (prefixed via use_case.prop).
+    Column names from SQL therefore should match the unprefixed property
+    names on the target class, not the prefixed Neo4j property keys.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    datasource: str          # references DataSourceSpec.id
+    sql: str                 # read-only SQL — validated at parse time
+    label: str               # unprefixed class name (e.g. "Order")
+    key_property: str        # unprefixed property used as the MERGE key
+
+    @field_validator("sql")
+    @classmethod
+    def _safe_sql(cls, v: str) -> str:
+        # Lazy import — avoids forcing the pipeline.datasources package
+        # onto callers who don't use any datasources at all.
+        from pipeline.datasources.postgres import assert_read_only_sql
+        try:
+            assert_read_only_sql(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return v
+
+
 class AdapterSpec(BaseModel):
     """Source-system ingestion adapter declaration (stage 4).
 
     Stage 4 creates an `:IngestionAdapter` node per spec, then links every
     target_class node whose match_property equals source_system, via the
     `sourcedFrom` relationship (prefixed in Neo4j).
+
+    Optional `pull:` extends the adapter to also fetch rows from an external
+    datasource (today: Postgres) and MERGE them as nodes. The metadata
+    register/link flow runs first regardless, so an adapter with a `pull:`
+    block creates both the IngestionAdapter provenance node AND the actual
+    target nodes from the SQL result.
     """
     adapter_id: str
     source_system: str
@@ -50,6 +110,7 @@ class AdapterSpec(BaseModel):
     sync_mode: str = "INCREMENTAL"
     target_class: str = "WorkOrder"
     match_property: str = "sourceSystem"
+    pull: PullSpec | None = None
 
 
 class ERRuleSpec(BaseModel):
@@ -173,12 +234,28 @@ class Manifest(BaseModel):
     in_scope_classes: list[str] = Field(default_factory=list)
     visualization: dict[str, VizEntry] = Field(default_factory=dict)
 
+    # External datasources (Postgres today). Referenced by AdapterSpec.pull.
+    datasources: list[DataSourceSpec] = Field(default_factory=list)
+
     # Stage configuration (each section is optional; empty = skip)
     stage2_constraints: list[ConstraintSpec] = Field(default_factory=list)
     stage2_indexes: list[IndexSpec] = Field(default_factory=list)
     stage4_adapters: list[AdapterSpec] = Field(default_factory=list)
     stage5_er_rules: list[ERRuleSpec] = Field(default_factory=list)
     stage6_checks: list[CheckSpec] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_pull_references(self) -> "Manifest":
+        """Every adapter.pull.datasource must point at a declared datasource id.
+        Catches typos at manifest-load time instead of at stage-4 runtime."""
+        ds_ids = {d.id for d in self.datasources}
+        for a in self.stage4_adapters:
+            if a.pull and a.pull.datasource not in ds_ids:
+                raise ValueError(
+                    f"Adapter {a.adapter_id!r}: pull.datasource={a.pull.datasource!r} "
+                    f"not declared in `datasources:`. Known: {sorted(ds_ids) or 'none'}"
+                )
+        return self
 
     # Privacy: schema_introspection samples enum-shaped property values from
     # live Neo4j and embeds them in the LLM prompt. Set to False (or omit
