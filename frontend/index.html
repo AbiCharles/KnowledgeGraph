@@ -1467,17 +1467,17 @@ function extractSubgraphFromRows(rows){
     });
   });
   // Property-based fallback for queries that return business identifiers
-  // (e.g. workOrderId, poId). Only consult identifier-shaped properties to
-  // avoid false positives where many nodes share a value like "OPEN" — and
-  // when a property value really does belong to multiple nodes, include them
-  // all rather than silently dropping all but one.
+  // (e.g. workOrderId, poId, equipment_id). Only consult identifier-shaped
+  // property names — matches both camelCase ("workOrderId") and snake_case
+  // ("work_order_id"). When a value really does belong to multiple nodes,
+  // include them all rather than silently dropping all but one.
   if(!ids.size){
-    const ID_KEY = /(^|_)(id|key|sku|code)$/i;
+    const ID_KEY = /(id|key|sku|code|guid|uri)$/i;
     const propIndex = new Map(); // value -> [nodeId, ...]
     NODES.forEach(n => {
       Object.entries(n.p || {}).forEach(([k, v]) => {
         if(typeof v !== 'string' || !v) return;
-        if(!ID_KEY.test(k)) return;
+        if(k.length < 3 || !ID_KEY.test(k)) return;
         if(!propIndex.has(v)) propIndex.set(v, []);
         propIndex.get(v).push(n.id);
       });
