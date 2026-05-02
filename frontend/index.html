@@ -194,6 +194,29 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 .gm-close:hover{border-color:var(--red);color:var(--red)}
 .gm-body{flex:1;position:relative;overflow:hidden}
 #gm-canvas{position:absolute;top:0;left:0}
+/* Modal-graph legend (top-left, larger than the inline qg-legend) */
+.gm-legend{position:absolute;top:14px;left:14px;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:9px 13px;font-size:10.5px;font-family:'JetBrains Mono',monospace;max-width:260px;z-index:5;line-height:1.6;color:var(--text2)}
+.gm-leg-row{display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.gm-leg-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
+.gm-leg-arrow{color:var(--teal);flex-shrink:0;font-size:11px}
+.gm-leg-divider{height:1px;background:var(--border);margin:6px 0}
+/* Modal-graph detail panel (right edge) */
+.gm-detail{position:absolute;top:0;right:0;bottom:0;width:300px;background:var(--bg2);border-left:1px solid var(--border);display:none;flex-direction:column;z-index:6;box-shadow:-4px 0 14px rgba(0,0,0,.4)}
+.gm-detail.visible{display:flex}
+.gm-d-hdr{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.gm-d-dot{width:15px;height:15px;border-radius:50%;flex-shrink:0}
+.gm-d-type{font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.gm-d-id{font-size:12.5px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace;word-break:break-all;line-height:1.25}
+.gm-d-close{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:17px;padding:0 5px}
+.gm-d-close:hover{color:var(--text)}
+.gm-d-props{flex:1;overflow-y:auto;padding:11px 14px}
+.gm-d-prop{margin-bottom:9px}
+.gm-d-pk{font-size:9px;color:var(--purple);font-family:'JetBrains Mono',monospace;margin-bottom:2px}
+.gm-d-pv{font-size:11px;color:var(--text);background:var(--bg3);border-radius:3px;padding:3px 8px;word-break:break-all;line-height:1.4}
+.gm-d-rels{padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0;max-height:35%;overflow-y:auto}
+.gm-d-rels-title{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:7px;font-family:'JetBrains Mono',monospace}
+.gm-d-rel{font-size:10.5px;color:var(--text2);padding:3px 0;font-family:'JetBrains Mono',monospace}
+.gm-d-rel-arrow{color:var(--teal);margin-right:5px}
 .graph-expand-btn{position:absolute;top:8px;right:8px;z-index:5;padding:4px 10px;background:var(--bg2);border:1px solid var(--border2);border-radius:4px;color:var(--text2);font-size:9.5px;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
 .graph-expand-btn:hover{border-color:var(--teal);color:var(--teal)}
 
@@ -591,6 +614,16 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
   </div>
   <div class="gm-body" id="gm-body">
     <canvas id="gm-canvas"></canvas>
+    <div class="gm-legend" id="gm-legend"></div>
+    <div class="gm-detail" id="gm-detail">
+      <div class="gm-d-hdr">
+        <div class="gm-d-dot" id="gm-d-dot"></div>
+        <div style="min-width:0"><div class="gm-d-type" id="gm-d-type"></div><div class="gm-d-id" id="gm-d-id"></div></div>
+        <button class="gm-d-close" id="gm-d-close" title="Close">&times;</button>
+      </div>
+      <div class="gm-d-props" id="gm-d-props"></div>
+      <div class="gm-d-rels"><div class="gm-d-rels-title">Relationships</div><div id="gm-d-rels-list"></div></div>
+    </div>
   </div>
 </div>
 
@@ -1967,6 +2000,11 @@ function drawModalGraph(res, cv, W, H){
   const usedSet = new Set(res.nodeIds);
   const vis = NODES.filter(n => usedSet.has(n.id));
   if(!vis.length) return;
+  // Populate the modal legend with subgraph-scoped types + relationships and
+  // hide any leftover detail panel from a previous open.
+  _renderModalLegend(vis, res.edges);
+  const det = document.getElementById('gm-detail');
+  if(det) det.classList.remove('visible');
   // Modal nodes are 30% larger than the inline canvas for readability — but
   // colour/icon/relative size all come from the manifest-derived GSZ map so
   // a non-manufacturing bundle gets the right per-class sizing.
@@ -2033,12 +2071,78 @@ function drawModalGraph(res, cv, W, H){
   tick();
   if(!cv._gmReady){
     cv._gmReady = true;
-    cv.addEventListener('mousedown', e => { gmPanning = true; gmPanStart = {x:e.clientX, y:e.clientY}; gmPanOrigin = {x:gmPanX, y:gmPanY}; });
-    cv.addEventListener('mousemove', e => { if(gmPanning){ gmPanX = gmPanOrigin.x + (e.clientX - gmPanStart.x); gmPanY = gmPanOrigin.y + (e.clientY - gmPanStart.y); } cv.style.cursor = gmPanning ? 'grabbing' : 'grab'; });
-    cv.addEventListener('mouseup', () => { gmPanning = false; cv.style.cursor = 'grab'; });
+    // Convert canvas-local click coords to graph world coords (undoing pan/zoom).
+    function nodeAt(e){
+      const rect = cv.getBoundingClientRect();
+      const wx = (e.clientX - rect.left - gmPanX) / gmZoom;
+      const wy = (e.clientY - rect.top  - gmPanY) / gmZoom;
+      for(let i = gmSim.length - 1; i >= 0; i--){
+        const n = gmSim[i];
+        if(Math.hypot(n.x - wx, n.y - wy) <= (n.r/gmZoom) * 1.5) return n;
+      }
+      return null;
+    }
+    cv.addEventListener('mousedown', e => {
+      gmPanning = true;
+      gmPanStart  = {x:e.clientX, y:e.clientY};
+      gmPanOrigin = {x:gmPanX, y:gmPanY};
+    });
+    cv.addEventListener('mousemove', e => {
+      if(gmPanning){
+        gmPanX = gmPanOrigin.x + (e.clientX - gmPanStart.x);
+        gmPanY = gmPanOrigin.y + (e.clientY - gmPanStart.y);
+        cv.style.cursor = 'grabbing';
+        return;
+      }
+      cv.style.cursor = nodeAt(e) ? 'pointer' : 'grab';
+    });
+    cv.addEventListener('mouseup', e => {
+      // Click (move < 4px) vs drag-pan: tiny movement means user wanted to inspect.
+      const moved = Math.hypot(e.clientX - gmPanStart.x, e.clientY - gmPanStart.y);
+      gmPanning = false;
+      cv.style.cursor = 'grab';
+      if(moved < 4){
+        const hit = nodeAt(e);
+        if(hit){
+          const node = NM[hit.id];
+          if(node) _showModalDetail(node, res);
+        }
+      }
+    });
     cv.addEventListener('mouseleave', () => { gmPanning = false; });
     cv.addEventListener('wheel', e => { e.preventDefault(); const f = e.deltaY < 0 ? 1.12 : 0.89; const rect = cv.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top; gmPanX = mx - (mx - gmPanX) * f; gmPanY = my - (my - gmPanY) * f; gmZoom = Math.max(0.1, Math.min(8, gmZoom * f)); }, {passive:false});
+    const closeBtn = document.getElementById('gm-d-close');
+    if(closeBtn){ closeBtn.onclick = () => document.getElementById('gm-detail').classList.remove('visible'); }
   }
+}
+
+function _renderModalLegend(vis, edges){
+  const el = document.getElementById('gm-legend');
+  if(!el) return;
+  const types = [...new Set(vis.map(n => n.type))].sort();
+  const rels  = [...new Set(edges.map(e => e.rel))].sort();
+  el.innerHTML =
+    types.map(t => `<div class="gm-leg-row"><div class="gm-leg-dot" style="background:${escapeHTML(GCOL[t]||'#555')}"></div><span>${escapeHTML(t)}</span></div>`).join('') +
+    (rels.length ? '<div class="gm-leg-divider"></div>' + rels.map(r => `<div class="gm-leg-row"><span class="gm-leg-arrow">&rarr;</span><span>${escapeHTML(r)}</span></div>`).join('') : '');
+}
+
+function _showModalDetail(node, res){
+  const detail = document.getElementById('gm-detail');
+  if(!detail) return;
+  document.getElementById('gm-d-dot').style.background = GCOL[node.type] || '#555';
+  document.getElementById('gm-d-type').textContent = node.type;
+  document.getElementById('gm-d-id').textContent = pickLabel(node);
+  document.getElementById('gm-d-props').innerHTML = Object.entries(node.p || {}).map(([k, v]) =>
+    `<div class="gm-d-prop"><div class="gm-d-pk">${escapeHTML(k)}</div><div class="gm-d-pv">${escapeHTML(String(v))}</div></div>`
+  ).join('') || '<div style="font-size:9.5px;color:var(--text3)">No properties</div>';
+  const rels = res.edges.filter(e => e.s === node.id || e.t === node.id);
+  document.getElementById('gm-d-rels-list').innerHTML = rels.length ? rels.map(e => {
+    const out = e.s === node.id;
+    const other = NM[out ? e.t : e.s];
+    const otherLabel = other ? pickLabel(other) : '?';
+    return `<div class="gm-d-rel"><span class="gm-d-rel-arrow">${out ? '&rarr;' : '&larr;'}</span>${escapeHTML(e.rel)} &nbsp; ${escapeHTML(otherLabel)}</div>`;
+  }).join('') : '<div style="font-size:9.5px;color:var(--text3)">None in this view</div>';
+  detail.classList.add('visible');
 }
 document.addEventListener('keydown', e => {
   if(e.key !== 'Escape') return;
