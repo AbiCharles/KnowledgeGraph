@@ -195,6 +195,61 @@ def diff_bundle_version(slug: str, stamp: str):
     return {"slug": slug, "from": stamp, "to": "current", "diff": diff_snapshots(old, new)}
 
 
+@router.post("/{slug}/generate-data")
+async def generate_test_data(slug: str, count: int = 10, seed: int = 42, replace: bool = False):
+    """Synthesise plausible instance data from the bundle's ontology.
+
+    Returns the generated TTL + a per-class summary. By default the bundle's
+    data.ttl is left untouched and the TTL is returned for preview; pass
+    `replace=true` to atomically swap the new data into the bundle (the prior
+    bundle, including the existing data.ttl, is archived under
+    `<slug>.versions/` so the generation is reversible).
+    """
+    bundle_dir = use_case_registry.USE_CASES_DIR / slug
+    if not bundle_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No bundle {slug!r}")
+
+    from pipeline.data_generator import generate_data
+    try:
+        uc = use_case_registry.load(slug)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not load bundle: {exc}")
+
+    ontology_text = (bundle_dir / "ontology.ttl").read_text(encoding="utf-8")
+    try:
+        ttl, summary = generate_data(
+            ontology_ttl=ontology_text,
+            bundle_ns=uc.manifest.namespace,
+            count=count,
+            seed=seed,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Generation failed: {exc}")
+
+    if not replace:
+        return {"slug": slug, "ttl": ttl, "summary": summary, "replaced": False}
+
+    async with acquire_or_409(locks.active_lock, "data generation"):
+        manifest_text = (bundle_dir / "manifest.yaml").read_text(encoding="utf-8")
+        try:
+            use_case_registry.register_uploaded(
+                slug,
+                ontology_text.encode("utf-8"),
+                ttl.encode("utf-8"),
+                manifest_text.encode("utf-8"),
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Could not write generated data: {exc}")
+        try:
+            from pipeline.schema_introspection import invalidate_schema_cache
+            invalidate_schema_cache()
+        except Exception:
+            pass
+    return {"slug": slug, "summary": summary, "replaced": True}
+
+
 @router.post("/{slug}/versions/{stamp}/restore", response_model=UseCaseSummary)
 async def restore_bundle_version(slug: str, stamp: str):
     """Promote an archived version back to live. The current version is itself

@@ -83,6 +83,25 @@ def test_diff_route_404_on_unknown_stamp(stub_db):
     assert r.status_code == 404
 
 
+def test_generate_data_preview_returns_ttl_and_summary(stub_db):
+    r = _client().post("/use_cases/kf-mfg-workorder/generate-data?count=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["replaced"] is False
+    assert body["summary"]["total_nodes"] > 0
+    assert "@prefix" in body["ttl"]
+
+
+def test_generate_data_404_on_unknown_bundle(stub_db):
+    r = _client().post("/use_cases/no-such/generate-data")
+    assert r.status_code == 404
+
+
+def test_generate_data_count_validation(stub_db):
+    r = _client().post("/use_cases/kf-mfg-workorder/generate-data?count=0")
+    assert r.status_code == 400
+
+
 def test_cors_safe_invariant():
     """If origins include '*', credentials must be disabled. Either way the
     app must never combine wildcard origins with credentials enabled."""
