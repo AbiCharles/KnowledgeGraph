@@ -18,6 +18,10 @@ def build_agent(system_prompt: str):
         model=s.openai_model,
         api_key=s.openai_api_key,
         temperature=0,
+        # Cap each LLM round-trip; default of 600s would tie up a worker for
+        # 10 minutes on a hung request. Setting affects both /agents and the
+        # ReAct loop's tool-calling round-trips.
+        timeout=s.openai_timeout_seconds,
     )
     return create_react_agent(
         model=llm,

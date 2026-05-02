@@ -61,6 +61,46 @@ def _save(data: dict) -> None:
     os.replace(tmp, _USAGE_FILE)
 
 
+# ── Cross-process file lock ──────────────────────────────────────────────────
+# The threading.Lock above only synchronises within ONE process. With multiple
+# uvicorn workers (or sibling processes hitting the same usage file) we need
+# OS-level coordination to keep the JSON consistent. fcntl.flock is the
+# stdlib portable answer on POSIX; on Windows it's a no-op (msvcrt.locking
+# would be the equivalent). Falling back to no-op there is acceptable —
+# pilot deployments are POSIX, and the in-process lock still helps.
+try:
+    import fcntl as _fcntl  # noqa: F401  (Linux/macOS)
+    _HAVE_FLOCK = True
+except ImportError:
+    _HAVE_FLOCK = False
+
+
+class _FileLock:
+    """Context manager that flock()s a sidecar lock file. Acquires LOCK_EX
+    so concurrent readers and writers serialise. Best-effort — if flock
+    isn't available (Windows) we degrade to the in-process lock only."""
+    def __init__(self, path):
+        self._path = str(path) + ".lock"
+        self._fh = None
+
+    def __enter__(self):
+        if not _HAVE_FLOCK:
+            return self
+        # Make sure parent dir exists (first run before _save has touched it).
+        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        self._fh = open(self._path, "a+")
+        _fcntl.flock(self._fh.fileno(), _fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        if self._fh is not None:
+            try:
+                _fcntl.flock(self._fh.fileno(), _fcntl.LOCK_UN)
+            finally:
+                self._fh.close()
+                self._fh = None
+
+
 def _today_record(data: dict) -> dict:
     today = _today()
     rec = data.get(today)
@@ -91,7 +131,7 @@ def assert_within_daily_cap() -> None:
     cap = float(s.llm_daily_usd_cap or 0)
     if cap <= 0:
         return
-    with _lock:
+    with _lock, _FileLock(_USAGE_FILE):
         data = _load()
         rec = _today_record(data)
         if rec["usd"] >= cap:
@@ -113,7 +153,7 @@ def record_call(model: str, input_tokens: int, output_tokens: int, kind: str = "
     """
     cost = estimate_cost(model, input_tokens, output_tokens)
     try:
-        with _lock:
+        with _lock, _FileLock(_USAGE_FILE):
             data = _load()
             rec = _today_record(data)
             rec["calls"] += 1
@@ -137,7 +177,7 @@ def record_call(model: str, input_tokens: int, output_tokens: int, kind: str = "
 
 def usage_today() -> dict:
     """Return today's record (for surfacing in API responses)."""
-    with _lock:
+    with _lock, _FileLock(_USAGE_FILE):
         return _today_record(_load())
 
 

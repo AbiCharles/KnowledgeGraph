@@ -33,7 +33,31 @@ async def _lifespan(app: FastAPI):
     except Exception as exc:
         logging.getLogger(__name__).warning("Startup DB activation skipped: %s", exc)
     yield
+    # Graceful shutdown: wait briefly for in-flight pipeline / curation runs
+    # to release their lock so we don't tear down the driver mid-write and
+    # leave the database in a half-loaded state. SIGTERM honours this; an
+    # operator who really wants to abort can SIGKILL.
+    await _drain_active_locks(timeout_seconds=20)
     close_driver()
+
+
+async def _drain_active_locks(timeout_seconds: int) -> None:
+    """Wait until pipeline_lock and curation_lock are free, or until the
+    timeout elapses. Polls every 250ms — cheap on idle, responsive on busy."""
+    import asyncio
+    from api import locks
+    log = logging.getLogger(__name__)
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    while asyncio.get_event_loop().time() < deadline:
+        if not locks.pipeline_lock.locked() and not locks.curation_lock.locked():
+            return
+        log.info("Shutdown: waiting for in-flight pipeline/curation to finish…")
+        await asyncio.sleep(0.25)
+    log.warning(
+        "Shutdown: timeout (%ds) waiting for locks; closing driver anyway. "
+        "In-flight writes may not have completed.",
+        timeout_seconds,
+    )
 
 app = FastAPI(
     title="KF Knowledge Graph API",

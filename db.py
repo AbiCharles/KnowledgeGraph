@@ -16,11 +16,35 @@ import re
 from functools import lru_cache
 
 from neo4j import Driver, GraphDatabase
+from neo4j.exceptions import (
+    ServiceUnavailable, SessionExpired, TransientError,
+)
+from tenacity import (
+    retry, retry_if_exception_type, stop_after_attempt, wait_exponential,
+)
 
 from config import get_settings
 
 
 log = logging.getLogger(__name__)
+
+
+# Transient Neo4j errors that retrying actually helps with — connection
+# blips, leader re-elections in a cluster, momentary timeouts. We DON'T
+# retry on ClientError / DatabaseError / SyntaxError because those are
+# the caller's problem and retrying just hides them.
+_TRANSIENT_NEO4J_ERRS = (ServiceUnavailable, SessionExpired, TransientError)
+
+
+def _retry_transient(fn):
+    """Decorator: retry on transient Neo4j errors with exponential backoff,
+    capped at 3 total attempts so a real outage still surfaces quickly."""
+    return retry(
+        retry=retry_if_exception_type(_TRANSIENT_NEO4J_ERRS),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=0.2, min=0.2, max=2.0),
+        reraise=True,
+    )(fn)
 
 _active_database: str | None = None
 _multi_db_supported: bool | None = None  # None = not yet probed
@@ -141,12 +165,14 @@ def _session(driver):
     return driver.session()
 
 
+@_retry_transient
 def run_on_database(db_name: str | None, cypher: str, params: dict = None) -> list[dict]:
     """One-shot query against a specific database without mutating module state.
 
     Pass `db_name=None` to fall through to the driver default. Used by the
     federation view to fetch one bundle's graph while the active bundle stays
-    pointed elsewhere — single-DB mode just ignores the name.
+    pointed elsewhere — single-DB mode just ignores the name. Same retry
+    policy as run_query.
     """
     driver = get_driver()
     if db_name and supports_multi_db():
@@ -160,26 +186,38 @@ def run_on_database(db_name: str | None, cypher: str, params: dict = None) -> li
 
 # ── Query helpers ─────────────────────────────────────────────────────────────
 
+@_retry_transient
 def run_query(cypher: str, params: dict = None) -> list[dict]:
-    """Run a Cypher query and return rows as plain dicts."""
+    """Run a Cypher query and return rows as plain dicts.
+
+    Retries on transient Neo4j errors (connection blip, leader re-election,
+    momentary timeout) with exponential backoff, up to 3 total attempts.
+    Permanent errors (syntax, constraint violation, auth) propagate
+    immediately so the caller sees the real problem.
+    """
     driver = get_driver()
     with _session(driver) as session:
         result = session.run(cypher, params or {})
         return [dict(record) for record in result]
 
 
+@_retry_transient
 def run_write(cypher: str, params: dict = None) -> None:
-    """Run a write Cypher statement (no return value needed)."""
+    """Run a write Cypher statement (no return value needed). Retried on
+    transient errors — see run_query for the retry policy."""
     driver = get_driver()
     with _session(driver) as session:
         session.run(cypher, params or {})
 
 
+@_retry_transient
 def run_writes_in_tx(statements: list[tuple[str, dict]]) -> None:
     """Run a list of (cypher, params) writes inside a single transaction.
 
     Either all succeed or all are rolled back — useful for stage 4 which would
     otherwise leave the graph half-populated if one MERGE in a sequence fails.
+    Retried on transient errors; the whole batch retries together so partial
+    state can't leak.
     """
     driver = get_driver()
     with _session(driver) as session:
@@ -195,6 +233,8 @@ def run_in_session(work):
     Lets callers chain reads + writes against the same session — important
     when downstream writes refer to elementIds/IDs that the read just yielded
     (Neo4j only guarantees elementId stability within one session/transaction).
+    Not retried automatically because the work function may have arbitrary
+    side effects; callers wrap their own retry policy if needed.
     """
     driver = get_driver()
     with _session(driver) as session:
