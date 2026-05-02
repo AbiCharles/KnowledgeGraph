@@ -12,6 +12,7 @@ from config import get_settings
 from db import close_driver
 
 from api.routes import pipeline, query, agents, ontology, nl, use_cases, usage, graph, schema
+from api.security import APIKeyAuthMiddleware, RateLimitMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 
@@ -69,8 +70,17 @@ app.add_middleware(
     allow_origins=_origins or ["http://localhost:8000"],
     allow_credentials=_allow_creds,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
+
+# Auth + rate-limit. Both no-op when their corresponding setting is empty/0
+# so local dev stays frictionless. Order: auth first (cheap header check),
+# rate limit second (fends off abusers who can't authenticate either way).
+# Starlette runs middleware in REVERSE registration order, so add rate
+# limit first then auth — auth runs outermost and rejects bad keys before
+# the rate-limit bucket is even consulted.
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(APIKeyAuthMiddleware)
 
 app.include_router(pipeline.router,  prefix="/pipeline",  tags=["Pipeline"])
 app.include_router(query.router,     prefix="/query",     tags=["Query"])
