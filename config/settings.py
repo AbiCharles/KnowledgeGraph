@@ -30,6 +30,24 @@ class Settings(BaseSettings):
     # use rough public-pricing tables; treat as a soft guardrail, not billing.
     llm_daily_usd_cap: float = 5.0
 
+    # API key required on every API request (sent as the X-API-Key header).
+    # Empty default keeps local dev frictionless; set to a long random string
+    # before exposing the API beyond localhost. Static-asset GETs (`/`,
+    # /index.html, .css/.js/etc.) and a small public allowlist (/health,
+    # /capabilities, /docs, /openapi.json) bypass auth so the dashboard can
+    # bootstrap and prompt the operator for the key.
+    api_key: str = ""
+
+    # Per-IP rate limit on API endpoints (requests per minute). Token bucket
+    # in memory — enough for a single-process pilot deployment; for multi-
+    # worker put a shared Redis-backed limiter in front. 0 = disabled.
+    rate_limit_per_minute: int = 120
+
+    # Per-call timeout for OpenAI requests (seconds). LangChain/openai-python
+    # default is 600s which leaves a hung request tying up a worker for 10
+    # minutes — way too long.
+    openai_timeout_seconds: int = 60
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

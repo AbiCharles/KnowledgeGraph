@@ -4,16 +4,37 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>KF Knowledge Graph</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- All CDN assets pinned to specific versions + SRI hashes so a CDN compromise
+     can't inject code into the dashboard. Update both URL + integrity hash
+     together if you bump a version. -->
+<script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"
+        integrity="sha384-YTBHtsL8yVTHcLakYNyrOfK3K+QQcXiECuaALJ+3j7Mo681Rtzadt8NR6WrZH+eQ"
+        crossorigin="anonymous"></script>
 <!-- CodeMirror 5 — Cypher editor with schema-driven autocomplete -->
-<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
-<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.css">
-<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css">
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/cypher/cypher.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.min.js"></script>
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css"
+        integrity="sha384-phfEUVAmRZV1Pzn/Xgxc3NH6zPMDuer0wHU9jRQKhNBBLyV4MP1gaBY1sxfxxPRT"
+        crossorigin="anonymous">
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.css"
+        integrity="sha384-S4UBk64rtla3i7jU1OfBBBgD1T+Si880BgZxMhvlqibC7+rpycLVw+mnhfS0RZ0L"
+        crossorigin="anonymous">
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css"
+        integrity="sha384-taFaaS975Q8MrqKRHLJ5eZcZoGrPsLzg7IR+pbYWFZQ4CprQ4Xw6BZKtN8FRcJ5L"
+        crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"
+        integrity="sha384-CtBuRlcKITyrd+aBeTPNFB1/T8+kvtNQiWMCLtiGvD6NpLOJAdt8e8PpJJ2Gn1D0"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/cypher/cypher.min.js"
+        integrity="sha384-0SC0/tH4RKyZ63gXM79lx4DqLOoeU12eF8MDExVCyFaKaUMwbIX+W0A5rFmKUY2/"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.js"
+        integrity="sha384-4/Pls6PVcvwrEwQW+NNalPikGxQqWc/vC/epwgbcYTKNy+5Zy5ZLBnEPdy7rYQJQ"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.min.js"
+        integrity="sha384-syGEV/F5UdVbpIEMH5owBa1U3KtVa4kcBzsDb3YevB5oEe69JWVdV/4SLV8OPA9v"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.min.js"
+        integrity="sha384-Q1bXASnJgEhS8C0bKSZQRYmnyQjuG47fXyPqdh1c4iUD9giCdSmXiS6hAb00VnK3"
+        crossorigin="anonymous"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#0b0e14;--bg2:#111620;--bg3:#181e2e;--bg4:#1e2538;--border:#2a3148;--border2:#3a4460;--text:#d4deff;--text2:#6e7fa8;--text3:#4a5578;--teal:#00c4b8;--blue:#4da6ff;--purple:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;}
@@ -855,17 +876,62 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 // API CLIENT
 // =============================================================================
 const API = "";
+// API key sent on every API call when the backend is configured with one
+// (Settings.api_key). Stored in sessionStorage so it survives reloads in
+// the same tab but not across browser restarts — operators paste it once
+// per session via the inline prompt below.
+function _getApiKey(){ return sessionStorage.getItem('kf_api_key') || ''; }
+function _setApiKey(k){
+  if(k) sessionStorage.setItem('kf_api_key', k);
+  else  sessionStorage.removeItem('kf_api_key');
+}
+function _withAuth(headers){
+  const k = _getApiKey();
+  return k ? {...headers, 'X-API-Key': k} : headers;
+}
 async function api(path, body, signal){
+  const baseHeaders = body ? {'Content-Type':'application/json'} : {};
   const opts = body
-    ? {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), signal}
-    : {method:'GET', signal};
+    ? {method:'POST', headers: _withAuth(baseHeaders), body: JSON.stringify(body), signal}
+    : {method:'GET',  headers: _withAuth(baseHeaders), signal};
   const res = await fetch(API+path, opts);
+  if(res.status === 401){
+    // Backend is configured with an API key but ours is missing/invalid.
+    // Prompt once, then retry the request with the new key.
+    const entered = await promptApiKey();
+    if(entered){
+      _setApiKey(entered);
+      // Retry once. If it still 401s, fall through to the normal error path.
+      const opts2 = body
+        ? {method:'POST', headers: _withAuth(baseHeaders), body: JSON.stringify(body), signal}
+        : {method:'GET',  headers: _withAuth(baseHeaders), signal};
+      const res2 = await fetch(API+path, opts2);
+      if(res2.ok) return res2.json();
+      let msg2 = `HTTP ${res2.status}`;
+      try{ const j2 = await res2.json(); msg2 = j2.detail || JSON.stringify(j2); } catch(_){}
+      throw new Error(msg2);
+    }
+  }
   if(!res.ok){
     let msg = `HTTP ${res.status}`;
     try{ const j = await res.json(); msg = j.detail || JSON.stringify(j); } catch(_){}
     throw new Error(msg);
   }
   return res.json();
+}
+
+// Inline API-key prompt — fires when the backend returns 401. Uses native
+// prompt() rather than a full modal so it works even if the dashboard's
+// CSS hasn't loaded yet (e.g. very early in the boot sequence).
+function promptApiKey(){
+  return new Promise(resolve => {
+    const k = window.prompt(
+      'API key required\n\nThe server is configured with an API key. ' +
+      'Paste yours below — it stays in this browser tab\'s sessionStorage ' +
+      'and is sent as the X-API-Key header on every request.'
+    );
+    resolve(k ? k.trim() : null);
+  });
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const isAbort = (err) => err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''));
@@ -1115,7 +1181,7 @@ async function runPipeline(){
   try {
     const res = await fetch('/pipeline/run?stream=true', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: _withAuth({'Content-Type': 'application/json'}),
       body: '{}',
       signal: _pAbort.signal,
     });
@@ -1462,7 +1528,7 @@ async function loadAgentConversation(cid, rowEl){
 async function deleteAgentConversation(cid){
   if(!confirm('Delete this conversation? The :Conversation and :Message nodes will be removed from Neo4j.')) return;
   try {
-    const res = await fetch(`/agents/conversations/${encodeURIComponent(cid)}`, {method: 'DELETE'});
+    const res = await fetch(`/agents/conversations/${encodeURIComponent(cid)}`, {method: 'DELETE', headers: _withAuth({})});
     if(!res.ok){ const e = await res.json(); throw new Error(e.detail || `HTTP ${res.status}`); }
     openAgentHistory();   // refresh
   } catch(err){
@@ -3052,7 +3118,7 @@ async function deactivateBundle(slug){
   );
   try {
     const url = '/use_cases/deactivate' + (dropDb ? '?drop_database=true' : '');
-    const res = await fetch(url, {method: 'POST'});
+    const res = await fetch(url, {method: 'POST', headers: _withAuth({})});
     const body = await res.json();
     if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
     _invalidateUseCasesCache();
@@ -3125,7 +3191,7 @@ async function submitEdit(kind){
   result.innerHTML = '<div style="font-size:10px;color:var(--text3)">Applying…</div>';
   try {
     const res = await fetch(`/use_cases/${encodeURIComponent(_editSlug)}/ontology/add`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: _withAuth({'Content-Type': 'application/json'}),
       body: JSON.stringify(payload),
     });
     const body = await res.json();
@@ -3264,7 +3330,7 @@ async function runGenData(replace){
   result.innerHTML = '<div style="font-size:10px;color:var(--text3)">Generating…</div>';
   try {
     const url = `/use_cases/${encodeURIComponent(_genSlug)}/generate-data?count=${count}&seed=${seed}&replace=${replace?'true':'false'}`;
-    const res = await fetch(url, {method: 'POST'});
+    const res = await fetch(url, {method: 'POST', headers: _withAuth({})});
     const body = await res.json();
     if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
     const summary = body.summary;
@@ -3509,7 +3575,7 @@ async function deleteUseCase(slug, isActive){
   }
   if(!confirm(`Delete bundle "${slug}"?\n\nThis removes its files from disk (use_cases/${slug}/) and cannot be undone.`)) return;
   try {
-    const res = await fetch(`/use_cases/${encodeURIComponent(slug)}`, {method: 'DELETE'});
+    const res = await fetch(`/use_cases/${encodeURIComponent(slug)}`, {method: 'DELETE', headers: _withAuth({})});
     if(!res.ok){ const e = await res.json(); throw new Error(e.detail || `HTTP ${res.status}`); }
     _invalidateUseCasesCache();
     renderUseCases(true);
@@ -3590,7 +3656,9 @@ async function submitUpload(){
   const submit = document.getElementById('uc-upload-submit');
   submit.disabled = true;
   try {
-    const res = await fetch('/use_cases/upload', {method: 'POST', body: fd});
+    // Don't set Content-Type for multipart — the browser appends the
+    // boundary automatically when given a FormData body.
+    const res = await fetch('/use_cases/upload', {method: 'POST', body: fd, headers: _withAuth({})});
     if(!res.ok){ const e = await res.json(); throw new Error(e.detail || `HTTP ${res.status}`); }
     closeUploadModal();
     _invalidateUseCasesCache();
