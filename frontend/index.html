@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>KF Knowledge Graph</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<!-- CodeMirror 5 — Cypher editor with schema-driven autocomplete -->
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.css">
+<link  rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css">
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/cypher/cypher.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#0b0e14;--bg2:#111620;--bg3:#181e2e;--bg4:#1e2538;--border:#2a3148;--border2:#3a4460;--text:#d4deff;--text2:#6e7fa8;--text3:#4a5578;--teal:#00c4b8;--blue:#4da6ff;--purple:#a78bfa;--green:#34d399;--amber:#fbbf24;--red:#f87171;}
@@ -60,6 +69,19 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
 .nl-ed:focus{border-color:var(--teal)}.nl-ed::placeholder{color:var(--text3)}
 .cy-ed{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:8px 11px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);resize:none;height:68px;outline:none;transition:border-color .18s;line-height:1.6}
 .cy-ed:focus{border-color:var(--teal)}
+/* CodeMirror Cypher editor — match dashboard theme */
+.CodeMirror{height:78px;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);line-height:1.6;padding:4px 6px}
+.CodeMirror-focused{border-color:var(--teal)}
+.CodeMirror-hints{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text2);padding:3px;box-shadow:0 4px 16px rgba(0,0,0,.5);max-height:240px}
+.CodeMirror-hint{padding:3px 9px;color:var(--text2);border-radius:3px}
+li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
+.cm-keyword{color:var(--purple)!important;font-weight:600}
+.cm-string,.cm-string-2{color:#7eea9e!important}
+.cm-number{color:var(--amber)!important}
+.cm-variable,.cm-variable-2{color:var(--blue)!important}
+.cm-property{color:var(--text)!important}
+.cm-comment{color:var(--text3)!important;font-style:italic}
+.cm-operator{color:var(--teal)!important}
 .ts-strip{margin-top:5px;padding:6px 10px;background:rgba(0,196,184,.05);border:1px solid rgba(0,196,184,.15);border-radius:4px;font-size:9.5px;display:none;gap:8px}
 .ts-lbl{color:var(--teal);font-family:'JetBrains Mono',monospace;font-size:9px;white-space:nowrap}
 .ts-txt{color:var(--text2);font-family:'JetBrains Mono',monospace;font-size:9px;line-height:1.5;flex:1;word-break:break-all}
@@ -1497,6 +1519,9 @@ let PLAIN_EXAMPLES = [];  // populated from manifest.examples[].label
 let NL_RULES = [];        // populated from manifest.nl_rules
 
 let currentMode = 'nl';
+let _cypherCM = null;       // CodeMirror instance (lazy-init in initCypherEditor)
+let _schemaCache = null;    // {prefix, labels, relationship_types, properties_by_label}
+
 function setMode(mode){
   currentMode = mode;
   const nl = mode === 'nl';
@@ -1506,7 +1531,100 @@ function setMode(mode){
   document.getElementById('wrap-cy').style.display = nl ? 'none' : 'block';
   document.getElementById('strip-nl').style.display = nl ? 'flex' : 'none';
   document.getElementById('strip-cy').style.display = nl ? 'none' : 'flex';
-  document.getElementById('qhint').textContent = nl ? 'Type a plain-English question (LLM fallback if no example matches)' : 'Write a Cypher MATCH query';
+  document.getElementById('qhint').textContent = nl ? 'Type a plain-English question (LLM fallback if no example matches)' : 'Write a Cypher MATCH query — Ctrl-Space autocompletes labels/relationships/properties';
+  // CodeMirror only computes layout when its container is visible. Refresh
+  // when switching into cypher mode so the editor renders properly even when
+  // the dashboard boots in NL mode.
+  if(!nl && _cypherCM){ setTimeout(() => _cypherCM.refresh(), 0); }
+}
+
+// Helpers — keep existing call sites (.value) working alongside the editor.
+function getCypher(){
+  if(_cypherCM) return _cypherCM.getValue();
+  return document.getElementById('cypher-input').value;
+}
+function setCypher(text){
+  if(_cypherCM){ _cypherCM.setValue(text || ''); }
+  document.getElementById('cypher-input').value = text || '';
+}
+
+function initCypherEditor(){
+  if(_cypherCM || !window.CodeMirror) return;
+  const ta = document.getElementById('cypher-input');
+  if(!ta) return;
+  _cypherCM = CodeMirror.fromTextArea(ta, {
+    mode: 'application/x-cypher-query',
+    theme: 'material-darker',
+    lineNumbers: false,
+    lineWrapping: true,
+    autoCloseBrackets: true,
+    matchBrackets: true,
+    extraKeys: {
+      'Ctrl-Space': 'autocomplete',
+      'Cmd-Space': 'autocomplete',
+      'Ctrl-Enter': () => runQuery(),
+      'Cmd-Enter': () => runQuery(),
+    },
+    hintOptions: {
+      completeSingle: false,
+      hint: cypherHint,
+    },
+  });
+  // Sync changes back to the underlying textarea so legacy .value reads still work.
+  _cypherCM.on('change', () => _cypherCM.save());
+}
+
+// Schema-driven autocomplete. Suggestions are scoped by token context:
+//   - inside :Label   → labels
+//   - inside [:REL]   → relationship types
+//   - after a "."     → properties
+//   - otherwise       → labels + rels + Cypher keywords
+function cypherHint(cm){
+  const cur = cm.getCursor();
+  const line = cm.getLine(cur.line);
+  const upTo = line.slice(0, cur.ch);
+  const tokenMatch = upTo.match(/[A-Za-z_][A-Za-z0-9_]*$/);
+  const token = tokenMatch ? tokenMatch[0] : '';
+  const start = cur.ch - token.length;
+  const s = _schemaCache || {labels: [], relationship_types: [], properties_by_label: {}, prefix: ''};
+  const pfx = s.prefix ? s.prefix + '__' : '';
+  const allProps = Array.from(new Set(
+    Object.values(s.properties_by_label || {}).flat()
+  )).sort();
+  const KEYWORDS = ['MATCH','OPTIONAL MATCH','WHERE','WITH','RETURN','ORDER BY','LIMIT','SKIP','AND','OR','NOT','AS','IN','IS NULL','IS NOT NULL','DISTINCT','COUNT','COLLECT','UNWIND','CASE','WHEN','THEN','ELSE','END'];
+
+  let pool = [];
+  // Inside a :Label or [:Rel] bracket — narrow.
+  const labelCtx = /[:(]\s*[`]?[A-Za-z0-9_]*$/.test(upTo) && !/\[\s*[`]?[A-Za-z0-9_]*$/.test(upTo);
+  const relCtx   = /\[\s*:?[`]?[A-Za-z0-9_]*$/.test(upTo);
+  const propCtx  = /\.[`]?[A-Za-z0-9_]*$/.test(upTo);
+
+  if(propCtx){
+    pool = allProps.map(p => ({text: '`' + pfx + p + '`', displayText: p}));
+  } else if(relCtx){
+    pool = (s.relationship_types || []).map(r => ({text: '`' + pfx + r + '`', displayText: r}));
+  } else if(labelCtx){
+    pool = (s.labels || []).map(l => ({text: '`' + pfx + l + '`', displayText: l}));
+  } else {
+    pool = [
+      ...(s.labels || []).map(l => ({text: l, displayText: l + '  (label)'})),
+      ...(s.relationship_types || []).map(r => ({text: r, displayText: r + '  (relationship)'})),
+      ...allProps.map(p => ({text: p, displayText: p + '  (property)'})),
+      ...KEYWORDS.map(k => ({text: k, displayText: k + '  (keyword)'})),
+    ];
+  }
+
+  const list = pool
+    .filter(item => !token || item.displayText.toLowerCase().startsWith(token.toLowerCase()))
+    .slice(0, 50);
+
+  return {list, from: CodeMirror.Pos(cur.line, start), to: cur};
+}
+
+async function loadSchemaForEditor(){
+  try {
+    _schemaCache = await api('/schema/summary');
+  } catch(_){ _schemaCache = null; }
 }
 
 function nlMatchRegex(q){
@@ -1529,7 +1647,7 @@ function setExampleQ(i){
     document.getElementById('nl-input').value = PLAIN_EXAMPLES[i];
     document.getElementById('nl-input').dispatchEvent(new Event('input'));
   } else {
-    document.getElementById('cypher-input').value = EXAMPLES[i];
+    setCypher(EXAMPLES[i]);
   }
 }
 
@@ -1543,7 +1661,7 @@ async function getActiveCypher(){
     const data = await api('/nl', {question: q});
     return {cypher: data.cypher, source: 'llm', explanation: data.explanation};
   }
-  const c = document.getElementById('cypher-input').value.trim();
+  const c = getCypher().trim();
   return c ? {cypher: c, source: 'cypher'} : null;
 }
 
@@ -1568,7 +1686,7 @@ function switchTab(t, el){
 
 function clearQ(){
   document.getElementById('nl-input').value = '';
-  document.getElementById('cypher-input').value = '';
+  setCypher('');
   document.getElementById('ts-strip').style.display = 'none';
   if(gFrame){ cancelAnimationFrame(gFrame); gFrame = null; }
   lastResult = null;
@@ -1617,7 +1735,7 @@ function saveCurrentQuery(){
   const mode = currentMode;
   const text = (mode === 'nl'
     ? document.getElementById('nl-input').value
-    : document.getElementById('cypher-input').value).trim();
+    : getCypher()).trim();
   if(!text){ alert('Nothing to save — type a question or paste a Cypher query first.'); return; }
   const label = prompt('Label for this saved query:', text.slice(0, 60));
   if(!label) return;
@@ -1660,7 +1778,7 @@ function loadSavedQuery(i){
     document.getElementById('nl-input').value = q.text;
     document.getElementById('nl-input').dispatchEvent(new Event('input'));
   } else {
-    document.getElementById('cypher-input').value = q.text;
+    setCypher(q.text);
   }
   document.getElementById('qsaved-panel').style.display = 'none';
 }
@@ -3049,6 +3167,8 @@ async function refreshDbChip(){
 (async function boot(){
   renderStages({});
   renderOntSteps({});
+  initCypherEditor();
+  loadSchemaForEditor();   // fire-and-forget; autocomplete shows once it lands
   await loadManifest();
   const ok = await loadGraph();
   if(ok && NODES.length){
