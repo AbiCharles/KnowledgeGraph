@@ -133,6 +133,22 @@ The four left-panel tabs each have a dedicated guide in [docs/](docs/):
   streaming works, troubleshooting.
 - **[Agent Ops](docs/agent-ops.md)** — running manifest-defined agents,
   reading the conversation history.
+- **[Operations](docs/operations.md)** — production deployment, env vars,
+  Docker compose, observability, backups, security checklist, common
+  incidents.
+
+## Production deployment
+
+```bash
+# Generate an API key
+export API_KEY=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')
+
+# Bring up Neo4j + the API together (uses the bundled Dockerfile)
+docker compose up -d
+```
+
+See [docs/operations.md](docs/operations.md) for the full hardening +
+backup checklist.
 
 ## Endpoints (overview)
 
