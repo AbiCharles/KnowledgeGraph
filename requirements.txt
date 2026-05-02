@@ -1,6 +1,10 @@
 # API
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
+# Required by FastAPI for multipart/form-data parsing — bundle uploads use
+# Form() + UploadFile, which import this lazily and crash on first request
+# if it's missing.
+python-multipart==0.0.18
 python-dotenv==1.0.1
 pydantic==2.10.3
 pydantic-settings==2.6.1
