@@ -40,6 +40,7 @@ class AgentRunRequest(BaseModel):
 class AgentRunResponse(BaseModel):
     agent: str
     result: str
+    conversation_id: str | None = None
 
 
 class NLRequest(BaseModel):
