@@ -76,6 +76,29 @@ async def set_active_use_case(req: SetActiveRequest):
         return uc.manifest.model_dump()
 
 
+@router.post("/deactivate")
+async def deactivate_active_use_case(drop_database: bool = False):
+    """Clear the active selection. No bundle stays selected, so the
+    dashboard banner says 'No active use case' and operations that need
+    one will 404 until the operator activates again.
+
+    `?drop_database=true` also drops the bundle's Neo4j database to reclaim
+    disk space — bundle files on disk are kept either way, so re-activating
+    just re-hydrates from scratch via the pipeline.
+    """
+    async with acquire_or_409(locks.active_lock, "deactivation"):
+        try:
+            result = use_case_registry.deactivate(drop_database=bool(drop_database))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        try:
+            from pipeline.schema_introspection import invalidate_schema_cache
+            invalidate_schema_cache()
+        except Exception:
+            pass
+        return result
+
+
 @router.post("/upload", response_model=UseCaseSummary)
 async def upload_bundle(
     slug: str = Form(...),

@@ -52,6 +52,26 @@ def test_set_active_unknown_slug_404(stub_db):
     assert r.status_code == 404
 
 
+def test_deactivate_route_returns_slug(stub_db):
+    """The route writes to the real use_cases/.active so we capture the
+    previous active slug and restore it after the assertion — keeps later
+    tests that depend on an active bundle (schema, agents) working."""
+    from pipeline import use_case_registry
+    prev = use_case_registry.get_active_slug()
+    try:
+        r = _client().post("/use_cases/deactivate")
+        assert r.status_code == 200
+        body = r.json()
+        assert "slug" in body and "dropped_database" in body
+        assert body["dropped_database"] is False  # default keeps DB intact
+        # After deactivation get_active_slug must report None — that's the
+        # whole point of the empty-marker semantics.
+        assert use_case_registry.get_active_slug() is None
+    finally:
+        if prev:
+            use_case_registry.set_active(prev)
+
+
 def test_get_use_case_by_slug_returns_manifest(stub_db):
     r = _client().get("/use_cases/kf-mfg-workorder")
     assert r.status_code == 200
