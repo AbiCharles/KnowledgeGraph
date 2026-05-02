@@ -159,6 +159,63 @@ async def upload_bundle(
     return _summary(uc, use_case_registry.get_active_slug())
 
 
+@router.get("/{slug}/versions")
+def list_bundle_versions(slug: str):
+    """Archived snapshots of a bundle (newest first), one per prior upload."""
+    if not (use_case_registry.USE_CASES_DIR / slug).is_dir():
+        raise HTTPException(status_code=404, detail=f"No bundle {slug!r}")
+    return {"slug": slug, "versions": use_case_registry.list_versions(slug)}
+
+
+@router.get("/{slug}/versions/{stamp}")
+def get_bundle_version(slug: str, stamp: str):
+    """Raw text payload (manifest/ontology/data) of a specific archived version."""
+    try:
+        return use_case_registry.load_version(slug, stamp)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/{slug}/versions/{stamp}/diff")
+def diff_bundle_version(slug: str, stamp: str):
+    """Structural diff: archived version (old) vs current live bundle (new)."""
+    from pipeline.manifest_diff import diff_snapshots
+    try:
+        old = use_case_registry.load_version(slug, stamp)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    bundle_dir = use_case_registry.USE_CASES_DIR / slug
+    if not bundle_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No live bundle {slug!r}")
+    new = {
+        "manifest": (bundle_dir / "manifest.yaml").read_text(encoding="utf-8") if (bundle_dir / "manifest.yaml").exists() else "",
+        "ontology": (bundle_dir / "ontology.ttl").read_text(encoding="utf-8") if (bundle_dir / "ontology.ttl").exists() else "",
+        "data":     (bundle_dir / "data.ttl").read_text(encoding="utf-8")     if (bundle_dir / "data.ttl").exists()     else "",
+    }
+    return {"slug": slug, "from": stamp, "to": "current", "diff": diff_snapshots(old, new)}
+
+
+@router.post("/{slug}/versions/{stamp}/restore", response_model=UseCaseSummary)
+async def restore_bundle_version(slug: str, stamp: str):
+    """Promote an archived version back to live. The current version is itself
+    archived first, so a restore is fully reversible."""
+    async with acquire_or_409(locks.active_lock, "version restore"):
+        try:
+            uc = use_case_registry.restore_version(slug, stamp)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Restore failed: {exc}")
+        try:
+            from pipeline.schema_introspection import invalidate_schema_cache
+            invalidate_schema_cache()
+        except Exception:
+            pass
+        return _summary(uc, use_case_registry.get_active_slug())
+
+
 @router.delete("/{slug}")
 def delete_use_case(slug: str):
     try:
