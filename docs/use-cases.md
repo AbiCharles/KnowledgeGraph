@@ -1,9 +1,12 @@
 # Use Cases tab
 
-The **Use Cases** tab is the home base. It lists every bundle on disk, lets
-you upload new ones, switch which is active, archive/diff/roll back prior
-versions, generate synthetic data, edit the ontology in-place, and compare
-two bundles' graphs side-by-side.
+The **Use Cases** tab is the home base. Two sub-tabs:
+
+- **Bundles** (default) — list/activate/upload/version/diff/edit bundles.
+- **Datasources** — manage external datasource connectors (Postgres today)
+  and the pull adapters that wire them into stage 4 of the hydration
+  pipeline. See the [Datasources sub-tab](#datasources-sub-tab) section
+  near the bottom of this doc.
 
 ## Anatomy of a bundle
 
@@ -295,3 +298,112 @@ Top-right of the dashboard header. Three states:
   click the chip to retry.
 
 Click the chip any time to manually refresh.
+
+## Datasources sub-tab
+
+Switch to the **Datasources** sub-tab at the top of the Use Cases pane to
+manage external connectors and the pull adapters that use them. Each
+bundle gets its own card showing:
+
+- **Datasources** — declared connectors (Postgres today). Each row
+  shows: id, kind, env-var name, an env-status pill (`env ✓` /
+  `env ✗` / `inline`), and how many pull adapters reference it.
+- **Pull adapters** — stage-4 adapters with a `pull:` block. Each row
+  shows: adapter id, target Neo4j label, datasource id, key property.
+
+Per-row buttons:
+
+| Button | What it does |
+|---|---|
+| **Test** (datasource) | Server opens a real Postgres connection and runs `SELECT 1`. Shows a green success or a red error message — no exceptions, the message is always renderable. |
+| **Remove** (datasource) | Removes the datasource from the manifest. Refuses if any pull adapter still references it (drop the adapters first). |
+| **▶ Run** (pull adapter) | Executes ONE pull adapter outside the full hydration pipeline. Acquires the pipeline lock so a concurrent full pipeline run gets 409 — a manual pull during hydration can't corrupt state. Use this to iterate on SQL without re-running stages 0–6 every time. |
+| **Remove** (pull adapter) | Drops the adapter from the manifest. |
+
+Per-bundle buttons:
+
+| Button | What it does |
+|---|---|
+| **+ Datasource** | Opens a modal: id, kind (postgres), env var holding the DSN. The DSN value itself is **never** stored or asked for in the UI — only the env var name. Set the env var on the host before clicking Test. |
+| **+ Pull adapter** | Opens a modal: adapter id, source system, datasource picker (auto-populated from declared datasources), target class picker (auto-populated from `in_scope_classes`), SQL textarea, key property. |
+
+### Security model
+
+DSNs (which contain credentials) live exclusively in environment
+variables. The UI shows only the env var **name** + a presence chip
+indicating whether the variable is set in the running server's
+environment — it never displays, accepts, or stores the value itself.
+
+If you set the env var **after** the dashboard loaded the env-status,
+click `Test` on the datasource — the server reads the env var fresh on
+every test, so the result reflects the current state.
+
+### Workflow: add a Postgres datasource end-to-end
+
+1. **Set the env var on the host:**
+   ```bash
+   export ORDERS_PG_DSN='postgresql://reader:secret@orders-db.internal:5432/orders'
+   ```
+   Restart uvicorn so it picks up the new env var.
+
+2. **Datasources tab → + Datasource** on the target bundle:
+   - Datasource id: `orders_db`
+   - Env var: `ORDERS_PG_DSN`
+   - Click **Add datasource**.
+
+3. **Click "Test"** on the new datasource row. You should see
+   `✓ Connected; SELECT 1 succeeded. (rows=1)`. If not, the message
+   tells you what to fix (env var unset, host wrong, auth failed, etc.).
+
+4. **Click "+ Pull adapter"** on the same bundle:
+   - Adapter id: `PG-ORDERS-001`
+   - Source system: `ORDERS_DB`
+   - Datasource: `orders_db` (from dropdown)
+   - Target class: `Order` (from dropdown — must be in
+     `in_scope_classes`)
+   - SQL:
+     ```sql
+     SELECT order_id   AS "orderId",
+            customer   AS "customerName",
+            status     AS "orderStatus"
+     FROM orders LIMIT 1000
+     ```
+   - Key property: `orderId` (must match an aliased SQL column)
+   - Click **Add pull adapter**.
+
+5. **Click "▶ Run"** on the new pull adapter to test the SQL → MERGE
+   round-trip without running the full pipeline. Status alert shows
+   row count + `PASS`/`FAIL` log lines.
+
+6. From now on, every Hydration Pipeline → Run will include this pull
+   in stage 4. Iterate on the SQL by clicking ▶ Run again — no need
+   to re-run stages 0–6 just to test query changes.
+
+### Manifest YAML produced
+
+After the steps above the bundle's manifest gets these blocks added
+(both auto-archived under Versions, so you can roll back any change):
+
+```yaml
+datasources:
+  - id: orders_db
+    kind: postgres
+    dsn_env: ORDERS_PG_DSN
+
+stage4_adapters:
+  - adapter_id: PG-ORDERS-001
+    source_system: ORDERS_DB
+    protocol: postgres
+    sync_mode: FULL
+    target_class: Order
+    match_property: sourceSystem
+    pull:
+      datasource: orders_db
+      sql: |
+        SELECT order_id   AS "orderId",
+               customer   AS "customerName",
+               status     AS "orderStatus"
+        FROM orders LIMIT 1000
+      label: Order
+      key_property: orderId
+```

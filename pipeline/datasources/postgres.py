@@ -67,7 +67,14 @@ def _resolve_dsn(spec) -> str:
 @contextmanager
 def _connect(spec):
     """Open a short-lived psycopg connection. Lazy import so the missing-
-    driver case surfaces only when a postgres datasource is actually used."""
+    driver case surfaces only when a postgres datasource is actually used.
+
+    Order matters: resolve the DSN BEFORE importing psycopg. If both are
+    broken, the operator sees the env-var error (cheap, actionable) rather
+    than the install hint (which they'd then fix only to still hit the
+    config error). Fail fast on the cheapest check.
+    """
+    dsn = _resolve_dsn(spec)
     try:
         import psycopg  # noqa: WPS433  (intentional lazy import)
     except ImportError as exc:
@@ -75,7 +82,6 @@ def _connect(spec):
             "Postgres datasource requested but psycopg isn't installed. "
             "Run: pip install 'psycopg[binary]'"
         ) from exc
-    dsn = _resolve_dsn(spec)
     conn = psycopg.connect(dsn, connect_timeout=10)
     try:
         # Belt and braces: also enforce read-only at the session level so
