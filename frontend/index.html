@@ -626,6 +626,30 @@ header{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 18px;
   </div>
 </div>
 
+<!-- Generate test-data modal -->
+<div class="uc-modal-bg" id="gen-modal">
+  <div class="uc-modal" style="width:520px">
+    <div class="uc-modal-title">Generate test data</div>
+    <div class="uc-modal-sub">Synthesises plausible instance data from <code id="gen-slug"></code>'s ontology. URIs use the bundle's primary namespace; literals are picked by property name (e.g. <code>woStatus</code> → OPEN/CLOSED/…) and <code>rdfs:range</code>. Object-property edges only target instances of the declared range; <code>owl:cardinality 1</code> is honoured.</div>
+    <div class="uc-form-row" style="flex-direction:row;gap:14px;margin-bottom:10px">
+      <div style="flex:1">
+        <div class="uc-form-label">Instances per class</div>
+        <input class="uc-form-input" id="gen-count" type="number" min="1" max="500" value="10" />
+      </div>
+      <div style="flex:1">
+        <div class="uc-form-label">Random seed</div>
+        <input class="uc-form-input" id="gen-seed" type="number" value="42" title="Same seed always yields the same data — change to re-roll" />
+      </div>
+    </div>
+    <div id="gen-result" style="display:none;margin-top:10px;padding:9px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:5px"></div>
+    <div class="uc-modal-actions">
+      <button class="uc-modal-cancel" onclick="closeGenModal()">Close</button>
+      <button class="uc-modal-cancel" onclick="runGenData(false)" title="Generate but do not write to disk">Preview</button>
+      <button class="uc-modal-submit" onclick="runGenData(true)" title="Replace the bundle's data.ttl (current version is archived first)">Replace data.ttl</button>
+    </div>
+  </div>
+</div>
+
 <!-- Bundle version diff modal -->
 <div class="uc-modal-bg" id="uc-diff-modal">
   <div class="uc-modal" style="width:640px">
@@ -2535,6 +2559,7 @@ function _renderUcCards(data){
           ${agentChip}${tags}
         </div>
         <div class="uc-card-actions">
+          <button class="uc-btn uc-btn-versions" data-action="gen" data-slug="" title="Synthesise plausible instance data from the bundle's ontology">Generate data</button>
           <button class="uc-btn uc-btn-versions" data-action="versions" data-slug="" title="View prior uploads of this bundle">Versions</button>
           <button class="uc-btn uc-btn-delete" data-action="delete" data-slug="" data-active="${b.is_active}"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
           ${b.is_active ? '' : '<button class="uc-btn uc-btn-activate" data-action="activate" data-slug="">Activate</button>'}
@@ -2561,7 +2586,58 @@ document.addEventListener('click', (e) => {
   if(btn.dataset.action === 'activate') activateUseCase(slug);
   else if(btn.dataset.action === 'delete') deleteUseCase(slug, btn.dataset.active === 'true');
   else if(btn.dataset.action === 'versions') toggleVersionsPanel(slug, btn);
+  else if(btn.dataset.action === 'gen') openGenDataModal(slug);
 });
+
+let _genSlug = null;
+
+function openGenDataModal(slug){
+  _genSlug = slug;
+  document.getElementById('gen-slug').textContent = slug;
+  document.getElementById('gen-count').value = 10;
+  document.getElementById('gen-seed').value = 42;
+  document.getElementById('gen-result').innerHTML = '';
+  document.getElementById('gen-result').style.display = 'none';
+  document.getElementById('gen-modal').classList.add('open');
+}
+function closeGenModal(){ document.getElementById('gen-modal').classList.remove('open'); }
+
+async function runGenData(replace){
+  if(!_genSlug) return;
+  const count = parseInt(document.getElementById('gen-count').value, 10) || 10;
+  const seed = parseInt(document.getElementById('gen-seed').value, 10) || 42;
+  const result = document.getElementById('gen-result');
+  result.style.display = 'block';
+  if(replace && !confirm(`Replace data.ttl in "${_genSlug}" with ${count} instances per class?\n\nThe current data.ttl will be archived (visible under Versions) so you can roll back.`)) return;
+  result.innerHTML = '<div style="font-size:10px;color:var(--text3)">Generating…</div>';
+  try {
+    const url = `/use_cases/${encodeURIComponent(_genSlug)}/generate-data?count=${count}&seed=${seed}&replace=${replace?'true':'false'}`;
+    const res = await fetch(url, {method: 'POST'});
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    const summary = body.summary;
+    const rows = (summary.classes || []).map(c =>
+      `<div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2)">${escapeHTML(c.class)}: <span style="color:var(--teal)">${c.count}</span></div>`
+    ).join('');
+    const note = replace
+      ? '<div style="margin-top:8px;font-size:10px;color:#7eea9e">✓ Bundle data.ttl replaced. Run the Hydration Pipeline to load it into Neo4j.</div>'
+      : '<div style="margin-top:8px;font-size:10px;color:var(--text3)">Preview only — click "Replace data.ttl" to commit.</div>';
+    const previewBlock = body.ttl
+      ? `<details style="margin-top:8px"><summary style="cursor:pointer;font-size:10px;color:var(--text2)">Show TTL preview (${body.ttl.length} chars)</summary><pre class="uc-diff-pre">${escapeHTML(body.ttl.slice(0, 4000))}${body.ttl.length>4000?'\n…':''}</pre></details>`
+      : '';
+    result.innerHTML = `
+      <div style="font-size:11px;color:var(--text);margin-bottom:6px"><b>${summary.total_nodes}</b> nodes, <b>${summary.total_edges}</b> edges</div>
+      ${rows}
+      ${previewBlock}
+      ${note}`;
+    if(replace){
+      _invalidateUseCasesCache();
+      renderUseCases(true);
+    }
+  } catch(err){
+    result.innerHTML = `<div class="errbox" style="margin:0">${escapeHTML(err.message)}</div>`;
+  }
+}
 
 async function toggleVersionsPanel(slug, btn){
   const card = btn.closest('.uc-card');
