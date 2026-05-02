@@ -141,6 +141,9 @@ adapters declared, skipping` and reports `pass`.
 
 #### End-to-end: adding a Postgres pull from the dashboard
 
+> Full walkthrough with troubleshooting:
+> [Datasources quick-start](datasources-quickstart.md). Summary below.
+
 The fastest way to wire a Postgres source into the pipeline:
 
 1. **Set the env var** holding the DSN, e.g.

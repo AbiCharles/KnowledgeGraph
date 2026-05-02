@@ -123,6 +123,12 @@ In the dashboard:
 
 The four left-panel tabs each have a dedicated guide in [docs/](docs/):
 
+> **Want to load data from Postgres instead of `data.ttl`?** Start with
+> the [Datasources quick-start](docs/datasources-quickstart.md) — a
+> step-by-step walkthrough from `pip install` through `▶ Run` to seeing
+> your rows as graph nodes.
+
+
 - **[Use Cases](docs/use-cases.md)** — bundle CRUD, activation/deactivation,
   versioning, generate test data, edit ontology, side-by-side compare.
 - **[Ontology Curation](docs/ontology-curation.md)** — the 6-step
