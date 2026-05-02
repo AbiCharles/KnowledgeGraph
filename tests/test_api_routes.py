@@ -102,6 +102,19 @@ def test_generate_data_count_validation(stub_db):
     assert r.status_code == 400
 
 
+def test_agent_conversations_list_returns_empty_initially(stub_db):
+    r = _client().get("/agents/conversations")
+    assert r.status_code == 200
+    body = r.json()
+    assert "slug" in body and "conversations" in body
+    assert isinstance(body["conversations"], list)
+
+
+def test_agent_conversations_get_unknown_404(stub_db):
+    r = _client().get("/agents/conversations/does-not-exist-cid")
+    assert r.status_code == 404
+
+
 def test_capabilities_route_returns_multi_db_flag(stub_db):
     r = _client().get("/capabilities")
     assert r.status_code == 200
