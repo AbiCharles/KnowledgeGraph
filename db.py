@@ -50,3 +50,15 @@ def run_writes_in_tx(statements: list[tuple[str, dict]]) -> None:
             for cypher, params in statements:
                 tx.run(cypher, params or {})
             tx.commit()
+
+
+def run_in_session(work):
+    """Open one session and run `work(session)`, returning whatever it returns.
+
+    Lets callers chain reads + writes against the same session — important
+    when downstream writes refer to elementIds/IDs that the read just yielded
+    (Neo4j only guarantees elementId stability within one session/transaction).
+    """
+    driver = get_driver()
+    with driver.session() as session:
+        return work(session)

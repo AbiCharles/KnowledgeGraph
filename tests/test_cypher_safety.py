@@ -49,6 +49,18 @@ def test_keyword_inside_comment_is_safe():
     assert_read_only("MATCH (n) /* delete this later */ RETURN n")
 
 
+# Property names that happen to spell forbidden keywords (n.show, n.start, etc.)
+# tokenise as those keywords but are property accesses, not Cypher commands.
+@pytest.mark.parametrize("q", [
+    "MATCH (n) RETURN n.show AS visibility",
+    "MATCH (n) WHERE n.start = 1 RETURN n",
+    "MATCH (n) RETURN n.create_date AS d",   # underscore continuation
+    "MATCH (n) RETURN n . show AS x",        # whitespace-padded dot
+])
+def test_property_access_not_a_keyword(q):
+    assert_read_only(q)
+
+
 # --- The bypass that the original substring filter missed ----------------
 
 def test_no_substring_bypass_via_string_literal():

@@ -2,7 +2,9 @@ from fastapi import APIRouter, HTTPException
 
 from pipeline.run import run_pipeline
 from pipeline import use_case_registry
-from api.locks import pipeline_lock
+from pipeline.schema_introspection import invalidate_schema_cache
+from api import locks
+from api.locks import acquire_or_409
 from api.schemas import PipelineRunResponse, StageResultSchema
 
 router = APIRouter()
@@ -12,12 +14,10 @@ router = APIRouter()
 async def run_pipeline_endpoint():
     """Run the 7-stage hydration pipeline against the active use case.
 
-    Guarded by a module-level lock — concurrent calls return 409 instead of
-    racing each other and corrupting the graph.
+    Concurrent calls return 409 immediately (non-blocking acquire — no
+    TOCTOU race between checking and acquiring the lock).
     """
-    if pipeline_lock.locked():
-        raise HTTPException(status_code=409, detail="A pipeline run is already in progress.")
-    async with pipeline_lock:
+    async with acquire_or_409(locks.pipeline_lock, "pipeline"):
         try:
             use_case = use_case_registry.get_active()
         except RuntimeError as exc:
@@ -33,4 +33,6 @@ async def run_pipeline_endpoint():
                 overall = "fail"
                 break
 
+        # Pipeline rewrites Neo4j data so any cached enum samples are stale.
+        invalidate_schema_cache()
         return PipelineRunResponse(stages=completed, overall=overall)
