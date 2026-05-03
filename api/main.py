@@ -12,7 +12,8 @@ from config import get_settings
 from db import close_driver
 
 from api.routes import (
-    pipeline, query, agents, ontology, nl, use_cases, usage, graph, schema, datasources, builder,
+    pipeline, query, agents, ontology, nl, use_cases, usage, graph, schema,
+    datasources, builder, refine,
 )
 from api.security import APIKeyAuthMiddleware, RateLimitMiddleware
 from api.observability import (
@@ -127,6 +128,7 @@ app.include_router(graph.router,     prefix="/graph",     tags=["Graph"])
 app.include_router(schema.router,    prefix="/schema",    tags=["Schema"])
 app.include_router(datasources.router, prefix="/datasources", tags=["Datasources"])
 app.include_router(builder.router,   prefix="/builder",   tags=["Builder"])
+app.include_router(refine.router,    prefix="/refine",    tags=["Refiner"])
 
 
 @app.get("/health", tags=["Health"])
