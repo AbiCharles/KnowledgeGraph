@@ -572,8 +572,17 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
           <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
           RUN CURATION
         </button>
-        <span id="ont-toolbar-info" style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">Validates the active bundle's ontology.ttl with rdflib + pyshacl</span>
+        <button class="kgpbtn" onclick="analysePipelineWithLLM('curation')" title="Send curation logs + ontology to the LLM for fix suggestions (counts against daily LLM cap)" style="margin-left:8px">&#129504; Analyse with LLM</button>
+        <label style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;display:flex;gap:5px;align-items:center;margin-left:8px">
+          <input type="checkbox" id="ont-auto-llm" /> Auto-LLM on FAIL
+        </label>
+        <label style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;display:flex;gap:5px;align-items:center;margin-left:8px">
+          <input type="checkbox" id="ont-include-data" onchange="confirmPiiConsent(this)" /> Include data sample
+        </label>
+        <span id="ont-toolbar-info" style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:auto">Validates the active bundle's ontology.ttl with rdflib + pyshacl</span>
       </div>
+      <!-- LLM findings dock — same shape as the hydration one. -->
+      <div id="ont-llm-dock" style="display:none;border-bottom:1px solid var(--border);padding:11px 14px;background:var(--bg2);max-height:280px;overflow-y:auto"></div>
       <div class="pipe-body">
         <div class="pipe-left">
           <div class="stagelist" id="ont-steplist"></div>
@@ -623,8 +632,19 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
           <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
           RUN PIPELINE
         </button>
-        <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace">7 stages against live Neo4j</span>
+        <button class="kgpbtn" onclick="analysePipelineWithLLM('hydration')" title="Send pipeline logs + ontology to the LLM for fix suggestions (counts against daily LLM cap)" style="margin-left:8px">&#129504; Analyse with LLM</button>
+        <label style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;display:flex;gap:5px;align-items:center;margin-left:8px">
+          <input type="checkbox" id="pip-auto-llm" /> Auto-LLM on FAIL
+        </label>
+        <label style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;display:flex;gap:5px;align-items:center;margin-left:8px">
+          <input type="checkbox" id="pip-include-data" onchange="confirmPiiConsent(this)" /> Include data sample
+        </label>
+        <span style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:auto">7 stages against live Neo4j</span>
       </div>
+      <!-- Findings dock — populated by analysePipelineWithLLM() with the
+           same ref-finding cards used by the Refine sub-tab. Stays empty
+           until the operator triggers analysis (button or auto-on-FAIL). -->
+      <div id="pip-llm-dock" style="display:none;border-bottom:1px solid var(--border);padding:11px 14px;background:var(--bg2);max-height:280px;overflow-y:auto"></div>
       <div class="pipe-body">
         <div class="pipe-left">
           <div class="stagelist" id="stagelist"></div>
@@ -1534,12 +1554,21 @@ async function runPipeline(){
     if(overall === null) overall = (allStages.length && allStages[allStages.length-1].status === 'fail') ? 'fail' : 'pass';
     addDiv(la, '── Overall: ' + overall.toUpperCase() + ' ──', 'ldiv');
 
+    // Stash for the LLM analyser — both the manual "Analyse with LLM"
+    // button and auto-on-FAIL read from this.
+    _lastPipelineStages = allStages.slice();
+
     if(overall === 'pass'){
       showValidationReport(allStages);
       try { await loadGraph(); } catch(_){}
       document.getElementById('kgscrollhint').style.display = 'block';
       document.getElementById('kgpanel').classList.add('active');
       setTimeout(initKGCanvas, 250);
+    } else {
+      // Auto-fire LLM analysis on FAIL when the operator opted in.
+      // Best-effort — failure to invoke the analyser shouldn't break
+      // the pipeline-result rendering.
+      try { await _autoAnalyseOnFail('hydration', allStages); } catch(_){}
     }
 
   } catch(err){
@@ -1682,8 +1711,12 @@ async function runCuration(){
     }
 
     addDiv(la, '── Overall: ' + data.overall.toUpperCase() + ' ──', 'ldiv');
+    // Stash the curation steps for the LLM analyser (manual + auto paths).
+    _lastCurationStages = (data.stages || []).slice();
     if(data.overall === 'pass'){
       setTimeout(startTransfer, 600);
+    } else {
+      try { await _autoAnalyseOnFail('curation', _lastCurationStages); } catch(_){}
     }
   } catch(err){
     addLog(la, isAbort(err) ? 'WARN' : 'ERROR', isAbort(err) ? 'Curation cancelled by user' : ('Curation call failed: ' + err.message));
@@ -4641,6 +4674,160 @@ async function _builderCreate(){
   });
   _invalidateUseCasesCache();
   switchPipeTab('uc');
+}
+
+// =============================================================================
+// PIPELINE ANALYSER — LLM advice on Hydration / Curation runs
+// =============================================================================
+// Two trigger paths share one backend:
+//   - Manual button → analysePipelineWithLLM(kind)
+//   - Auto-on-FAIL  → fired from runPipeline / runCuration when a stage fails
+// Both render findings into the dock div for that pane (#pip-llm-dock /
+// #ont-llm-dock) using the same ref-finding card shape as the Refine sub-tab.
+let _piiConsent = false;   // session-scoped — explicit operator opt-in
+let _lastPipelineStages = [];
+let _lastCurationStages = [];
+
+function _stagesFor(kind){
+  return kind === 'curation' ? _lastCurationStages : _lastPipelineStages;
+}
+
+function _dockFor(kind){
+  return document.getElementById(kind === 'curation' ? 'ont-llm-dock' : 'pip-llm-dock');
+}
+
+function _includeDataChecked(kind){
+  const id = kind === 'curation' ? 'ont-include-data' : 'pip-include-data';
+  return document.getElementById(id)?.checked === true;
+}
+
+function _autoLlmChecked(kind){
+  const id = kind === 'curation' ? 'ont-auto-llm' : 'pip-auto-llm';
+  return document.getElementById(id)?.checked === true;
+}
+
+function confirmPiiConsent(checkbox){
+  // Operator just toggled "Include data sample". If turning ON, get
+  // explicit consent the first time. Persists for the session.
+  if(!checkbox.checked) return;
+  if(_piiConsent) return;
+  const ok = confirm(
+    'Include live data sample?\n\n' +
+    'When the LLM analyser runs, it will fetch up to 10 sample nodes per ' +
+    'class from the active Neo4j and include them in the prompt.\n\n' +
+    'Common PII property names (email, phone, ssn, password, names, address, ' +
+    'birthdate, credit card, api keys) are server-side redacted before the ' +
+    'prompt is built. Other property values are sent as-is to OpenAI.\n\n' +
+    'Continue?'
+  );
+  if(ok){
+    _piiConsent = true;
+  } else {
+    checkbox.checked = false;
+  }
+}
+
+async function analysePipelineWithLLM(kind){
+  const slug = MANIFEST?.slug;
+  if(!slug){ alert('No active bundle.'); return; }
+  const stages = _stagesFor(kind);
+  if(!stages.length){
+    alert('Run the ' + (kind === 'curation' ? 'curation' : 'pipeline') + ' first — the LLM analyses what happened.');
+    return;
+  }
+  await _fireAnalyser(slug, kind, stages, /* failed_only */ false);
+}
+
+async function _autoAnalyseOnFail(kind, stages){
+  // Auto-fire: only the failing stages, only if the operator opted in.
+  if(!_autoLlmChecked(kind)) return;
+  const slug = MANIFEST?.slug;
+  if(!slug) return;
+  await _fireAnalyser(slug, kind, stages, /* failed_only */ true);
+}
+
+async function _fireAnalyser(slug, kind, stages, failedOnly){
+  const dock = _dockFor(kind);
+  if(!dock) return;
+  dock.style.display = 'block';
+  dock.innerHTML = '<div style="font-size:10.5px;color:var(--text3)">🧠 Asking LLM analyser…</div>';
+  try {
+    const res = await api(`/refine/${encodeURIComponent(slug)}/analyse-pipeline`, {
+      stage_logs: stages,
+      failed_only: failedOnly,
+      include_data_sample: _includeDataChecked(kind),
+    });
+    _renderPipelineLLMDock(dock, res, slug);
+  } catch(err){
+    dock.innerHTML = `<div class="errbox" style="margin:0">Analyser failed: ${escapeHTML(err.message)}</div>`;
+  }
+}
+
+function _renderPipelineLLMDock(dock, res, slug){
+  if(res.cap_hit){
+    dock.innerHTML = `<div style="font-size:10.5px;color:var(--red)">Daily LLM cap reached — ${escapeHTML(res.cap_message || 'try again tomorrow.')}</div>`;
+    return;
+  }
+  if(res.error){
+    dock.innerHTML = `<div style="font-size:10.5px;color:var(--red)">LLM call failed: ${escapeHTML(res.error)}</div>`;
+    return;
+  }
+  if(!res.findings || res.findings.length === 0){
+    dock.innerHTML = '<div style="font-size:10.5px;color:#7eea9e">✓ LLM had no suggestions for this run.</div>';
+    return;
+  }
+  const c = res.counts || {error:0, warn:0, info:0};
+  dock.innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">
+      <span class="ref-summary-chip ref-chip-llm">${res.findings.length} LLM suggestion${res.findings.length!==1?'s':''}</span>
+      ${c.error ? `<span class="ref-summary-chip ref-chip-error">${c.error} ERROR</span>` : ''}
+      ${c.warn  ? `<span class="ref-summary-chip ref-chip-warn">${c.warn} WARN</span>` : ''}
+      ${c.info  ? `<span class="ref-summary-chip ref-chip-info">${c.info} INFO</span>` : ''}
+      <span style="flex:1"></span>
+      ${res.tokens ? `<span style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace">tokens: ${res.tokens.input}+${res.tokens.output}</span>` : ''}
+    </div>
+    ${res.findings.map(_renderPipelineLLMCard).join('')}`;
+  dock.querySelectorAll('[data-pl-action]').forEach(btn => {
+    btn.onclick = () => _onPipelineLLMAction(btn, slug, dock, res);
+  });
+}
+
+function _renderPipelineLLMCard(f){
+  const sev = f.severity || 'info';
+  const isAuto = f.fix?.kind && f.fix.kind !== 'noop';
+  return `<div class="ref-finding" style="margin-bottom:8px;padding:9px 12px" data-pl-fid="${escapeHTML(f.id)}">
+    <div class="ref-finding-hdr" style="margin-bottom:4px">
+      <span class="ref-finding-sev ref-sev-${sev}" style="font-size:8.5px">${sev.toUpperCase()}</span>
+      <span class="ref-finding-title" style="font-size:10.5px">${escapeHTML(f.title || '')}</span>
+      <span class="ref-finding-source ref-finding-source-llm">LLM</span>
+    </div>
+    ${f.description ? `<div class="ref-finding-desc">${escapeHTML(f.description)}</div>` : ''}
+    ${f.fix?.preview ? `<div class="ref-finding-preview">${escapeHTML(f.fix.preview)}</div>` : ''}
+    <div class="ref-finding-actions">
+      ${isAuto
+        ? `<button class="ref-action ref-action-apply" data-pl-action="apply" data-fix='${escapeHTML(JSON.stringify(f.fix))}'>Apply</button>`
+        : `<span style="font-size:9px;color:var(--text3);font-style:italic;align-self:center">Manual fix only</span>`}
+    </div>
+  </div>`;
+}
+
+async function _onPipelineLLMAction(btn, slug, dock, res){
+  if(btn.dataset.plAction !== 'apply') return;
+  const fix = JSON.parse(btn.dataset.fix.replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    await api(`/refine/${encodeURIComponent(slug)}/apply`, {fix});
+    // Mark this finding as applied so it disappears on the next render.
+    const fid = btn.closest('[data-pl-fid]')?.dataset.plFid;
+    if(fid) res.findings = res.findings.filter(f => f.id !== fid);
+    _renderPipelineLLMDock(dock, res, slug);
+    // Bust the schema cache so the editor's autocomplete picks up the change.
+    _schemaCache = null;
+    if(typeof loadSchemaForEditor === 'function') loadSchemaForEditor();
+  } catch(err){
+    alert('Apply failed: ' + err.message);
+    btn.disabled = false; btn.textContent = 'Apply';
+  }
 }
 
 // =============================================================================

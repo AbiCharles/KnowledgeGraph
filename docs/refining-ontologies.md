@@ -177,6 +177,71 @@ re-run Hydration to repopulate, then validate.
 
 ---
 
+## LLM analysis on pipeline runs
+
+The Refine sub-tab is great for proactive review of an idle bundle, but
+when a Hydration or Curation pipeline FAILs the LLM advice should
+appear *where the failure happened* — not two clicks away. Two
+trigger paths share one backend:
+
+### Manual button — always available
+
+A `🧠 Analyse with LLM` button now lives on both the **Hydration
+Pipeline** and **Ontology Curation** toolbars. Click any time after
+running the pipeline (pass or fail) to get LLM suggestions in a dock
+between the toolbar and the stage list. Each suggestion has the same
+Apply UX as the Refine sub-tab — fixes auto-archive the prior bundle
+version under Versions for one-click rollback.
+
+### Auto-on-FAIL — opt-in
+
+Each pane has an `Auto-LLM on FAIL ☑` checkbox. When ticked, any
+stage failure auto-fires the LLM analyser with the failing stage's
+logs. Findings appear inline immediately. Defaults to OFF so the
+operator opts in once per session — no surprise LLM credit burn.
+
+### PII protection for sample data
+
+Both panes also have an `Include data sample ☑` checkbox. When
+ticked, the analyser fetches up to 10 sample nodes per class from the
+live Neo4j to give the LLM more context. **Toggling it on triggers a
+one-time consent prompt** describing exactly what gets sent.
+
+Property values matching any of these patterns are server-side
+redacted to `<redacted>` before they enter the prompt:
+
+- `email` (anywhere in the name)
+- `ssn`, `social.security`
+- `phone`, `mobile`
+- `password`, `secret`
+- `apiKey`, `accessToken`, `bearer`
+- `firstName`, `lastName`, `fullName`
+- `address` (but not `addressId` — that's an FK, not the address itself)
+- `birthDate`, `dob`
+- `creditCard`, `ccNumber`
+
+The redaction allowlist lives in
+`pipeline/refiner/pipeline_analyser.py:_REDACT_PATTERNS` so an auditor
+can grep for the policy. To extend it for your own deployment, append
+patterns there.
+
+## Empty in-scope classes are now warnings, not failures
+
+Stage 6's auto-generated `count(<Class>) >= 1` check is smart about
+severity:
+
+- Class with **at least one declared datatype property** → `severity=critical`
+  (a missing instance is a real ingestion bug — "I forgot to load Orders").
+- Class with **zero datatype properties** (marker class — taxonomy or
+  linter test fixture) → `severity=warning`. The check still runs and
+  logs a WARN line if the class is empty, but the pipeline doesn't FAIL.
+
+This means bundles like `lint-demo` with deliberately property-less
+classes (`Orphan`, `bad_class`) hydrate cleanly without needing fake
+bare instances just to satisfy validation. Bundles with explicit
+`stage6_checks:` are unaffected — only the auto-generated default
+suite changes severity.
+
 ## API reference
 
 ```bash
@@ -195,6 +260,15 @@ curl -X POST http://localhost:8000/refine/<slug>/llm-coach
 curl -X POST http://localhost:8000/refine/<slug>/apply \
   -H 'Content-Type: application/json' \
   -d '{"fix": <fix object from a finding>}'
+
+# Analyse a pipeline run with the LLM (counts against daily LLM cap)
+curl -X POST http://localhost:8000/refine/<slug>/analyse-pipeline \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "stage_logs": [<StageResult-shaped dicts>],
+    "failed_only": true,
+    "include_data_sample": false
+  }'
 ```
 
 Full schema at [http://localhost:8000/docs](http://localhost:8000/docs).

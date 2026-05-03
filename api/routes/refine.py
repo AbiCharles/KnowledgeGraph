@@ -85,6 +85,48 @@ def lint_route(slug: str):
         raise HTTPException(status_code=500, detail=f"Linter failed: {exc}")
 
 
+@router.post("/{slug}/analyse-pipeline")
+def analyse_pipeline_route(slug: str, req: dict):
+    """Ask the LLM to analyse a pipeline run (Hydration or Curation)
+    and suggest fixes. Counts against the daily LLM cap; degrades to
+    empty findings (with cap_hit=true in the response) if the cap is
+    hit. Findings follow the same shape as /refine/{slug}/llm-coach
+    so the frontend can render them through the existing finding-card
+    UI and apply them via /refine/{slug}/apply.
+
+    Body: {
+      stage_logs:  list of StageResult-shaped dicts,
+      failed_only: bool (default true) — when true, drops PASS stages
+                   from the prompt so the LLM focuses on failures,
+      include_data_sample: bool (default false) — when true, fetch
+                           sample nodes per class from the live graph.
+                           PII values are server-side redacted before
+                           the prompt sees them.
+    }
+    """
+    try:
+        uc = use_case_registry.load(slug)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    stage_logs = (req or {}).get("stage_logs") or []
+    failed_only = bool((req or {}).get("failed_only", True))
+    include_data_sample = bool((req or {}).get("include_data_sample", False))
+
+    try:
+        from pipeline.refiner import pipeline_analyser
+        return pipeline_analyser.analyse(
+            uc, stage_logs,
+            failed_only=failed_only,
+            include_data_sample=include_data_sample,
+        )
+    except Exception as exc:
+        log.exception("Pipeline analyser crashed for bundle %s", slug)
+        raise HTTPException(status_code=502, detail=f"Pipeline analyser failed: {exc}")
+
+
 @router.post("/{slug}/llm-coach")
 def llm_coach_route(slug: str):
     """Ask the LLM for structural improvement suggestions. Counts

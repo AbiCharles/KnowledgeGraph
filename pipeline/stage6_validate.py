@@ -102,16 +102,59 @@ def _run_check(use_case, check) -> tuple[bool, str]:
 
 
 def _generic_checks(use_case):
-    """Default suite when manifest has no checks: count >= 1 for each in-scope class."""
+    """Default suite when manifest has no checks: count >= 1 for each
+    in-scope class.
+
+    Smart severity: a class with at least one declared datatype property
+    in the ontology gets severity=critical (a missing instance is a real
+    ingestion bug — "I forgot to load Orders"). A class with zero
+    datatype properties is treated as a marker class (taxonomy / parent
+    type / linter test fixture) and gets severity=warning so an empty
+    count surfaces as a WARN log line without failing the pipeline.
+
+    Rationale: marker classes can't carry meaningful data anyway, and
+    requiring fake bare instances just to satisfy validation defeats
+    the point. Classes with properties stay strict — a missing instance
+    of a real entity should still halt the pipeline.
+    """
     from pipeline.use_case import CheckSpec
-    return [
-        CheckSpec(
-            id=f"VC-AUTO-{i+1:02d}",
-            kind="count_at_least",
-            severity="critical",
-            label=cls,
-            threshold=1,
-            description=f"At least one {cls} node",
+
+    # Walk the ontology directly via rdflib to count datatype properties
+    # PER CLASS (only those whose rdfs:domain == this class). We avoid
+    # pipeline.schema_introspection.schema_summary because that helper
+    # promotes unscoped properties into every class's bucket for
+    # autocomplete purposes — that would defeat marker-class detection.
+    introspect_failed = False
+    classes_with_props: set[str] = set()
+    try:
+        from rdflib import Graph, OWL, RDF, RDFS, URIRef
+        g = Graph()
+        g.parse(str(use_case.ontology_path), format="turtle")
+        for prop in g.subjects(RDF.type, OWL.DatatypeProperty):
+            for domain in g.objects(prop, RDFS.domain):
+                if isinstance(domain, URIRef):
+                    s = str(domain)
+                    local = s.rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+                    classes_with_props.add(local)
+    except Exception:
+        # Corrupt TTL would have failed earlier stages, but if it
+        # somehow reaches here be conservative — every check critical
+        # rather than silently degrading every one to warning.
+        introspect_failed = True
+
+    checks = []
+    for i, cls in enumerate(use_case.manifest.in_scope_classes):
+        is_marker = (not introspect_failed) and (cls not in classes_with_props)
+        sev = "warning" if is_marker else "critical"
+        suffix = " (warning — class has no datatype properties)" if is_marker else ""
+        checks.append(
+            CheckSpec(
+                id=f"VC-AUTO-{i+1:02d}",
+                kind="count_at_least",
+                severity=sev,
+                label=cls,
+                threshold=1,
+                description=f"At least one {cls} node{suffix}",
+            )
         )
-        for i, cls in enumerate(use_case.manifest.in_scope_classes)
-    ]
+    return checks
