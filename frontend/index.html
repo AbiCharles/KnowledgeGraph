@@ -444,6 +444,30 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 .bld-col-row:last-child{border-bottom:none}
 .bld-col-row select{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:2px 5px;font-size:9.5px;color:var(--text);font-family:'JetBrains Mono',monospace}
 .bld-pkpill{font-size:8.5px;padding:1px 6px;border-radius:8px;background:rgba(0,196,184,.12);color:var(--teal);border:1px solid rgba(0,196,184,.4);font-family:'JetBrains Mono',monospace;font-weight:600}
+/* Refiner / Refine sub-tab */
+.ref-summary-chip{padding:5px 11px;border-radius:11px;font-size:9.5px;letter-spacing:.5px;font-weight:600;border:1px solid var(--border)}
+.ref-chip-error{background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.4)}
+.ref-chip-warn {background:rgba(251,191,36,.1);color:var(--amber);border-color:rgba(251,191,36,.4)}
+.ref-chip-info {background:rgba(0,196,184,.08);color:var(--teal);border-color:rgba(0,196,184,.4)}
+.ref-chip-llm  {background:rgba(167,139,250,.1);color:var(--purple);border-color:rgba(167,139,250,.4)}
+.ref-chip-cap  {background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.4)}
+.ref-finding{border:1px solid var(--border);border-radius:6px;background:var(--bg3);margin-bottom:10px;padding:11px 14px}
+.ref-finding-hdr{display:flex;align-items:flex-start;gap:9px;margin-bottom:6px}
+.ref-finding-sev{font-size:8.5px;padding:1px 7px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-weight:600;letter-spacing:.5px;flex-shrink:0;margin-top:2px}
+.ref-sev-error{background:var(--red);color:#fff}
+.ref-sev-warn {background:var(--amber);color:#1a0e00}
+.ref-sev-info {background:rgba(0,196,184,.2);color:var(--teal);border:1px solid var(--teal)}
+.ref-finding-title{flex:1;font-size:11px;font-weight:600;color:var(--text);line-height:1.4}
+.ref-finding-source{font-size:8.5px;padding:1px 6px;border-radius:8px;font-family:'JetBrains Mono',monospace;color:var(--text3);border:1px solid var(--border);flex-shrink:0;margin-top:2px}
+.ref-finding-source-llm{color:var(--purple);border-color:rgba(167,139,250,.4)}
+.ref-finding-desc{font-size:10px;color:var(--text2);line-height:1.55;margin-bottom:7px}
+.ref-finding-preview{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--teal);background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:4px 8px;margin-bottom:8px}
+.ref-finding-actions{display:flex;gap:6px;justify-content:flex-end}
+.ref-action{padding:4px 11px;border-radius:3px;font-size:9.5px;font-family:'JetBrains Mono',monospace;cursor:pointer;background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.ref-action:hover{border-color:var(--teal);color:var(--teal)}
+.ref-action-apply{background:var(--teal);color:#001a18;border-color:var(--teal);font-weight:600}
+.ref-action-apply:hover{background:#00dfd2;color:#001a18}
+.ref-action[disabled]{opacity:.4;cursor:not-allowed}
 
 /* Upload modal */
 .uc-modal-bg{display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,9,14,.75);align-items:center;justify-content:center}
@@ -528,7 +552,15 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
     </div>
 
     <!-- ── Ontology Curation pane ─────────────────────────────────────────── -->
-    <div class="pipe-pane" id="pipe-ont-pane" style="display:none">
+    <div class="pipe-pane" id="pipe-ont-pane" style="display:none;flex-direction:column">
+      <!-- Sub-tabs: Validate (existing) | Refine (new) -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0">
+        <button id="ont-subtab-validate" class="ptab ptab-active" onclick="switchOntSubTab('validate')" style="border-radius:0;border-bottom:none;padding:8px 16px;font-size:10px">Validate</button>
+        <button id="ont-subtab-refine"   class="ptab"             onclick="switchOntSubTab('refine')"   style="border-radius:0;border-bottom:none;padding:8px 16px;font-size:10px">Refine</button>
+      </div>
+
+      <!-- Validate sub-pane (existing curation flow) -->
+      <div id="ont-sub-validate" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
       <div class="pc">
         <button class="rbtn ont-rbtn" id="ont-rbtn" onclick="runCuration()">
           <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="2,1 12,7 2,13"/></svg>
@@ -558,6 +590,23 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
         <div class="transfer-title" id="transfer-title">Transferring ontology artefacts&hellip;</div>
         <div class="transfer-bar-wrap"><div class="transfer-bar" id="transfer-bar"></div></div>
         <div class="transfer-sub" id="transfer-sub">ontology.ttl &rarr; Hydration Pipeline</div>
+      </div>
+      </div>  <!-- /ont-sub-validate -->
+
+      <!-- Refine sub-pane (new) -->
+      <div id="ont-sub-refine" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="pc">
+          <button class="rbtn ont-rbtn" id="ref-lint-btn" onclick="refineRunLint()">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="currentColor"><polygon points="1,1 13,1 13,13 1,13" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+            RUN LINTER
+          </button>
+          <button class="kgpbtn" id="ref-llm-btn" onclick="refineRunLLM()" title="Ask the LLM for structural improvement suggestions (counts against your daily LLM budget)" style="margin-left:8px">&#9881; Ask LLM coach</button>
+          <span id="ref-status" style="font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-left:auto"></span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:14px">
+          <div id="ref-summary" style="display:flex;gap:8px;margin-bottom:14px;font-size:10.5px;font-family:'JetBrains Mono',monospace"></div>
+          <div id="ref-findings"></div>
+        </div>
       </div>
     </div>
 
@@ -716,6 +765,10 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
         <div class="builder-step" data-step="preview" style="display:none">
           <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600">Preview</div>
           <div id="bld-preview-summary" style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:10px"></div>
+          <!-- Lint findings — computed on the in-memory TTL so the operator can
+               see issues BEFORE clicking Create. They're informational only —
+               clicking Create proceeds regardless. -->
+          <div id="bld-preview-lint" style="margin-bottom:14px"></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
               <div style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-bottom:4px">manifest.yaml</div>
@@ -4340,6 +4393,43 @@ async function _builderPreview(){
   document.getElementById('bld-preview-summary').innerHTML =
     `<b>${sm.classes}</b> classes &middot; <b>${sm.datatype_properties}</b> datatype properties &middot; ` +
     `<b>${sm.object_properties}</b> object properties &middot; <b>${sm.data_triples}</b> seed triples`;
+  // Lint the in-memory TTL so the operator sees issues before clicking Create.
+  // Findings are advisory — Create proceeds regardless. The full Refine UX
+  // lives in Ontology Curation → Refine sub-tab once the bundle exists.
+  await _renderBuilderPreviewLint(out.ontology_ttl);
+}
+
+async function _renderBuilderPreviewLint(ttl){
+  const root = document.getElementById('bld-preview-lint');
+  root.innerHTML = '<div style="font-size:9.5px;color:var(--text3)">Linting…</div>';
+  try {
+    const res = await api('/refine/preview-lint', {
+      ontology_ttl: ttl,
+      prefix: _builderState.meta.prefix,
+      namespace: _builderState.meta.namespace,
+    });
+    const c = res.counts || {error:0, warn:0, info:0};
+    const total = res.total || 0;
+    if(total === 0){
+      root.innerHTML = '<div style="font-size:10px;color:#7eea9e;padding:6px 10px;background:rgba(126,234,158,.08);border:1px solid rgba(126,234,158,.4);border-radius:4px">✓ Linter found no issues. Click Create when ready.</div>';
+      return;
+    }
+    const top = (res.findings || []).slice(0, 5);   // first 5 are most-severe by sort order
+    const more = total - top.length;
+    root.innerHTML = `
+      <div style="display:flex;gap:6px;margin-bottom:7px">
+        ${c.error ? `<span class="ref-summary-chip ref-chip-error">${c.error} ERROR${c.error!==1?'S':''}</span>` : ''}
+        ${c.warn  ? `<span class="ref-summary-chip ref-chip-warn">${c.warn} WARN${c.warn!==1?'S':''}</span>` : ''}
+        ${c.info  ? `<span class="ref-summary-chip ref-chip-info">${c.info} INFO</span>` : ''}
+        <span style="color:var(--text3);font-size:9.5px;align-self:center">After Create, full apply UI is in <b>Ontology Curation → Refine</b>.</span>
+      </div>
+      <details>
+        <summary style="cursor:pointer;font-size:10px;color:var(--text2);margin-bottom:6px">Show top ${top.length} finding${top.length!==1?'s':''}${more > 0 ? ` (+${more} more)` : ''}</summary>
+        ${top.map(f => `<div style="font-size:10px;color:var(--text2);padding:4px 8px;border-left:2px solid ${f.severity==='error'?'var(--red)':f.severity==='warn'?'var(--amber)':'var(--teal)'};margin-bottom:4px;background:var(--bg3)"><b>[${f.severity}]</b> ${escapeHTML(f.title)}</div>`).join('')}
+      </details>`;
+  } catch(err){
+    root.innerHTML = `<div style="font-size:9.5px;color:var(--text3)">Linter unavailable: ${escapeHTML(err.message)}</div>`;
+  }
 }
 
 async function _builderCreate(){
@@ -4355,6 +4445,163 @@ async function _builderCreate(){
   });
   _invalidateUseCasesCache();
   switchPipeTab('uc');
+}
+
+// =============================================================================
+// REFINER — Refine sub-tab inside Ontology Curation
+// =============================================================================
+let _refineFindings = [];      // last lint+LLM result, for re-render after Apply
+let _refineDismissed = new Set();   // per-session: findings the user hid
+
+function switchOntSubTab(which){
+  document.getElementById('ont-subtab-validate').classList.toggle('ptab-active', which === 'validate');
+  document.getElementById('ont-subtab-refine').classList.toggle('ptab-active',   which === 'refine');
+  document.getElementById('ont-sub-validate').style.display = which === 'validate' ? 'flex' : 'none';
+  document.getElementById('ont-sub-refine').style.display   = which === 'refine'   ? 'flex' : 'none';
+  if(which === 'refine' && _refineFindings.length === 0) refineRunLint();
+}
+
+async function refineRunLint(){
+  const slug = MANIFEST?.slug;
+  if(!slug){ alert('No active bundle.'); return; }
+  const btn = document.getElementById('ref-lint-btn');
+  const status = document.getElementById('ref-status');
+  const orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = 'Linting…';
+  status.textContent = '';
+  try {
+    const res = await api(`/refine/${encodeURIComponent(slug)}/lint`);
+    _refineFindings = res.findings || [];
+    _renderRefineResults(res, null);
+  } catch(err){
+    document.getElementById('ref-findings').innerHTML = `<div class="errbox">Lint failed: ${escapeHTML(err.message)}</div>`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = orig;
+  }
+}
+
+async function refineRunLLM(){
+  const slug = MANIFEST?.slug;
+  if(!slug){ alert('No active bundle.'); return; }
+  if(!confirm('Send this bundle\'s ontology summary to the LLM coach?\n\nUses ~$0.005-0.02 from your daily LLM budget.\n\nFindings appear alongside the rule-based ones.')) return;
+  const btn = document.getElementById('ref-llm-btn');
+  const status = document.getElementById('ref-status');
+  const orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = 'Asking LLM…';
+  status.textContent = '';
+  try {
+    const llm = await api(`/refine/${encodeURIComponent(slug)}/llm-coach`, {});
+    if(llm.cap_hit){
+      status.innerHTML = `<span style="color:var(--red)">Daily LLM cap reached — ${escapeHTML(llm.cap_message || '')}</span>`;
+      return;
+    }
+    if(llm.error){
+      status.innerHTML = `<span style="color:var(--red)">LLM call failed: ${escapeHTML(llm.error)}</span>`;
+      return;
+    }
+    // Merge LLM findings with the existing lint findings.
+    const lintRes = await api(`/refine/${encodeURIComponent(slug)}/lint`);
+    _refineFindings = (lintRes.findings || []).concat(llm.findings || []);
+    _renderRefineResults({findings: _refineFindings, counts: _mergeCounts(lintRes.counts, llm.counts)}, llm);
+    status.textContent = llm.tokens ? `LLM call: ${llm.tokens.input}+${llm.tokens.output} tokens` : '';
+  } catch(err){
+    status.innerHTML = `<span style="color:var(--red)">${escapeHTML(err.message)}</span>`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = orig;
+  }
+}
+
+function _mergeCounts(a, b){
+  const out = {error:0, warn:0, info:0};
+  for(const k of Object.keys(out)){
+    out[k] = (a?.[k] || 0) + (b?.[k] || 0);
+  }
+  return out;
+}
+
+function _renderRefineResults(res, llmRes){
+  const summary = document.getElementById('ref-summary');
+  const list = document.getElementById('ref-findings');
+  const visible = (res.findings || []).filter(f => !_refineDismissed.has(f.id));
+  const c = res.counts || {error:0, warn:0, info:0};
+  const llmCount = (res.findings || []).filter(f => f.source === 'llm').length;
+
+  summary.innerHTML = `
+    ${c.error ? `<span class="ref-summary-chip ref-chip-error">${c.error} ERROR${c.error!==1?'S':''}</span>` : ''}
+    ${c.warn  ? `<span class="ref-summary-chip ref-chip-warn">${c.warn} WARN${c.warn!==1?'S':''}</span>` : ''}
+    ${c.info  ? `<span class="ref-summary-chip ref-chip-info">${c.info} INFO</span>` : ''}
+    ${llmCount ? `<span class="ref-summary-chip ref-chip-llm">${llmCount} LLM SUGGESTION${llmCount!==1?'S':''}</span>` : ''}
+    ${visible.length === 0 ? '<span style="color:var(--text3);align-self:center;font-style:italic">No findings to show</span>' : ''}
+  `;
+  if(!visible.length){
+    list.innerHTML = '<div style="color:var(--text3);font-size:10.5px;text-align:center;padding:24px"><b>✓ Looks good.</b><br/><br/>The linter found no issues that need attention. Try the LLM coach above for structural suggestions.</div>';
+    return;
+  }
+  list.innerHTML = visible.map(f => _renderFindingCard(f)).join('');
+  list.querySelectorAll('[data-ref-action]').forEach(btn => {
+    btn.onclick = () => _onRefineAction(btn);
+  });
+}
+
+function _renderFindingCard(f){
+  const sev = f.severity || 'info';
+  const isAuto = f.fix?.kind && f.fix.kind !== 'noop';
+  const sourceTag = f.source === 'llm'
+    ? '<span class="ref-finding-source ref-finding-source-llm">LLM</span>'
+    : '<span class="ref-finding-source">LINT</span>';
+  return `<div class="ref-finding" data-fid="${escapeHTML(f.id)}">
+    <div class="ref-finding-hdr">
+      <span class="ref-finding-sev ref-sev-${sev}">${sev.toUpperCase()}</span>
+      <span class="ref-finding-title">${escapeHTML(f.title || '')}</span>
+      ${sourceTag}
+    </div>
+    <div class="ref-finding-desc">${escapeHTML(f.description || '')}</div>
+    ${f.fix?.preview ? `<div class="ref-finding-preview">${escapeHTML(f.fix.preview)}</div>` : ''}
+    <div class="ref-finding-actions">
+      <button class="ref-action" data-ref-action="dismiss" data-fid="${escapeHTML(f.id)}">Dismiss</button>
+      <button class="ref-action ref-action-apply" data-ref-action="apply" data-fid="${escapeHTML(f.id)}" ${isAuto ? '' : 'disabled title="No automatic fix — open Edit Ontology to apply manually"'}>${isAuto ? 'Apply' : 'Manual fix'}</button>
+    </div>
+  </div>`;
+}
+
+async function _onRefineAction(btn){
+  const action = btn.dataset.refAction;
+  const fid = btn.dataset.fid;
+  const finding = _refineFindings.find(f => f.id === fid);
+  if(!finding) return;
+  if(action === 'dismiss'){
+    _refineDismissed.add(fid);
+    _renderRefineResults({findings: _refineFindings, counts: _summariseCounts(_refineFindings)});
+    return;
+  }
+  if(action === 'apply'){
+    if(!finding.fix || finding.fix.kind === 'noop'){
+      alert('This finding has no automatic fix — open Use Cases → Edit Ontology to make the change manually.');
+      return;
+    }
+    const slug = MANIFEST?.slug;
+    btn.disabled = true; btn.textContent = '…';
+    try {
+      const res = await api(`/refine/${encodeURIComponent(slug)}/apply`, {fix: finding.fix});
+      // Mark this finding as dismissed (it's been applied) and re-lint.
+      _refineDismissed.add(fid);
+      await refineRunLint();
+      // Schema cache busted server-side; tell the editor to re-fetch too.
+      _schemaCache = null; loadSchemaForEditor();
+    } catch(err){
+      alert('Apply failed: ' + err.message);
+      btn.disabled = false; btn.textContent = 'Apply';
+    }
+  }
+}
+
+function _summariseCounts(findings){
+  const c = {error:0, warn:0, info:0};
+  for(const f of findings){
+    if(_refineDismissed.has(f.id)) continue;
+    c[f.severity || 'info'] = (c[f.severity || 'info'] || 0) + 1;
+  }
+  return c;
 }
 
 // =============================================================================

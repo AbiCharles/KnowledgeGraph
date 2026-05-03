@@ -152,6 +152,10 @@ The five left-panel tabs each have a dedicated guide in [docs/](docs/):
   reading the conversation history.
 - **[Ontology Builder](docs/ontology-builder.md)** — 5-step wizard that
   generates a complete bundle from a Postgres schema or a stack of CSVs.
+- **[Refining ontologies](docs/refining-ontologies.md)** — operator
+  guide for the rule-based linter + LLM coach inside Ontology Curation
+  → Refine sub-tab. Surfaces missing labels, hidden FKs, orphan classes,
+  naming inconsistencies; one-click Apply with auto-archive rollback.
 - **[Operations](docs/operations.md)** — production deployment, env vars,
   Docker compose, observability, backups, security checklist, common
   incidents.
