@@ -271,3 +271,109 @@ def test_namespace_auto_suggested_from_prefix():
 ])
 def test_singularise_pascal(inp, expected):
     assert singularise_pascal(inp) == expected
+
+
+# ── Auto-generated examples ─────────────────────────────────────────────────
+
+def test_examples_generated_per_class():
+    """Every class should get at least 'Show all' + 'Count' examples."""
+    schema = _pg_schema([
+        ("orders", [("orderId", "integer", True), ("status", "string")]),
+    ])
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    examples = m.get("examples", [])
+    labels = [e["label"] for e in examples]
+    assert "Show all orders" in labels
+    assert "Count orders" in labels
+    assert any("Top 10 orders" in l for l in labels)
+
+
+def test_examples_use_correct_prefixed_labels():
+    """Generated Cypher must reference the prefix-qualified Neo4j label
+    (`<prefix>__<Class>`), not the bare class name."""
+    schema = _pg_schema([("orders", [("orderId", "integer", True)])])
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    show_all = next(e for e in m["examples"] if e["label"] == "Show all orders")
+    assert "`tb__Order`" in show_all["cypher"]
+    assert "RETURN n" in show_all["cypher"]
+
+
+def test_examples_capped_at_max():
+    """Lots of classes shouldn't blow out the chip strip — cap kicks in."""
+    from pipeline.builder.generator import MAX_EXAMPLES
+    # 10 classes × 3 examples per = 30 candidates, but cap is 12.
+    cols = [("id", "integer", True)]
+    schema = _pg_schema([(f"thing_{i}", cols) for i in range(10)])
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    assert len(m["examples"]) <= MAX_EXAMPLES
+
+
+def test_examples_skip_top_n_when_no_pk():
+    """If a class has no detected PK, don't emit 'Top 10 by <PK>'."""
+    schema = _pg_schema([("things", [("name", "string")])])  # no PK col
+    schema["tables"][0]["primary_key"] = None
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    labels = [e["label"] for e in m["examples"]]
+    assert not any("Top 10" in l for l in labels)
+
+
+def test_nl_rules_index_correct_examples():
+    """nl_rules.example_index must point at the right example by position
+    (the Query Console matches NL → cypher via this index)."""
+    schema = _pg_schema([("orders", [("orderId", "integer", True)])])
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    rules = m.get("nl_rules", [])
+    assert rules, "expected at least one nl_rule"
+    # The 'show orders' rule should index to an example whose label is
+    # 'Show all orders' (not 'Count orders' or 'Top 10').
+    show_rule = next(r for r in rules if "show" in r["pattern"])
+    pointed_at = m["examples"][show_rule["example_index"]]
+    assert pointed_at["label"] == "Show all orders"
+
+
+def test_relationship_example_for_postgres_fks():
+    """Postgres source with an FK should emit a 2-class MATCH example."""
+    schema = _pg_schema([
+        ("orders",    [("orderId", "integer", True)]),
+        ("customers", [("id", "integer", True)]),
+    ])
+    schema["tables"][0]["foreign_keys"] = [
+        {"local_column": "customer_id", "ref_table": "customers", "ref_column": "id"},
+    ]
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    rel_examples = [e for e in m["examples"] if "with their" in e["label"]]
+    assert rel_examples
+    # Cypher should be a 2-pattern match
+    assert "->(" in rel_examples[0]["cypher"]
+    assert "`tb__customer`" in rel_examples[0]["cypher"]   # rel name
+
+
+def test_csv_source_does_not_emit_relationship_examples():
+    """CSVs have no FKs, so no relationship examples — but per-class ones
+    should still appear."""
+    schema = _csv_schema(
+        "orders",
+        [{"name": "id", "xsd_type": "integer", "nullable": False, "is_pk": True}],
+        sample_rows=[{"id": "1"}],
+    )
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    assert any("Show all orders" in e["label"] for e in m["examples"])
+    assert not any("with their" in e["label"] for e in m["examples"])
+
+
+def test_examples_validate_against_manifest_pydantic_model():
+    """Each generated example must be a valid ExampleSpec (cypher passes
+    the read-only safety filter, label is non-empty)."""
+    schema = _pg_schema([("orders", [("orderId", "integer", True)])])
+    out = generate(schema, _META)
+    # The generator already round-trips through Manifest(**...) — if any
+    # example were unsafe Cypher, generate() would have raised. But pin
+    # it explicitly here so a regression breaks loud.
+    Manifest(**yaml.safe_load(out["manifest_yaml"]))
