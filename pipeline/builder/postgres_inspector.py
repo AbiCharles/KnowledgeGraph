@@ -146,9 +146,10 @@ def inspect(dsn_env: str, schema: str = "public") -> dict:
     # ── Assemble the schema dict ────────────────────────────────────────
     cols_by_table: dict[str, list[dict]] = {t: [] for t in table_names}
     for r in col_rows:
+        normalised = _normalise_property_name(r["column_name"])
         cols_by_table.setdefault(r["table_name"], []).append({
-            "name": _normalise_property_name(r["column_name"]),
-            "_sql_name": r["column_name"],   # internal — for the SQL builder
+            "name": normalised,                # camelCase — used as Neo4j property + SQL AS alias
+            "sql_name": r["column_name"],      # original Postgres identifier — used on the SELECT side
             "xsd_type": _xsd_for(r["data_type"]),
             "nullable": str(r["is_nullable"]).upper() == "YES",
             "is_pk": False,
@@ -168,18 +169,16 @@ def inspect(dsn_env: str, schema: str = "public") -> dict:
         pk = pk_by_table.get(t)
         if pk:
             for c in cols:
-                if c.get("_sql_name") == pk:
+                if c.get("sql_name") == pk:
                     c["is_pk"] = True
                     c["nullable"] = False
                     pk = c["name"]   # rewrite to normalised name
                     break
-        # Strip the internal _sql_name field before returning to the API.
-        public_cols = [{k: v for k, v in c.items() if not k.startswith("_")} for c in cols]
         tables.append({
             "name": t,
             "class_name": singularise_pascal(t),
             "primary_key": pk,
-            "columns": public_cols,
+            "columns": cols,
             "foreign_keys": fks_by_table.get(t, []),
         })
 

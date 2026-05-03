@@ -203,6 +203,101 @@ later, or pre-process the CSV into a larger TTL chunk.
 
 ---
 
+## How to debug + fix a generated bundle that won't hydrate
+
+The Builder produces a syntactically valid bundle but it can still fail
+at hydration time — bad SQL, schema mismatch, unreachable host. Here's
+the debug loop, ordered cheapest-to-most-expensive:
+
+### 1. Read the failing stage card
+
+The Hydration Pipeline tab shows one card per stage with `PASS` /
+`FAIL` plus the actual log lines. Most failures land in **Stage 4**
+(adapter pulls). The error string is verbatim from the source
+database — e.g.:
+
+```
+FAIL  Adapter PG-ORDER-001 pull failed:
+      column "orderId" does not exist
+      LINE 1: SELECT "orderId" AS "orderId", ...
+      HINT: Perhaps you meant to reference the column "orders.order_id".
+```
+
+### 2. Re-run that single pull instead of the whole pipeline
+
+Going around the 7-stage loop just to retry one SQL change is slow.
+Use **Use Cases tab → Datasources sub-tab → ▶ Run** on the failing
+pull adapter. Same error, ~5 seconds instead of ~30. Iterate here
+until the pull succeeds, then run the full pipeline to verify the
+rest of the stages pass.
+
+### 3. Find the bad SQL in the manifest
+
+The pull SQL lives in
+`use_cases/<slug>/manifest.yaml` under
+`stage4_adapters[*].pull.sql`. Open the file in any editor.
+
+### 4. Test the SQL directly against Postgres
+
+Before changing anything in the manifest, confirm the corrected SQL
+works against the real database:
+
+```bash
+docker exec -i kf-test-pg psql -U postgres -d demo -c \
+  'SELECT "order_id" AS "orderId", "customer" AS "customerName" FROM orders LIMIT 5;'
+```
+
+If it returns rows, the SQL is good.
+
+### 5. Three options to apply the fix
+
+**Option A — Re-run the Builder (recommended for structural fixes).**
+If the ontology + manifest need wholesale re-generation (column types
+wrong, missing tables, FKs not detected), just open the
+**Ontology Builder** tab again with the same source. The new bundle
+auto-archives the old one under Versions, so the broken version is
+one click from rollback if you need it.
+
+**Option B — Edit `manifest.yaml` directly.**
+For a single bad SQL, this is fastest. Open the file in any editor,
+fix the `pull.sql` block, save. Restart uvicorn (the file mtime will
+be picked up by the registry). Re-run the pull from the Datasources
+tab — green. Then re-run the full pipeline.
+
+**Option C — Remove + Re-add the pull adapter via the UI.**
+Use Cases → Datasources sub-tab → click **Remove** on the broken
+pull adapter, then **+ Pull adapter** and paste the corrected SQL.
+The bundle's prior manifest is auto-archived under Versions so you
+can roll back if you mistype.
+
+### 6. Re-validate end to end
+
+After the pull adapter succeeds:
+1. Hydration Pipeline → Run → all 7 stages PASS.
+2. Query Console → Cypher tab → `MATCH (n:`<prefix>__Order`) RETURN n LIMIT 10`
+   → should return your rows.
+
+### Common pull-SQL fixes
+
+| Error fragment | Fix |
+|---|---|
+| `column "X" does not exist` + `HINT: ... "table.x_orig_name"` | Postgres column is the snake_case name on the right of the HINT. Use that on the SELECT side; keep `AS "X"` on the alias side so the property name in Neo4j stays camelCase. |
+| `relation "X" does not exist` | Table name typo, OR the table is in a non-default schema. Either fix the table name, or qualify it: `FROM "myschema"."orders"`. |
+| `permission denied for table X` | The connecting Postgres role can't SELECT from the table. See [docs/using-datasources.md](using-datasources.md) for setting up a read-only role with the right grants. |
+| `connection refused` / `nodename nor servname provided` | DSN has the wrong host/port. Re-export the env var with the correct DSN, restart uvicorn. |
+| `> 100000 rows; refusing to load` | Add a `WHERE` clause or tighten `LIMIT` in the SQL to keep the pulled set bounded. |
+
+### Common ontology fixes
+
+| Symptom | Fix |
+|---|---|
+| Stage 6 fails with `count(<Class>)=0 < 1` | Stage 4 didn't pull any rows. Check the Stage 4 log lines — usually the SQL error above. |
+| Stage 6 fails with `no_duplicates_on(...)` | Two rows in the source share the same primary-key value. Either fix the source data (add a unique constraint) or change the `key_property` on the pull adapter. |
+| Property values render as `null` in Cypher results | The xsd type chosen during Inspect didn't match the actual column data. Re-run the Builder and pick a more permissive type (or `string` as fallback). |
+| Cypher autocomplete doesn't show new classes | The schema cache wasn't invalidated. Click any other tab and back, or restart uvicorn. |
+
+---
+
 ## Troubleshooting
 
 ### Postgres inspect says "No tables found"

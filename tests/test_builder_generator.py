@@ -79,6 +79,64 @@ def test_postgres_generation_pre_wires_pull_adapters():
     assert "SELECT" in adapter["pull"]["sql"].upper()
 
 
+def test_postgres_pull_sql_uses_original_column_names_on_select_side():
+    """Regression test: the SQL must reference the ORIGINAL Postgres
+    column name (snake_case) on the SELECT side, not the camelCased
+    property name. Otherwise Postgres returns 'column ... does not exist'.
+    The AS alias is the camelCased property name so psycopg returns row
+    dicts keyed the way the MERGE expects."""
+    schema = {
+        "source_kind": "postgres",
+        "source_metadata": {"dsn_env": "X_DSN"},
+        "tables": [{
+            "name": "orders",
+            "class_name": "Order",
+            "primary_key": "orderId",
+            "columns": [
+                # Property names are normalised camelCase (`orderId`); the
+                # original Postgres column name is `order_id`.
+                {"name": "orderId", "sql_name": "order_id",
+                 "xsd_type": "integer", "nullable": False, "is_pk": True},
+                {"name": "customer", "sql_name": "customer",
+                 "xsd_type": "string", "nullable": False, "is_pk": False},
+            ],
+            "foreign_keys": [],
+        }],
+    }
+    out = generate(schema, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    sql = m["stage4_adapters"][0]["pull"]["sql"]
+    # SELECT side must use original snake_case name…
+    assert '"order_id" AS "orderId"' in sql, f"SQL missing original col name: {sql!r}"
+    # …no leftover bare camelCase reference (would fail on real Postgres).
+    assert '"orderId" AS "orderId"' not in sql
+
+
+def test_csv_generated_pull_falls_back_to_property_name():
+    """CSV columns don't have a separate SQL name — generator uses the
+    property name on both sides, which is fine because CSV has no
+    associated Postgres database to query."""
+    # CSVs don't generate pull adapters, but if a future inspector
+    # produces a schema dict without sql_name fields, the generator
+    # shouldn't crash. (Postgres path always fills sql_name.)
+    schema = {
+        "source_kind": "postgres",
+        "source_metadata": {"dsn_env": "X_DSN"},
+        "tables": [{
+            "name": "orders",
+            "class_name": "Order",
+            "primary_key": "orderId",
+            "columns": [
+                {"name": "orderId", "xsd_type": "integer", "nullable": False, "is_pk": True},
+            ],
+            "foreign_keys": [],
+        }],
+    }
+    out = generate(schema, _META)   # no sql_name → must not raise
+    sql = yaml.safe_load(out["manifest_yaml"])["stage4_adapters"][0]["pull"]["sql"]
+    assert '"orderId" AS "orderId"' in sql
+
+
 def test_postgres_fk_becomes_object_property():
     schema = _pg_schema([
         ("orders",    [("orderId", "integer", True), ("status", "string")]),
