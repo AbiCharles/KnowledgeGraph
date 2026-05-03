@@ -39,7 +39,7 @@ _PUBLIC_PATHS = {
 # anything that doesn't look like an API path is treated as a static file.
 _API_PREFIXES = (
     "/use_cases", "/pipeline", "/ontology", "/query", "/nl",
-    "/agents", "/usage", "/graph", "/schema", "/datasources",
+    "/agents", "/usage", "/graph", "/schema", "/datasources", "/builder",
 )
 
 

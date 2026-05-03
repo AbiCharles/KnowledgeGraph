@@ -121,11 +121,17 @@ In the dashboard:
 
 ## Tab-by-tab user docs
 
-The four left-panel tabs each have a dedicated guide in [docs/](docs/):
+The five left-panel tabs each have a dedicated guide in [docs/](docs/):
 
-> **Loading data from a database instead of `data.ttl`?**
-> - [Quick-start](docs/datasources-quickstart.md) — first-time setup
->   walkthrough using a throwaway docker Postgres.
+> **Brand new to the platform — have a database or CSVs and want a
+> bundle?** Start with the [Ontology Builder](docs/ontology-builder.md)
+> — a 5-step wizard that introspects your data, infers an OWL2
+> ontology, and produces a complete bundle ready to drop through
+> Ontology Curation → Hydration Pipeline → Query Console.
+>
+> **Already have a bundle and want to wire in live data?**
+> - [Datasources quick-start](docs/datasources-quickstart.md) —
+>   first-time setup walkthrough using a throwaway docker Postgres.
 > - [Datasources in production](docs/using-datasources.md) — operator
 >   guide for TLS hardening + setting up a least-privilege read-only
 >   role before pointing at real data.
@@ -144,6 +150,8 @@ The four left-panel tabs each have a dedicated guide in [docs/](docs/):
   streaming works, troubleshooting.
 - **[Agent Ops](docs/agent-ops.md)** — running manifest-defined agents,
   reading the conversation history.
+- **[Ontology Builder](docs/ontology-builder.md)** — 5-step wizard that
+  generates a complete bundle from a Postgres schema or a stack of CSVs.
 - **[Operations](docs/operations.md)** — production deployment, env vars,
   Docker compose, observability, backups, security checklist, common
   incidents.
