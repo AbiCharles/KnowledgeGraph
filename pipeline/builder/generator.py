@@ -313,21 +313,24 @@ def _build_manifest(schema: dict, meta: dict) -> dict:
 
 
 def _build_pull_adapter(datasource_id: str, table: dict, index: int) -> dict:
-    """Produce one stage-4 adapter for a Postgres table. SQL aliases each
-    column to the unprefixed property name so the runtime MERGE keys
-    line up with the ontology's rdfs:domain definitions."""
-    # SELECT col1 AS "col1", col2 AS "col2", ... — explicit alias preserves
-    # camelCase via Postgres's case-folding rules.
-    cols = [c["name"] for c in table.get("columns", [])]
-    if not cols:
+    """Produce one stage-4 adapter for a Postgres table. SQL uses the
+    ORIGINAL Postgres column name on the SELECT side and aliases it to
+    the camelCase property name on the AS side, so:
+      - Postgres can resolve the column (it only knows the original name)
+      - psycopg returns the row dict keyed by the camelCase alias, which
+        matches the property name in the ontology
+    Falls back to the property name on the SELECT side for sources
+    (CSV) that don't carry sql_name.
+    """
+    if not table.get("columns"):
         raise ValueError(
             f"Table {table.get('name')!r}: cannot build pull adapter with zero columns."
         )
-    # Use the ORIGINAL SQL column name on the LHS; alias to the property name on RHS.
-    select_parts = [
-        f"{_quote_sql_ident(c['name'])} AS {_quote_sql_ident(c['name'])}"
-        for c in table["columns"]
-    ]
+    select_parts = []
+    for c in table["columns"]:
+        select_side = _quote_sql_ident(c.get("sql_name") or c["name"])
+        alias_side = _quote_sql_ident(c["name"])
+        select_parts.append(f"{select_side} AS {alias_side}")
     sql = f"SELECT {', '.join(select_parts)}\nFROM {_quote_sql_ident(table['name'])}\nLIMIT 1000"
     pk = table.get("primary_key") or table["columns"][0]["name"]
     return {
