@@ -288,7 +288,9 @@ def _escape_ttl_string(s: str) -> str:
 
 def _build_manifest(schema: dict, meta: dict) -> dict:
     """Assemble the manifest dict. Postgres adds datasources + pull
-    adapters; CSV stays minimal."""
+    adapters; CSV stays minimal. Both sources get auto-generated
+    examples + nl_rules so the Query Console has clickable starter
+    queries on day one."""
     in_scope = [t["class_name"] for t in schema["tables"]]
     manifest: dict = {
         "slug": meta["slug"],
@@ -309,7 +311,115 @@ def _build_manifest(schema: dict, meta: dict) -> dict:
             for i, table in enumerate(schema["tables"], start=1):
                 adapters.append(_build_pull_adapter(ds_id, table, i))
             manifest["stage4_adapters"] = adapters
+
+    # Starter examples — give every new bundle a Query Console that's
+    # actually useful out of the box. Capped at MAX_EXAMPLES to keep the
+    # chip strip manageable; per-class breadth wins over per-class depth.
+    examples, nl_rules = _build_examples(schema, meta)
+    if examples:
+        manifest["examples"] = examples
+    if nl_rules:
+        manifest["nl_rules"] = nl_rules
     return manifest
+
+
+# Cap on auto-generated examples so the Query Console chip strip stays
+# scrollable. Distributes ~2-3 examples per class up to this total.
+MAX_EXAMPLES = 12
+
+
+def _build_examples(schema: dict, meta: dict) -> tuple[list[dict], list[dict]]:
+    """Generate a small set of starter Cypher examples + matching NL rules.
+
+    Per class:
+      1. "Show all <Class>"               → MATCH (n:<Cls>) RETURN n LIMIT 25
+      2. "Count <Class>"                  → MATCH (n:<Cls>) RETURN count(n)
+      3. "Top 10 <Class> by <PK>"         → if a primary key exists
+    Per object property (Postgres only):
+      4. "<Class> with their <Range>"     → MATCH (a)-[:rel]->(b) RETURN a, b LIMIT 25
+
+    Each example gets a matching nl_rule so plain-English queries like
+    "show all orders" trigger the right Cypher chip.
+    """
+    prefix = meta["prefix"]
+    examples: list[dict] = []
+    nl_rules: list[dict] = []
+
+    def _add(label: str, cypher: str, nl_pattern: str | None):
+        """Append example + optional nl_rule. Indexes nl_rule to the
+        zero-based position the example takes in the final list."""
+        if len(examples) >= MAX_EXAMPLES:
+            return
+        idx = len(examples)
+        examples.append({"label": label, "cypher": cypher})
+        if nl_pattern:
+            nl_rules.append({"pattern": nl_pattern, "example_index": idx})
+
+    for table in schema.get("tables", []):
+        cls = table["class_name"]
+        label_n4j = f"`{prefix}__{cls}`"
+        cls_lower = cls.lower()
+        plural = _english_plural(cls_lower)
+
+        # 1. Show all
+        _add(
+            f"Show all {plural}",
+            f"MATCH (n:{label_n4j}) RETURN n LIMIT 25",
+            rf"\bshow\s+(?:me\s+)?(?:all\s+)?{plural}\b",
+        )
+        # 2. Count
+        _add(
+            f"Count {plural}",
+            f"MATCH (n:{label_n4j}) RETURN count(n) AS total",
+            rf"\b(?:how\s+many|count(?:\s+the)?)\s+{plural}\b",
+        )
+        # 3. Top N by PK — only if a primary key was detected.
+        pk = table.get("primary_key")
+        if pk:
+            pk_n4j = f"`{prefix}__{pk}`"
+            _add(
+                f"Top 10 {plural} by {pk}",
+                f"MATCH (n:{label_n4j}) RETURN n.{pk_n4j} AS {pk}, n ORDER BY {pk} LIMIT 10",
+                None,   # too narrow for a useful NL match
+            )
+
+    # Per-relationship example (Postgres FKs only — CSVs don't have rels).
+    if schema.get("source_kind") == "postgres":
+        by_sql = {t["name"]: t for t in schema["tables"]}
+        for table in schema["tables"]:
+            for fk in table.get("foreign_keys", []) or []:
+                if len(examples) >= MAX_EXAMPLES:
+                    break
+                target = by_sql.get(fk.get("ref_table"))
+                if not target:
+                    continue
+                src_cls = table["class_name"]
+                tgt_cls = target["class_name"]
+                # Singularised ref-table name = relationship name in the generator.
+                from pipeline.builder.generator import _singular
+                rel = _singular(fk["ref_table"])
+                rel_n4j = f"`{prefix}__{rel}`"
+                src_n4j = f"`{prefix}__{src_cls}`"
+                tgt_n4j = f"`{prefix}__{tgt_cls}`"
+                _add(
+                    f"{src_cls} with their {tgt_cls}",
+                    f"MATCH (a:{src_n4j})-[:{rel_n4j}]->(b:{tgt_n4j}) RETURN a, b LIMIT 25",
+                    None,
+                )
+    return examples, nl_rules
+
+
+def _english_plural(word: str) -> str:
+    """Inverse of _singular — naïve English plural for use in example labels.
+    'order' → 'orders', 'address' → 'addresses', 'company' → 'companies'."""
+    if not word:
+        return word
+    lower = word.lower()
+    if lower.endswith("y") and len(lower) > 1 and lower[-2] not in "aeiou":
+        return word[:-1] + "ies"
+    if lower.endswith(("s", "x", "z", "ch", "sh")):
+        return word + "es"
+    return word + "s"
 
 
 def _build_pull_adapter(datasource_id: str, table: dict, index: int) -> dict:
