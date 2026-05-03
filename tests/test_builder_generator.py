@@ -368,6 +368,75 @@ def test_csv_source_does_not_emit_relationship_examples():
     assert not any("with their" in e["label"] for e in m["examples"])
 
 
+def test_class_label_override_honoured():
+    """User-set class_label on the schema dict overrides the default
+    auto-humanised one in the generated rdfs:label."""
+    schema = _pg_schema([("orders", [("orderId", "integer", True)])])
+    schema["tables"][0]["class_label"] = "Customer Purchase Order"
+    out = generate(schema, _META)
+    assert '"Customer Purchase Order"' in out["ontology_ttl"]
+
+
+def test_class_description_override_honoured():
+    schema = _pg_schema([("orders", [("orderId", "integer", True)])])
+    schema["tables"][0]["class_description"] = "A purchase request from the storefront."
+    out = generate(schema, _META)
+    assert "A purchase request from the storefront." in out["ontology_ttl"]
+
+
+def test_column_label_override_honoured():
+    schema = _pg_schema([("orders", [("orderId", "integer", True)])])
+    schema["tables"][0]["columns"][0]["label"] = "Customer's Order Reference Number"
+    out = generate(schema, _META)
+    assert "Customer's Order Reference Number" in out["ontology_ttl"]
+
+
+def test_user_added_relationship_for_csv_source():
+    """CSV sources can't infer FKs; users add relationships explicitly via
+    the wizard. Each one becomes an owl:ObjectProperty in the generated TTL."""
+    schema = _csv_schema(
+        "orders",
+        [{"name": "id", "xsd_type": "integer", "nullable": False, "is_pk": True}],
+        sample_rows=[{"id": "1"}],
+    )
+    schema["tables"][0]["relationships"] = [
+        {"name": "placedBy", "range_class": "Customer", "functional": True},
+    ]
+    # Add a Customer class so the relationship has a valid range.
+    schema["tables"].append({
+        "name": "customers.csv", "class_name": "Customer", "primary_key": "id",
+        "columns": [{"name": "id", "xsd_type": "integer", "nullable": False, "is_pk": True}],
+        "foreign_keys": [], "sample_rows": [{"id": "1"}],
+    })
+    out = generate(schema, _META)
+    assert "owl:ObjectProperty" in out["ontology_ttl"]
+    assert "tb:placedBy" in out["ontology_ttl"]
+    assert out["summary"]["object_properties"] == 1
+
+
+def test_user_added_relationship_invalid_name_rejected():
+    schema = _pg_schema([
+        ("orders",    [("id", "integer", True)]),
+        ("customers", [("id", "integer", True)]),
+    ])
+    schema["tables"][0]["relationships"] = [
+        {"name": "1bad", "range_class": "Customer"},
+    ]
+    with pytest.raises(ValueError, match="must match"):
+        generate(schema, _META)
+
+
+def test_user_added_relationship_with_missing_range_class_skipped():
+    """If range_class is empty, the relationship is silently skipped
+    (keeps generation forgiving when the wizard's form has incomplete data)."""
+    schema = _pg_schema([("orders", [("id", "integer", True)])])
+    schema["tables"][0]["relationships"] = [
+        {"name": "rel", "range_class": ""},   # incomplete
+    ]
+    out = generate(schema, _META)   # must not raise
+    assert out["summary"]["object_properties"] == 0
+
+
 def test_examples_validate_against_manifest_pydantic_model():
     """Each generated example must be a valid ExampleSpec (cypher passes
     the read-only safety filter, label is non-empty)."""

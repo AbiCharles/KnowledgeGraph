@@ -122,11 +122,15 @@ def preview(req: dict):
 
 @router.post("/create")
 async def create(req: dict):
-    """Body: same as /preview. On success, atomically writes the bundle
-    via register_uploaded (which auto-archives if the slug already
-    exists) and returns the new slug + a hint about next steps."""
+    """Body: same as /preview, plus an optional `override_ontology_ttl`
+    field. When the override is present, the wizard's Apply buttons
+    have mutated the in-memory TTL since /preview ran, so we use the
+    operator's mutated version instead of regenerating from the schema
+    dict (which would lose those edits). manifest.yaml + data.ttl are
+    still freshly generated since neither has Apply mutations."""
     schema = (req or {}).get("schema")
     bundle = (req or {}).get("bundle") or {}
+    override_ttl = (req or {}).get("override_ontology_ttl", "").strip()
     if not schema or not isinstance(schema, dict):
         raise HTTPException(status_code=400, detail="schema dict is required.")
     slug = bundle.get("slug", "").strip()
@@ -140,6 +144,15 @@ async def create(req: dict):
     except Exception as exc:
         log.exception("Builder generate failed")
         raise HTTPException(status_code=422, detail=f"Generation failed: {exc}")
+
+    if override_ttl:
+        # Sanity-check the override parses before we substitute it in.
+        try:
+            from rdflib import Graph
+            Graph().parse(data=override_ttl, format="turtle")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"override_ontology_ttl does not parse: {exc}")
+        out["ontology_ttl"] = override_ttl
 
     async with acquire_or_409(locks.active_lock, "builder create"):
         try:

@@ -203,6 +203,54 @@ later, or pre-process the CSV into a larger TTL chunk.
 
 ---
 
+## Refining inside the wizard
+
+Two layers of refinement built into the Builder so you don't have to
+generate first → activate → fix:
+
+### Step 3 (Inspect) — inline schema editor
+
+Each table card now has fully-editable fields:
+
+- **Class name** — change PascalCase name
+- **rdfs:label** — override the default humanised label (e.g. set
+  "Customer Order" instead of the auto "Order")
+- **skos:definition** — write a class description (helps both LLM
+  agents and human operators understand intent)
+- **Per column**: name, **rdfs:label**, xsd type
+- **× class** button — remove an entire class from the generated bundle
+- **× column** button — remove a column (refuses to delete a PK
+  silently)
+- **+ Relationship** button — add an `owl:ObjectProperty` linking this
+  class to another. Critical for **CSV bundles** where FKs can't be
+  inferred. For Postgres bundles you can add relationships the
+  `information_schema` introspection missed.
+
+Auto-detected Postgres FKs show as a teal-tinted read-only row labelled
+"FK · auto-detected".
+
+### Step 5 (Preview) — Apply lint fixes
+
+The lint summary on the Preview step now has full **Apply** buttons.
+Click Apply on any finding with an automatic fix and:
+
+- The in-memory TTL mutates immediately.
+- The right-hand `ontology.ttl` preview updates to show the result.
+- The lint findings re-run, so resolved findings disappear and any
+  cascade effects surface.
+- All applied changes are baked into the bundle when you click Create
+  (the wizard sends `override_ontology_ttl` to the create endpoint).
+
+There's also an **Apply all auto-fixable** bulk button — useful when
+the linter found a stack of `add_label` / `add_description` findings
+you'd otherwise click through one at a time.
+
+`noop` findings (require operator decision — orphan classes, naming
+violations) show as "Manual fix only" — apply via the Refine sub-tab
+after Create, or fix earlier on Step 3.
+
+---
+
 ## How to debug + fix a generated bundle that won't hydrate
 
 The Builder produces a syntactically valid bundle but it can still fail

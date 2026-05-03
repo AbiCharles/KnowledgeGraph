@@ -238,3 +238,73 @@ def test_preview_lint_route_400_on_missing_prefix(stub_db):
 def test_apply_route_400_on_missing_fix(stub_db):
     r = _client().post("/refine/kf-mfg-workorder/apply", json={})
     assert r.status_code == 400
+
+
+# ── apply_fix_to_text — Builder Preview path ────────────────────────────────
+
+def test_apply_fix_to_text_round_trip():
+    """In-memory variant: takes raw TTL, returns mutated TTL. No file
+    I/O, no register_uploaded — used by Builder Preview Apply buttons."""
+    from pipeline.refiner.applicator import apply_fix_to_text
+    fix = {"kind": "add_label", "target": "class:Order", "value": "Customer Order"}
+    new_ttl, summary = apply_fix_to_text(_TTL_PROBLEMS, _NS, fix)
+    assert "Customer Order" in new_ttl
+    assert summary["added"] == "rdfs:label"
+
+
+def test_apply_fix_to_text_unknown_kind_raises():
+    from pipeline.refiner.applicator import apply_fix_to_text
+    with pytest.raises(ValueError, match="Unknown fix kind"):
+        apply_fix_to_text(_TTL_HAPPY, _NS, {"kind": "fake", "target": "class:Order"})
+
+
+def test_preview_apply_route_returns_mutated_ttl(stub_db):
+    """Smoke test the route end-to-end."""
+    r = _client().post("/refine/preview-apply", json={
+        "ontology_ttl": _TTL_PROBLEMS,
+        "namespace": _NS,
+        "fix": {"kind": "add_label", "target": "class:Order", "value": "Order"},
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert "ontology_ttl" in body
+    assert "Order" in body["ontology_ttl"]
+
+
+def test_preview_apply_route_400_on_missing_namespace(stub_db):
+    r = _client().post("/refine/preview-apply", json={
+        "ontology_ttl": _TTL_HAPPY, "fix": {"kind": "noop", "target": ""},
+    })
+    assert r.status_code == 400
+
+
+def test_builder_create_honours_override_ttl(stub_db, tmp_use_cases_dir):
+    """When the Builder passes override_ontology_ttl, the bundle on disk
+    contains that TTL — not what generate() would have produced from
+    the schema dict. Proves Apply mutations survive Create."""
+    from rdflib import Graph
+    custom_ttl = """\
+@prefix ov:   <http://example.org/ov#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ov:OverriddenClass a owl:Class ; rdfs:label "User Override Marker" .
+"""
+    schema = {
+        "source_kind": "csv",
+        "source_metadata": {"filenames": ["test.csv"]},
+        "tables": [{
+            "name": "test.csv", "class_name": "Test", "primary_key": "id",
+            "columns": [{"name": "id", "xsd_type": "integer", "nullable": False, "is_pk": True}],
+            "foreign_keys": [], "sample_rows": [],
+        }],
+    }
+    bundle = {"slug": "override-test", "name": "Override", "prefix": "ov",
+              "namespace": "http://example.org/ov#"}
+    r = _client().post("/builder/create", json={
+        "schema": schema, "bundle": bundle, "override_ontology_ttl": custom_ttl,
+    })
+    assert r.status_code == 200
+    saved = (tmp_use_cases_dir / "override-test" / "ontology.ttl").read_text()
+    assert "OverriddenClass" in saved
+    assert "User Override Marker" in saved

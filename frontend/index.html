@@ -440,10 +440,16 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 .bld-table-name{flex:1;display:flex;gap:8px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--text2)}
 .bld-table-name input{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 7px;font-size:10.5px;color:var(--text);font-family:'JetBrains Mono',monospace;width:200px}
 .bld-table-meta{font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
-.bld-col-row{display:grid;grid-template-columns:1fr 140px 70px 70px;gap:8px;padding:5px 12px;border-bottom:1px dashed var(--border);align-items:center;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2)}
+.bld-col-row{display:grid;grid-template-columns:160px 1fr 110px 80px 36px;gap:8px;padding:5px 12px;border-bottom:1px dashed var(--border);align-items:center;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text2)}
+.bld-col-row input{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 7px;font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace}
 .bld-col-row:last-child{border-bottom:none}
 .bld-col-row select{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:2px 5px;font-size:9.5px;color:var(--text);font-family:'JetBrains Mono',monospace}
 .bld-pkpill{font-size:8.5px;padding:1px 6px;border-radius:8px;background:rgba(0,196,184,.12);color:var(--teal);border:1px solid rgba(0,196,184,.4);font-family:'JetBrains Mono',monospace;font-weight:600}
+.bld-table-rels-hdr{padding:7px 12px 3px;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);font-family:'JetBrains Mono',monospace;border-top:1px dashed var(--border)}
+.bld-rel-row{display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px dashed var(--border);font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2)}
+.bld-rel-row:last-child{border-bottom:none}
+.bld-rel-row input[type="text"], .bld-rel-row input:not([type]){background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 7px;font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;flex:1;max-width:240px}
+.bld-rel-row select{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 5px;font-size:9.5px;color:var(--text);font-family:'JetBrains Mono',monospace}
 /* Refiner / Refine sub-tab */
 .ref-summary-chip{padding:5px 11px;border-radius:11px;font-size:9.5px;letter-spacing:.5px;font-weight:600;border:1px solid var(--border)}
 .ref-chip-error{background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.4)}
@@ -4335,43 +4341,143 @@ function _renderBuilderSchema(){
   const root = document.getElementById('bld-schema-edit');
   const s = _builderState.schema;
   if(!s || !s.tables.length){ root.innerHTML = '<div class="ds-empty">Inspector returned no tables.</div>'; return; }
-  root.innerHTML = s.tables.map((t, ti) => {
-    const cols = t.columns.map((c, ci) => {
-      const xsds = ['string','integer','decimal','boolean','date','dateTime'];
-      const opts = xsds.map(x => `<option value="${x}"${c.xsd_type===x?' selected':''}>${x}</option>`).join('');
-      return `<div class="bld-col-row">
-        <input data-bld="col-name" data-t="${ti}" data-c="${ci}" value="${escapeHTML(c.name)}" />
-        <select data-bld="col-xsd" data-t="${ti}" data-c="${ci}">${opts}</select>
-        <span style="text-align:center">${c.nullable ? '<span style="color:var(--text3)">null ok</span>' : '<span style="color:var(--text2)">not null</span>'}</span>
-        <span style="text-align:center">${c.is_pk ? '<span class="bld-pkpill">PK</span>' : ''}</span>
-      </div>`;
-    }).join('');
-    const fkChip = (t.foreign_keys || []).length ? `<span class="bld-table-meta">${t.foreign_keys.length} FK${t.foreign_keys.length!==1?'s':''}</span>` : '';
-    return `<div class="bld-table-card">
-      <div class="bld-table-hdr">
-        <div class="bld-table-name">
-          <span style="color:var(--text3)">${escapeHTML(t.name)} →</span>
-          <input data-bld="cls-name" data-t="${ti}" value="${escapeHTML(t.class_name)}" title="OWL class name (PascalCase)" />
-        </div>
-        <span class="bld-table-meta">${t.columns.length} cols</span>
-        ${fkChip}
-      </div>
-      ${cols}
+  // Always render. Preserve existing class_label / class_description / per-column label
+  // fields if the user already typed something, otherwise leave them blank
+  // (generator falls back to humanised defaults).
+  root.innerHTML = s.tables.map((t, ti) => _renderBuilderTableCard(t, ti, s)).join('');
+
+  // Wire delete + add-relationship handlers (event delegation would be
+  // fancier, but per-button handlers play nicely with re-render).
+  root.querySelectorAll('[data-bld-action]').forEach(btn => {
+    btn.onclick = (e) => _onBuilderSchemaAction(btn);
+  });
+}
+
+function _renderBuilderTableCard(t, ti, s){
+  const cols = t.columns.map((c, ci) => {
+    const xsds = ['string','integer','decimal','boolean','date','dateTime'];
+    const opts = xsds.map(x => `<option value="${x}"${c.xsd_type===x?' selected':''}>${x}</option>`).join('');
+    return `<div class="bld-col-row">
+      <input data-bld="col-name" data-t="${ti}" data-c="${ci}" value="${escapeHTML(c.name)}" title="Property name (camelCase)" />
+      <input data-bld="col-label" data-t="${ti}" data-c="${ci}" value="${escapeHTML(c.label || '')}" placeholder="rdfs:label (optional — auto from name)" />
+      <select data-bld="col-xsd" data-t="${ti}" data-c="${ci}">${opts}</select>
+      <span style="text-align:center;font-size:9.5px">${c.is_pk ? '<span class="bld-pkpill">PK</span>' : (c.nullable ? '<span style="color:var(--text3)">nullable</span>' : '')}</span>
+      <button class="ds-btn ds-btn-danger" data-bld-action="del-col" data-t="${ti}" data-c="${ci}" title="Remove this column from the generated ontology">×</button>
     </div>`;
   }).join('');
+
+  // Relationships section — Postgres FKs (read-only) + user-added ones (editable + deletable).
+  const fkRows = (t.foreign_keys || []).map(fk => `
+    <div class="bld-rel-row" style="background:rgba(0,196,184,.06)">
+      <span style="color:var(--text3);font-size:9.5px">FK · auto-detected</span>
+      <span style="color:var(--text2);font-size:9.5px">${escapeHTML(fk.local_column)} → ${escapeHTML(fk.ref_table)}.${escapeHTML(fk.ref_column)}</span>
+    </div>`).join('');
+
+  const userRels = (t.relationships || []).map((r, ri) => {
+    const classOpts = s.tables.map(other => `<option value="${escapeHTML(other.class_name)}"${other.class_name === r.range_class ? ' selected' : ''}>${escapeHTML(other.class_name)}</option>`).join('');
+    return `<div class="bld-rel-row">
+      <input data-bld="rel-name" data-t="${ti}" data-r="${ri}" value="${escapeHTML(r.name || '')}" placeholder="relationship name (camelCase)" />
+      <span style="color:var(--text3);font-size:9.5px">→</span>
+      <select data-bld="rel-range" data-t="${ti}" data-r="${ri}">${classOpts}</select>
+      <label style="font-size:9.5px;color:var(--text3);display:flex;gap:4px;align-items:center">
+        <input type="checkbox" data-bld="rel-functional" data-t="${ti}" data-r="${ri}" ${r.functional ? 'checked' : ''} />functional
+      </label>
+      <button class="ds-btn ds-btn-danger" data-bld-action="del-rel" data-t="${ti}" data-r="${ri}" title="Remove this relationship">×</button>
+    </div>`;
+  }).join('');
+
+  return `<div class="bld-table-card">
+    <div class="bld-table-hdr">
+      <div class="bld-table-name" style="flex:1">
+        <span style="color:var(--text3)">${escapeHTML(t.name)} →</span>
+        <input data-bld="cls-name" data-t="${ti}" value="${escapeHTML(t.class_name)}" title="OWL class name (PascalCase)" />
+      </div>
+      <span class="bld-table-meta">${t.columns.length} col${t.columns.length!==1?'s':''}</span>
+      <button class="ds-btn ds-btn-danger" data-bld-action="del-table" data-t="${ti}" title="Remove this entire class from the generated bundle">× class</button>
+    </div>
+    <div style="padding:6px 12px;display:grid;grid-template-columns:1fr 1.4fr;gap:8px;border-bottom:1px dashed var(--border);background:var(--bg)">
+      <input data-bld="cls-label" data-t="${ti}" value="${escapeHTML(t.class_label || '')}" placeholder="rdfs:label (optional — auto from class name)" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:3px 7px;font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace" />
+      <input data-bld="cls-desc" data-t="${ti}" value="${escapeHTML(t.class_description || '')}" placeholder="skos:definition (optional — what does this class represent?)" style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:3px 7px;font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace" />
+    </div>
+    ${cols}
+    ${fkRows || userRels ? `<div class="bld-table-rels-hdr">Relationships</div>${fkRows}${userRels}` : ''}
+    <div style="padding:5px 12px;border-top:1px dashed var(--border);text-align:right">
+      <button class="ds-btn" data-bld-action="add-rel" data-t="${ti}" title="Add an object property linking this class to another">+ Relationship</button>
+    </div>
+  </div>`;
+}
+
+function _onBuilderSchemaAction(btn){
+  const action = btn.dataset.bldAction;
+  const ti = +btn.dataset.t;
+  const ci = btn.dataset.c !== undefined ? +btn.dataset.c : null;
+  const ri = btn.dataset.r !== undefined ? +btn.dataset.r : null;
+  const s = _builderState.schema;
+  if(!s) return;
+
+  // Capture in-progress edits before mutating + re-rendering.
+  _builderHarvestSchemaEdits();
+
+  if(action === 'del-col'){
+    if(s.tables[ti].columns[ci].is_pk){
+      if(!confirm('This column is marked as the primary key. Removing it means the generated MERGE has no key. Continue?')) return;
+    }
+    s.tables[ti].columns.splice(ci, 1);
+  } else if(action === 'del-table'){
+    if(!confirm(`Remove class "${s.tables[ti].class_name}" entirely?\n\nThis class won't appear in the generated bundle. Any relationships pointing at it will be silently dropped at generation time.`)) return;
+    s.tables.splice(ti, 1);
+  } else if(action === 'add-rel'){
+    // Pick a sensible default range class (the first table that isn't this one).
+    const candidates = s.tables.map(t => t.class_name).filter((_, i) => i !== ti);
+    if(!candidates.length){
+      alert('Need at least 2 classes to add a relationship.');
+      return;
+    }
+    if(!s.tables[ti].relationships) s.tables[ti].relationships = [];
+    s.tables[ti].relationships.push({
+      name: '', range_class: candidates[0], functional: false,
+    });
+  } else if(action === 'del-rel'){
+    s.tables[ti].relationships.splice(ri, 1);
+  }
+  _renderBuilderSchema();
 }
 
 function _builderHarvestSchemaEdits(){
   const s = _builderState.schema;
   if(!s) return;
+  // Class names + label + description
   document.querySelectorAll('[data-bld="cls-name"]').forEach(el => {
     s.tables[+el.dataset.t].class_name = el.value.trim();
   });
+  document.querySelectorAll('[data-bld="cls-label"]').forEach(el => {
+    s.tables[+el.dataset.t].class_label = el.value.trim();
+  });
+  document.querySelectorAll('[data-bld="cls-desc"]').forEach(el => {
+    s.tables[+el.dataset.t].class_description = el.value.trim();
+  });
+  // Columns
   document.querySelectorAll('[data-bld="col-name"]').forEach(el => {
     s.tables[+el.dataset.t].columns[+el.dataset.c].name = el.value.trim();
   });
+  document.querySelectorAll('[data-bld="col-label"]').forEach(el => {
+    s.tables[+el.dataset.t].columns[+el.dataset.c].label = el.value.trim();
+  });
   document.querySelectorAll('[data-bld="col-xsd"]').forEach(el => {
     s.tables[+el.dataset.t].columns[+el.dataset.c].xsd_type = el.value;
+  });
+  // User-added relationships
+  document.querySelectorAll('[data-bld="rel-name"]').forEach(el => {
+    const t = +el.dataset.t, r = +el.dataset.r;
+    if(s.tables[t]?.relationships?.[r]) s.tables[t].relationships[r].name = el.value.trim();
+  });
+  document.querySelectorAll('[data-bld="rel-range"]').forEach(el => {
+    const t = +el.dataset.t, r = +el.dataset.r;
+    if(s.tables[t]?.relationships?.[r]) s.tables[t].relationships[r].range_class = el.value;
+  });
+  document.querySelectorAll('[data-bld="rel-functional"]').forEach(el => {
+    const t = +el.dataset.t, r = +el.dataset.r;
+    if(s.tables[t]?.relationships?.[r]) s.tables[t].relationships[r].functional = el.checked;
   });
 }
 
@@ -4402,6 +4508,10 @@ async function _builderPreview(){
 async function _renderBuilderPreviewLint(ttl){
   const root = document.getElementById('bld-preview-lint');
   root.innerHTML = '<div style="font-size:9.5px;color:var(--text3)">Linting…</div>';
+  // Store the latest TTL on the state object so Apply handlers can mutate
+  // it. After each successful apply we re-fetch findings and re-render
+  // both the lint section and the right-hand preview pane.
+  _builderState.previewTTL = ttl;
   try {
     const res = await api('/refine/preview-lint', {
       ontology_ttl: ttl,
@@ -4414,31 +4524,117 @@ async function _renderBuilderPreviewLint(ttl){
       root.innerHTML = '<div style="font-size:10px;color:#7eea9e;padding:6px 10px;background:rgba(126,234,158,.08);border:1px solid rgba(126,234,158,.4);border-radius:4px">✓ Linter found no issues. Click Create when ready.</div>';
       return;
     }
-    const top = (res.findings || []).slice(0, 5);   // first 5 are most-severe by sort order
-    const more = total - top.length;
+    const all = res.findings || [];
+    const fixable = all.filter(f => f.fix?.kind && f.fix.kind !== 'noop');
     root.innerHTML = `
-      <div style="display:flex;gap:6px;margin-bottom:7px">
+      <div style="display:flex;gap:6px;margin-bottom:9px;align-items:center">
         ${c.error ? `<span class="ref-summary-chip ref-chip-error">${c.error} ERROR${c.error!==1?'S':''}</span>` : ''}
         ${c.warn  ? `<span class="ref-summary-chip ref-chip-warn">${c.warn} WARN${c.warn!==1?'S':''}</span>` : ''}
         ${c.info  ? `<span class="ref-summary-chip ref-chip-info">${c.info} INFO</span>` : ''}
-        <span style="color:var(--text3);font-size:9.5px;align-self:center">After Create, full apply UI is in <b>Ontology Curation → Refine</b>.</span>
+        <span style="flex:1"></span>
+        ${fixable.length ? `<button class="ds-btn" onclick="_builderApplyAllFixable()">Apply all ${fixable.length} auto-fixable</button>` : ''}
       </div>
-      <details>
-        <summary style="cursor:pointer;font-size:10px;color:var(--text2);margin-bottom:6px">Show top ${top.length} finding${top.length!==1?'s':''}${more > 0 ? ` (+${more} more)` : ''}</summary>
-        ${top.map(f => `<div style="font-size:10px;color:var(--text2);padding:4px 8px;border-left:2px solid ${f.severity==='error'?'var(--red)':f.severity==='warn'?'var(--amber)':'var(--teal)'};margin-bottom:4px;background:var(--bg3)"><b>[${f.severity}]</b> ${escapeHTML(f.title)}</div>`).join('')}
-      </details>`;
+      <div id="bld-preview-lint-list">
+        ${all.map(_renderBuilderLintCard).join('')}
+      </div>
+      <div style="font-size:9.5px;color:var(--text3);margin-top:6px">Findings here apply to the in-memory TTL. After Create the full Refine UI lives in <b>Ontology Curation → Refine</b>.</div>`;
+    root.querySelectorAll('[data-bld-lint]').forEach(btn => {
+      btn.onclick = () => _onBuilderLintAction(btn);
+    });
   } catch(err){
     root.innerHTML = `<div style="font-size:9.5px;color:var(--text3)">Linter unavailable: ${escapeHTML(err.message)}</div>`;
   }
 }
 
+function _renderBuilderLintCard(f){
+  const sev = f.severity || 'info';
+  const isAuto = f.fix?.kind && f.fix.kind !== 'noop';
+  return `<div class="ref-finding" style="margin-bottom:7px;padding:8px 11px">
+    <div class="ref-finding-hdr" style="margin-bottom:3px">
+      <span class="ref-finding-sev ref-sev-${sev}" style="font-size:8px">${sev.toUpperCase()}</span>
+      <span class="ref-finding-title" style="font-size:10.5px">${escapeHTML(f.title || '')}</span>
+    </div>
+    ${f.fix?.preview ? `<div class="ref-finding-preview" style="font-size:9px;padding:3px 6px;margin-bottom:5px">${escapeHTML(f.fix.preview)}</div>` : ''}
+    <div style="display:flex;gap:5px;justify-content:flex-end">
+      ${isAuto
+        ? `<button class="ref-action ref-action-apply" data-bld-lint="apply" data-fid="${escapeHTML(f.id)}" data-fix='${escapeHTML(JSON.stringify(f.fix))}' style="padding:3px 9px;font-size:9.5px">Apply</button>`
+        : `<span style="font-size:9px;color:var(--text3);font-style:italic;align-self:center">Manual fix only — apply via Refine sub-tab after Create</span>`}
+    </div>
+  </div>`;
+}
+
+async function _onBuilderLintAction(btn){
+  const fix = JSON.parse(btn.dataset.fix.replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const res = await api('/refine/preview-apply', {
+      ontology_ttl: _builderState.previewTTL,
+      namespace: _builderState.meta.namespace,
+      fix,
+    });
+    _builderState.previewTTL = res.ontology_ttl;
+    // Refresh the right-pane TTL preview AND the lint findings list.
+    document.getElementById('bld-preview-ontology').textContent = res.ontology_ttl;
+    await _renderBuilderPreviewLint(res.ontology_ttl);
+  } catch(err){
+    alert('Apply failed: ' + err.message);
+    btn.disabled = false; btn.textContent = 'Apply';
+  }
+}
+
+async function _builderApplyAllFixable(){
+  // Iterate findings in order, applying each. Stops on the first error.
+  // Re-renders once at the end so we don't thrash the DOM N times.
+  const root = document.getElementById('bld-preview-lint');
+  root.innerHTML = '<div style="font-size:10px;color:var(--text3);padding:8px">Applying all fixable findings…</div>';
+  let ttl = _builderState.previewTTL;
+  let applied = 0;
+  let failed = [];
+  try {
+    let fres = await api('/refine/preview-lint', {
+      ontology_ttl: ttl, prefix: _builderState.meta.prefix, namespace: _builderState.meta.namespace,
+    });
+    // Re-fetch findings each iteration because applying one can resolve another.
+    while(true){
+      const fixable = (fres.findings || []).filter(f => f.fix?.kind && f.fix.kind !== 'noop');
+      if(!fixable.length) break;
+      const f = fixable[0];
+      try {
+        const r = await api('/refine/preview-apply', {ontology_ttl: ttl, namespace: _builderState.meta.namespace, fix: f.fix});
+        ttl = r.ontology_ttl; applied++;
+      } catch(err){
+        failed.push({id: f.id, msg: err.message});
+        break;   // bail on first failure to avoid cascading errors
+      }
+      fres = await api('/refine/preview-lint', {
+        ontology_ttl: ttl, prefix: _builderState.meta.prefix, namespace: _builderState.meta.namespace,
+      });
+    }
+    _builderState.previewTTL = ttl;
+    document.getElementById('bld-preview-ontology').textContent = ttl;
+    await _renderBuilderPreviewLint(ttl);
+    if(failed.length){
+      alert(`Applied ${applied} fix${applied!==1?'es':''}. Stopped at: ${failed[0].id} (${failed[0].msg})`);
+    }
+  } catch(err){
+    alert('Bulk apply failed: ' + err.message);
+    await _renderBuilderPreviewLint(ttl);
+  }
+}
+
 async function _builderCreate(){
-  const out = await api('/builder/create', {schema: _builderState.schema, bundle: _builderState.meta});
+  // If the user clicked Apply on any preview lint findings, the mutated
+  // TTL lives on _builderState.previewTTL. Pass it through so the bundle
+  // we ultimately write reflects those edits.
+  const body = {schema: _builderState.schema, bundle: _builderState.meta};
+  if(_builderState.previewTTL) body.override_ontology_ttl = _builderState.previewTTL;
+  const out = await api('/builder/create', body);
   alert(`✓ Bundle "${out.slug}" created.\n\n${out.next}`);
   // Reset wizard + jump to Use Cases tab so user can activate.
   _builderState.step = 'source';
   _builderState.source = null;
   _builderState.schema = null;
+  _builderState.previewTTL = null;
   _builderState.meta = {slug:'', name:'', prefix:'', namespace:'', description:''};
   ['bld-pg-env','bld-meta-slug','bld-meta-name','bld-meta-prefix','bld-meta-ns','bld-meta-desc'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';

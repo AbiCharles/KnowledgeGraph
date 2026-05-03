@@ -24,6 +24,26 @@ from rdflib.namespace import SKOS
 from pipeline import use_case_registry
 
 
+def apply_fix_to_text(ontology_ttl: str, namespace: str, fix: dict) -> tuple[str, dict]:
+    """In-memory variant of apply_fix — operates on raw TTL text + namespace
+    without touching any bundle on disk. Used by the Builder's Preview step
+    so the operator can apply fixes BEFORE clicking Create. Returns
+    (new_ttl, summary).
+
+    Same fix.kind dispatch as the on-disk path; no register_uploaded
+    side-effects (no auto-archive — caller manages persistence)."""
+    if not isinstance(fix, dict) or "kind" not in fix:
+        raise ValueError("fix must be a dict with a 'kind' key.")
+    kind = fix["kind"]
+    handler = _HANDLERS.get(kind)
+    if handler is None:
+        raise ValueError(
+            f"Unknown fix kind {kind!r}. Supported: {sorted(_HANDLERS)}."
+        )
+    new_ontology, summary = handler(ontology_ttl, namespace, fix)
+    return new_ontology, summary
+
+
 def apply_fix(slug: str, fix: dict) -> dict:
     """Apply ONE fix to bundle `slug`. Returns a summary dict the route
     can pass back to the UI. Raises ValueError on bad input or noop

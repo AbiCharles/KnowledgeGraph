@@ -1,0 +1,18 @@
+slug: lint-demo
+name: Linter Demo
+description: |
+  A deliberately-broken bundle that triggers every linter rule. Use this
+  to see what the Refine sub-tab can find. Activate, then open Ontology
+  Curation → Refine to see all 9 finding types in action. The bundle's
+  data.ttl is intentionally tiny — this is for exercising the linter,
+  not for serious queries.
+
+prefix: ld
+namespace: http://example.org/ld#
+
+in_scope_classes:
+  - Order
+  - Customer
+  - Orphan
+  - IsolatedLeaf
+  - bad_class
