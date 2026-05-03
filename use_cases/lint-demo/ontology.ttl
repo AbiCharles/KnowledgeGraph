@@ -1,0 +1,91 @@
+@prefix ld:   <http://example.org/ld#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+<http://example.org/ld>
+    a owl:Ontology ;
+    dcterms:title "Linter Demo" ;
+    dcterms:description "Deliberately broken — exercises every linter rule." ;
+    owl:versionInfo "0.0.1" .
+
+# ── Classes ─────────────────────────────────────────────────────────────────
+
+# Clean baseline — has label + skos:definition + datatype properties + relationships.
+# Should produce ZERO findings on its own.
+ld:Customer a owl:Class ;
+    rdfs:label       "Customer" ;
+    skos:definition  "A person or organisation that places orders." .
+
+# Has datatype properties + a relationship — but several lint rules will fire
+# against its properties below.
+ld:Order a owl:Class ;
+    rdfs:label       "Order" ;
+    skos:definition  "A purchase request from a customer." .
+
+# Triggers `class-no-label-Orphan` + `class-no-definition-Orphan` + `orphan-class-Orphan`
+# (no label, no description, no properties, no relationships).
+ld:Orphan a owl:Class .
+
+# Triggers `class-no-definition-IsolatedLeaf` + `isolated-class-IsolatedLeaf`
+# (has a label + a property, but no relationships — won't connect in graph).
+ld:IsolatedLeaf a owl:Class ;
+    rdfs:label "Isolated Leaf" .
+
+# Triggers `class-naming-bad_class` (snake_case, not PascalCase) +
+# `class-no-label-bad_class` + `class-no-definition-bad_class` + `orphan-class-bad_class`.
+ld:bad_class a owl:Class .
+
+# ── Datatype properties on Order ────────────────────────────────────────────
+
+# Triggers `prop-no-label-orderId`. Has domain + range, just no label.
+ld:orderId a owl:DatatypeProperty ;
+    rdfs:domain ld:Order ;
+    rdfs:range  xsd:integer .
+
+# Triggers `hidden-fk-customerId` — name ends with "Id", a Customer class
+# exists in this ontology, but no object property named `customer` links them.
+# The Refine card will offer "Convert to object property" with one click.
+ld:customerId a owl:DatatypeProperty ;
+    rdfs:label  "Customer ID" ;
+    rdfs:domain ld:Order ;
+    rdfs:range  xsd:integer .
+
+# Triggers `prop-naming-bad_field` (snake_case) + `prop-no-label-bad_field`.
+ld:bad_field a owl:DatatypeProperty ;
+    rdfs:domain ld:Order ;
+    rdfs:range  xsd:string .
+
+# Triggers `prop-no-domain-orphanField` (no rdfs:domain — ambiguous scope).
+ld:orphanField a owl:DatatypeProperty ;
+    rdfs:label "Orphan Field" ;
+    rdfs:range xsd:string .
+
+# Used by IsolatedLeaf so it isn't flagged as orphan, only as isolated.
+ld:leafName a owl:DatatypeProperty ;
+    rdfs:label  "Leaf Name" ;
+    rdfs:domain ld:IsolatedLeaf ;
+    rdfs:range  xsd:string .
+
+# Customer property — clean baseline so Customer doesn't get false flags.
+ld:customerName a owl:DatatypeProperty ;
+    rdfs:label  "Customer Name" ;
+    rdfs:domain ld:Customer ;
+    rdfs:range  xsd:string .
+
+# ── Object properties ───────────────────────────────────────────────────────
+
+# Clean baseline — has label, domain, range. Connects Order ↔ Customer
+# so neither shows up as isolated.
+ld:placedBy a owl:ObjectProperty ;
+    rdfs:label  "Placed By" ;
+    rdfs:domain ld:Order ;
+    rdfs:range  ld:Customer .
+
+# Triggers `objprop-no-range-objNoRange` (no rdfs:range).
+ld:objNoRange a owl:ObjectProperty ;
+    rdfs:label  "Object Property With No Range" ;
+    rdfs:domain ld:Order .

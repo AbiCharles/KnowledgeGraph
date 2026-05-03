@@ -182,22 +182,33 @@ def generate(schema: dict, bundle_meta: dict) -> dict[str, Any]:
     #    properties (so FK targets exist when relationships are added).
     onto = _seed_ontology_ttl(meta)
 
-    # Pass 1: classes
+    # Pass 1: classes — honour user-set label + description if present, else
+    # default to the auto-generated values. Empty strings count as "use default"
+    # so the wizard can wipe a field to reset it.
     for table in schema["tables"]:
+        cls_label = (table.get("class_label") or "").strip() or _humanise(table["class_name"])
+        cls_desc = (table.get("class_description") or "").strip() or \
+            f"Generated from {schema['source_kind']} table {table['name']!r}"
         onto, _ = add_class(
             onto, meta["namespace"], table["class_name"],
-            description=f"Generated from {schema['source_kind']} table {table['name']!r}",
+            label=cls_label,
+            description=cls_desc,
         )
 
-    # Pass 2: datatype properties — one per column.
+    # Pass 2: datatype properties — one per column. Honour per-column
+    # label override; description override is stored in the schema dict
+    # but not yet wired into add_datatype_property (would need an
+    # ontology_editor extension; deferred for v1).
     for table in schema["tables"]:
         for col in table.get("columns", []):
+            col_label = (col.get("label") or "").strip() or _humanise(col["name"])
             try:
                 onto, _ = add_datatype_property(
                     onto, meta["namespace"],
                     local_name=col["name"],
                     domain_class=table["class_name"],
                     xsd_range=col["xsd_type"],
+                    label=col_label,
                 )
             except ValueError as exc:
                 # Ignore duplicate-property errors (same col name on two
@@ -205,7 +216,7 @@ def generate(schema: dict, bundle_meta: dict) -> dict[str, Any]:
                 if "already exists" not in str(exc):
                     raise
 
-    # Pass 3: object properties from foreign keys (Postgres only).
+    # Pass 3a: object properties from Postgres foreign keys.
     obj_count = 0
     if schema.get("source_kind") == "postgres":
         # Index tables by their original SQL name so FKs can find the class.
@@ -232,6 +243,34 @@ def generate(schema: dict, bundle_meta: dict) -> dict[str, Any]:
                 except ValueError as exc:
                     if "already exists" not in str(exc):
                         raise
+
+    # Pass 3b: explicit user-added relationships (works for any source).
+    # CSV source uses this exclusively (no FK detection); Postgres source
+    # can use it to add relationships the inspector missed.
+    for table in schema["tables"]:
+        for rel in table.get("relationships", []) or []:
+            rel_name = (rel.get("name") or "").strip()
+            range_class = (rel.get("range_class") or "").strip()
+            if not rel_name or not range_class:
+                continue
+            if not _NAME_RE.match(rel_name):
+                raise ValueError(
+                    f"Relationship name {rel_name!r} on {table['class_name']} "
+                    f"must match {_NAME_RE.pattern}."
+                )
+            try:
+                onto, _ = add_object_property(
+                    onto, meta["namespace"],
+                    local_name=rel_name,
+                    domain_class=table["class_name"],
+                    range_class=range_class,
+                    functional=bool(rel.get("functional", False)),
+                    label=(rel.get("label") or "").strip() or _humanise(rel_name),
+                )
+                obj_count += 1
+            except ValueError as exc:
+                if "already exists" not in str(exc):
+                    raise
 
     # 2. Build the manifest. Postgres source pre-populates datasources +
     #    pull adapters so the bundle is hydration-ready immediately.
@@ -407,6 +446,13 @@ def _build_examples(schema: dict, meta: dict) -> tuple[list[dict], list[dict]]:
                     None,
                 )
     return examples, nl_rules
+
+
+def _humanise(camel_or_pascal: str) -> str:
+    """workOrderId → 'Work Order Id'; WorkOrder → 'Work Order'.
+    Used to derive sensible default rdfs:labels from generated identifiers."""
+    s = re.sub(r"([A-Z])", r" \1", camel_or_pascal).strip()
+    return s[:1].upper() + s[1:]
 
 
 def _english_plural(word: str) -> str:

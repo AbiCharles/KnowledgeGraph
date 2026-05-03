@@ -37,6 +37,30 @@ Create.
 
 ---
 
+## Try it instantly with the lint-demo bundle
+
+The repo ships a deliberately-broken bundle that triggers every linter
+rule so you can see the full Refine UX without authoring a problem
+ontology yourself.
+
+1. **Use Cases tab → Activate** the `lint-demo` bundle (already in
+   `use_cases/lint-demo/`).
+2. **Ontology Curation → Refine sub-tab** → linter auto-runs.
+3. You should see **15 findings** spanning all 5 categories:
+   - **2 warns** — `objNoRange` (no range) + `orphanField` (no domain)
+   - **2 warns** — `Orphan` and `bad_class` (orphan classes)
+   - **1 info** — `IsolatedLeaf` (no relationships)
+   - **3 info** — missing skos:definitions
+   - **2 info** — missing rdfs:labels
+   - **2 info** — naming convention violations
+   - **1 info** — `customerId` looks like FK to `Customer` (one-click "Convert to object property" available)
+4. Click **Apply** on any finding with an automatic fix to see the
+   ontology mutate + the linter re-run.
+
+The `lint-demo` bundle has a tiny `data.ttl` so the Hydration Pipeline
+also runs on the parts of the schema that aren't broken — you can
+exercise the whole loop end-to-end.
+
 ## Quick-start
 
 1. **Use Cases tab → Activate** the bundle you want to refine.

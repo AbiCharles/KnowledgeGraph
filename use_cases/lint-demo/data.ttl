@@ -1,0 +1,38 @@
+@prefix ld:   <http://example.org/ld#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# Tiny sample so Hydration Pipeline produces SOME nodes after the
+# linter rules have been exercised in the Refine sub-tab. Just enough
+# to verify the data path still works end-to-end on the unbroken
+# parts of the schema.
+
+ld:Customer_C001
+    a ld:Customer ;
+    rdfs:label "Customer C001" ;
+    ld:customerName "Acme Corp" .
+
+ld:Customer_C002
+    a ld:Customer ;
+    rdfs:label "Customer C002" ;
+    ld:customerName "Beta LLC" .
+
+ld:Order_O100
+    a ld:Order ;
+    rdfs:label "Order O100" ;
+    ld:orderId 100 ;
+    ld:customerId 1 ;
+    ld:placedBy ld:Customer_C001 .
+
+ld:Order_O101
+    a ld:Order ;
+    rdfs:label "Order O101" ;
+    ld:orderId 101 ;
+    ld:customerId 2 ;
+    ld:placedBy ld:Customer_C002 .
+
+ld:IsolatedLeaf_L001
+    a ld:IsolatedLeaf ;
+    rdfs:label "Isolated Leaf 1" ;
+    ld:leafName "Standalone entity — won't connect to anything in the graph view." .

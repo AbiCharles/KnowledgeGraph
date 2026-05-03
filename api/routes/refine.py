@@ -23,6 +23,33 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 
+@router.post("/preview-apply")
+def preview_apply_route(req: dict):
+    """Apply ONE fix to in-memory TTL text. Used by the Builder Preview
+    step's Apply buttons — mutates the TTL the wizard is about to write
+    so changes take effect at Create time, no second pass through the
+    Refine sub-tab needed.
+
+    Body: {ontology_ttl, namespace, fix}. Returns {ontology_ttl, summary}.
+    """
+    ttl = (req or {}).get("ontology_ttl", "")
+    namespace = (req or {}).get("namespace", "")
+    fix = (req or {}).get("fix")
+    if not namespace:
+        raise HTTPException(status_code=400, detail="namespace is required.")
+    if not isinstance(fix, dict):
+        raise HTTPException(status_code=400, detail="fix dict is required.")
+    try:
+        from pipeline.refiner.applicator import apply_fix_to_text
+        new_ttl, summary = apply_fix_to_text(ttl, namespace, fix)
+        return {"ontology_ttl": new_ttl, "summary": summary}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        log.exception("Preview-apply failed")
+        raise HTTPException(status_code=422, detail=f"Apply failed: {exc}")
+
+
 @router.post("/preview-lint")
 def preview_lint_route(req: dict):
     """Lint an in-memory ontology TTL — used by the Builder's Preview
