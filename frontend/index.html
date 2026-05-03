@@ -801,6 +801,7 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
     <span class="kgptitle" id="kgptitle">Full Knowledge Graph</span>
     <span class="kgpstats" id="kgpstats">Loading&hellip;</span>
     <div class="kgpbtns">
+      <button class="kgpbtn" onclick="refreshKGCanvas()" title="Re-fetch nodes from Neo4j and redraw">&#8635; Refresh</button>
       <button class="kgpbtn" onclick="resetKGView()">Reset</button>
       <button class="kgpbtn" onclick="window.scrollTo({top:0,behavior:'smooth'})">&#8593; Top</button>
     </div>
@@ -2891,6 +2892,29 @@ function setupKGCanvas(cv){
 }
 
 function resetKGView(){ kgZoom = 1; kgPanX = 0; kgPanY = 0; }
+
+async function refreshKGCanvas(){
+  // Re-fetches the active manifest (so prefix is current) + the graph
+  // snapshot from Neo4j + redraws the canvas. Useful after running the
+  // pipeline against a freshly-activated bundle, or after any operation
+  // that changed the live graph (data generation, manual pull, etc.)
+  const stats = document.getElementById('kgpstats');
+  const orig = stats ? stats.textContent : '';
+  if(stats) stats.textContent = 'Refreshing…';
+  try {
+    await loadManifest();   // updates window.MANIFEST + GCOL/GSZ/etc.
+    const ok = await loadGraph();
+    if(ok){
+      document.getElementById('kgpanel').classList.add('active');
+      // Defer initKGCanvas so the panel layout settles first.
+      setTimeout(initKGCanvas, 50);
+    }
+  } catch(err){
+    if(stats) stats.textContent = 'Refresh failed: ' + err.message;
+    return;
+  }
+  if(stats) stats.textContent = orig || '';
+}
 
 function showKGDetail(n){
   document.getElementById('kgd-dot').style.background = n.color;
