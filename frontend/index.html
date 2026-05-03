@@ -4795,6 +4795,8 @@ function _renderPipelineLLMDock(dock, res, slug){
 function _renderPipelineLLMCard(f){
   const sev = f.severity || 'info';
   const isAuto = f.fix?.kind && f.fix.kind !== 'noop';
+  // Always render Dismiss — operators want to clear suggestions they
+  // disagree with even (especially) when there's no auto-fix.
   return `<div class="ref-finding" style="margin-bottom:8px;padding:9px 12px" data-pl-fid="${escapeHTML(f.id)}">
     <div class="ref-finding-hdr" style="margin-bottom:4px">
       <span class="ref-finding-sev ref-sev-${sev}" style="font-size:8.5px">${sev.toUpperCase()}</span>
@@ -4804,21 +4806,33 @@ function _renderPipelineLLMCard(f){
     ${f.description ? `<div class="ref-finding-desc">${escapeHTML(f.description)}</div>` : ''}
     ${f.fix?.preview ? `<div class="ref-finding-preview">${escapeHTML(f.fix.preview)}</div>` : ''}
     <div class="ref-finding-actions">
+      <button class="ref-action" data-pl-action="dismiss">Dismiss</button>
       ${isAuto
         ? `<button class="ref-action ref-action-apply" data-pl-action="apply" data-fix='${escapeHTML(JSON.stringify(f.fix))}'>Apply</button>`
-        : `<span style="font-size:9px;color:var(--text3);font-style:italic;align-self:center">Manual fix only</span>`}
+        : `<span style="font-size:9px;color:var(--text3);font-style:italic;align-self:center;padding-left:6px">Manual fix only</span>`}
     </div>
   </div>`;
 }
 
 async function _onPipelineLLMAction(btn, slug, dock, res){
-  if(btn.dataset.plAction !== 'apply') return;
+  const action = btn.dataset.plAction;
+  const fid = btn.closest('[data-pl-fid]')?.dataset.plFid;
+
+  if(action === 'dismiss'){
+    // Session-scoped dismissal — drop the finding from the visible list
+    // and re-render. Doesn't persist across reloads (matches the Refine
+    // sub-tab's _refineDismissed semantics).
+    if(fid) res.findings = res.findings.filter(f => f.id !== fid);
+    _renderPipelineLLMDock(dock, res, slug);
+    return;
+  }
+
+  if(action !== 'apply') return;
   const fix = JSON.parse(btn.dataset.fix.replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
   btn.disabled = true; btn.textContent = '…';
   try {
     await api(`/refine/${encodeURIComponent(slug)}/apply`, {fix});
     // Mark this finding as applied so it disappears on the next render.
-    const fid = btn.closest('[data-pl-fid]')?.dataset.plFid;
     if(fid) res.findings = res.findings.filter(f => f.id !== fid);
     _renderPipelineLLMDock(dock, res, slug);
     // Bust the schema cache so the editor's autocomplete picks up the change.
