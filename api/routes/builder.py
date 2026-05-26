@@ -96,6 +96,33 @@ async def postgres_inspect(req: dict):
             raise HTTPException(status_code=422, detail=f"Inspection failed: {exc}")
 
 
+# ── 2b. Describe (plain-English → draft schema via LLM) ──────────────────────
+
+@router.post("/describe")
+async def describe(req: dict):
+    """Body: {description: str, bundle?: {...hints}}.
+    Drafts an ontology from a natural-language description and returns the
+    SAME schema dict the csv/postgres inspectors produce (source_kind=
+    "description"), so it flows straight into /preview and /create. Counts
+    against the daily LLM cap; degrades to {tables: [], cap_hit: true} when
+    the cap is hit rather than erroring."""
+    description = (req or {}).get("description", "").strip()
+    hints = (req or {}).get("bundle") or {}
+    if not description:
+        raise HTTPException(status_code=400, detail="description is required.")
+    async with acquire_or_409(locks.active_lock, "builder describe"):
+        try:
+            # Local import keeps langchain_openai out of module import time,
+            # matching how refine.py lazily pulls in the LLM analyser.
+            from pipeline.builder import nl_inspector
+            return nl_inspector.describe(description, hints)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            log.exception("Builder describe failed")
+            raise HTTPException(status_code=422, detail=f"Describe failed: {exc}")
+
+
 # ── 3. Preview ──────────────────────────────────────────────────────────────
 
 @router.post("/preview")

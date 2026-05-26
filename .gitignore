@@ -1,5 +1,6 @@
 .env
 venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -12,4 +13,7 @@ build/
 
 # Use-case registry runtime state (which bundle is currently active)
 use_cases/.active
+# LLM daily-spend tracking (runtime state)
+use_cases/.llm_usage.json
+use_cases/.llm_usage.json.lock
 .fly-secrets.local

@@ -450,6 +450,32 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 .bld-rel-row:last-child{border-bottom:none}
 .bld-rel-row input[type="text"], .bld-rel-row input:not([type]){background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 7px;font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace;flex:1;max-width:240px}
 .bld-rel-row select{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 5px;font-size:9.5px;color:var(--text);font-family:'JetBrains Mono',monospace}
+/* Builder beginner/advanced mode. Default = beginner: .bld-adv-only hidden,
+   .bld-simple-only shown. body.bld-adv flips both. */
+.bld-adv-only{display:none}
+body.bld-adv .bld-adv-only{display:revert}
+body.bld-adv .bld-simple-only{display:none}
+.bld-adv-toggle{margin-left:auto;display:flex;align-items:center;gap:5px;color:var(--text3);cursor:pointer;font-size:9.5px;font-family:'JetBrains Mono',monospace;user-select:none}
+.bld-adv-toggle input{cursor:pointer;margin:0}
+.bld-adv-toggle:hover{color:var(--text2)}
+/* Builder simple-mode friendly rows */
+.bld-entity-name{background:var(--bg)!important;border:1px solid var(--border)!important;border-radius:3px;padding:4px 9px!important;font-size:11.5px!important;color:var(--text)!important;font-family:'JetBrains Mono',monospace;width:240px!important;font-weight:600}
+.bld-attr-row{display:grid;grid-template-columns:1fr 150px 32px;gap:8px;padding:5px 12px;border-bottom:1px dashed var(--border);align-items:center;font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text2)}
+.bld-attr-row:last-child{border-bottom:none}
+.bld-attr-row input{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-size:10.5px;color:var(--text);font-family:inherit}
+.bld-attr-row select{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:10px;color:var(--text);font-family:inherit}
+.bld-conn-row{display:flex;align-items:center;gap:7px;padding:5px 12px;border-bottom:1px dashed var(--border);font-size:10.5px;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.bld-conn-row:last-child{border-bottom:none}
+.bld-conn-row input.bld-conn-verb{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-size:10.5px;color:var(--text);font-family:inherit;flex:1;max-width:180px}
+.bld-conn-row select{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-size:10px;color:var(--text);font-family:inherit}
+.bld-conn-arrow{color:var(--teal);font-size:10px}
+.bld-conn-from{color:var(--text2);font-weight:600;white-space:nowrap}
+/* Builder preview outline (simple mode) */
+.bld-outline-card{border:1px solid var(--border);border-radius:6px;background:var(--bg3);margin-bottom:9px;padding:10px 13px}
+.bld-outline-title{font-size:12px;color:var(--text);font-weight:600;margin-bottom:5px;font-family:'JetBrains Mono',monospace}
+.bld-outline-attrs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.bld-outline-attr{font-size:9.5px;color:var(--text2);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:2px 9px;font-family:'JetBrains Mono',monospace}
+.bld-outline-conn{font-size:10px;color:var(--text2);font-family:'JetBrains Mono',monospace;padding:2px 0}
 /* Refiner / Refine sub-tab */
 .ref-summary-chip{padding:5px 11px;border-radius:11px;font-size:9.5px;letter-spacing:.5px;font-weight:600;border:1px solid var(--border)}
 .ref-chip-error{background:rgba(248,113,113,.1);color:var(--red);border-color:rgba(248,113,113,.4)}
@@ -710,18 +736,23 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
       <div style="flex:1;overflow-y:auto;padding:14px">
         <!-- Step 1: pick source -->
         <div class="builder-step" data-step="source">
-          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600">Pick a source</div>
-          <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:14px">The Builder introspects your data, infers an OWL2 ontology, and produces a complete bundle ready to drop through Ontology Curation → Hydration Pipeline → Query Console.</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <button class="bld-srcbtn" onclick="builderPickSource('postgres')">
-              <div style="font-size:24px;color:var(--teal);margin-bottom:6px">&#9678;</div>
-              <div style="font-size:11px;color:var(--text);font-weight:600;margin-bottom:4px">From Postgres</div>
-              <div style="font-size:9.5px;color:var(--text3);line-height:1.5">Query <code>information_schema</code> via an env-var DSN. Generates classes from tables, datatype properties from columns, object properties from foreign keys. Pre-wires stage-4 pull adapters so the bundle is hydration-ready.</div>
+          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600">How do you want to start?</div>
+          <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:14px">Describe what you track in plain English, upload spreadsheets, or connect a database. You'll review and edit everything before anything is created.<span class="bld-adv-only"> The Builder introspects your data, infers an OWL2 ontology, and produces a complete bundle ready to drop through Ontology Curation → Hydration Pipeline → Query Console.</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+            <button class="bld-srcbtn" onclick="builderPickSource('describe')">
+              <div style="font-size:24px;color:var(--purple);margin-bottom:6px">&#9998;</div>
+              <div style="font-size:11px;color:var(--text);font-weight:600;margin-bottom:4px">Describe in plain English</div>
+              <div style="font-size:9.5px;color:var(--text3);line-height:1.5">Tell us about your domain in a sentence or two. AI drafts the things you track, their details, and how they connect — you review and edit before creating. <span style="color:var(--purple)">Uses the AI assistant.</span></div>
             </button>
             <button class="bld-srcbtn" onclick="builderPickSource('csv')">
               <div style="font-size:24px;color:var(--blue);margin-bottom:6px">&#9783;</div>
-              <div style="font-size:11px;color:var(--text);font-weight:600;margin-bottom:4px">From CSVs</div>
-              <div style="font-size:9.5px;color:var(--text3);line-height:1.5">Upload N CSVs in one batch. Each becomes one class. Sample rows seed data.ttl directly — no datasource needed. Type inference: integer / decimal / boolean / date / dateTime / string.</div>
+              <div style="font-size:11px;color:var(--text);font-weight:600;margin-bottom:4px">From spreadsheets (CSV)</div>
+              <div style="font-size:9.5px;color:var(--text3);line-height:1.5">Upload up to 10 CSV files in one batch. Each file becomes one thing; its columns become the details. A few sample rows are loaded as starter data.<span class="bld-adv-only"> Type inference: integer / decimal / boolean / date / dateTime / string.</span></div>
+            </button>
+            <button class="bld-srcbtn" onclick="builderPickSource('postgres')">
+              <div style="font-size:24px;color:var(--teal);margin-bottom:6px">&#9678;</div>
+              <div style="font-size:11px;color:var(--text);font-weight:600;margin-bottom:4px">From a database (Postgres)</div>
+              <div style="font-size:9.5px;color:var(--text3);line-height:1.5">Connect a Postgres database and we'll read its structure automatically — tables become things, columns become details, and links between tables become connections.<span class="bld-adv-only"> Query <code>information_schema</code> via an env-var DSN; pre-wires stage-4 pull adapters.</span></div>
             </button>
           </div>
         </div>
@@ -729,6 +760,14 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
         <!-- Step 2: provide source details -->
         <div class="builder-step" data-step="provide" style="display:none">
           <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600" id="bld-provide-title"></div>
+          <div id="bld-provide-describe" style="display:none">
+            <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:12px">Describe what you want to track, in your own words. Mention the main things, what you record about each, and how they relate. The more detail, the better the draft.</div>
+            <textarea class="uc-form-input" id="bld-describe-text" rows="7" style="resize:vertical;line-height:1.55" placeholder="e.g. We track work orders assigned to technicians. Each work order is for one piece of equipment, has a priority (high / medium / low), a status, and a due date. Technicians have a name and a specialty. Equipment has a serial number and a location."></textarea>
+            <div style="margin-top:11px;display:flex;align-items:center;gap:11px">
+              <button class="uc-modal-submit" id="bld-describe-btn" onclick="builderDescribe()">&#10024; Draft my ontology</button>
+              <span id="bld-describe-status" style="font-size:10px;font-family:'JetBrains Mono',monospace"></span>
+            </div>
+          </div>
           <div id="bld-provide-pg" style="display:none">
             <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:14px">Set your DSN as an environment variable on the host (e.g. <code>export ORDERS_PG_DSN='postgresql://...'</code>) and restart uvicorn. Then enter the variable name below.</div>
             <div class="uc-form-row">
@@ -752,57 +791,64 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 
         <!-- Step 3: inspected schema preview (editable tree) -->
         <div class="builder-step" data-step="inspect" style="display:none">
-          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600">Inspect schema</div>
-          <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:14px">Edit class names + xsd types as needed. Each table becomes one OWL class.</div>
+          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600"><span class="bld-simple-only">Review what we found</span><span class="bld-adv-only">Inspect schema</span></div>
+          <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:14px"><span class="bld-simple-only">Here are the things we found, what we record about each, and how they connect. Rename anything, change a type, or remove what you don't need.</span><span class="bld-adv-only">Edit class names + xsd types as needed. Each table becomes one OWL class.</span></div>
           <div id="bld-schema-edit"></div>
         </div>
 
         <!-- Step 4: bundle metadata -->
         <div class="builder-step" data-step="meta" style="display:none">
-          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600">Bundle metadata</div>
-          <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:14px">These become the manifest's <code>slug</code>, <code>name</code>, <code>prefix</code>, and <code>namespace</code> fields. Slug is the directory name on disk; prefix is what shows up in Cypher (e.g. <code>kf-mfg__WorkOrder</code>).</div>
-          <div style="display:flex;gap:14px">
-            <div class="uc-form-row" style="flex:1">
-              <div class="uc-form-label">Slug</div>
-              <input class="uc-form-input" id="bld-meta-slug" placeholder="e.g. orders-test" />
-            </div>
-            <div class="uc-form-row" style="flex:1">
-              <div class="uc-form-label">Display name</div>
-              <input class="uc-form-input" id="bld-meta-name" placeholder="e.g. Orders Test" />
-            </div>
-          </div>
-          <div style="display:flex;gap:14px">
-            <div class="uc-form-row" style="flex:1">
-              <div class="uc-form-label">Prefix (≤16 lowercase chars)</div>
-              <input class="uc-form-input" id="bld-meta-prefix" placeholder="e.g. od" oninput="builderAutoNamespace()" />
-            </div>
-            <div class="uc-form-row" style="flex:1.4">
-              <div class="uc-form-label">Namespace (must end with # or /)</div>
-              <input class="uc-form-input" id="bld-meta-ns" placeholder="e.g. http://example.org/od#" />
-            </div>
+          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600"><span class="bld-simple-only">Name it</span><span class="bld-adv-only">Bundle metadata</span></div>
+          <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:14px"><span class="bld-simple-only">Give this knowledge base a name. We'll fill in the technical identifiers for you — show Advanced mode if you want to set them yourself.</span><span class="bld-adv-only">These become the manifest's <code>slug</code>, <code>name</code>, <code>prefix</code>, and <code>namespace</code> fields. Slug is the directory name on disk; prefix is what shows up in Cypher (e.g. <code>kf-mfg__WorkOrder</code>).</span></div>
+          <div class="uc-form-row">
+            <div class="uc-form-label">Name</div>
+            <input class="uc-form-input" id="bld-meta-name" placeholder="e.g. Maintenance Operations" oninput="_builderDeriveMeta()" />
           </div>
           <div class="uc-form-row">
             <div class="uc-form-label">Description (optional)</div>
             <input class="uc-form-input" id="bld-meta-desc" placeholder="One-line description shown on the bundle card." />
           </div>
+          <!-- Technical identifiers — auto-derived from the name; revealed in Advanced mode. -->
+          <div class="bld-adv-only" style="margin-top:8px;padding-top:10px;border-top:1px dashed var(--border)">
+            <div style="display:flex;gap:14px">
+              <div class="uc-form-row" style="flex:1">
+                <div class="uc-form-label">Slug</div>
+                <input class="uc-form-input" id="bld-meta-slug" placeholder="e.g. orders-test" oninput="this.dataset.userEdited='1'" />
+              </div>
+              <div class="uc-form-row" style="flex:1">
+                <div class="uc-form-label">Prefix (≤16 lowercase chars)</div>
+                <input class="uc-form-input" id="bld-meta-prefix" placeholder="e.g. od" oninput="this.dataset.userEdited='1';_builderDeriveNs()" />
+              </div>
+            </div>
+            <div class="uc-form-row">
+              <div class="uc-form-label">Namespace (must end with # or /)</div>
+              <input class="uc-form-input" id="bld-meta-ns" placeholder="e.g. http://example.org/od#" oninput="this.dataset.userEdited='1'" />
+            </div>
+          </div>
         </div>
 
         <!-- Step 5: preview generated files -->
         <div class="builder-step" data-step="preview" style="display:none">
-          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600">Preview</div>
+          <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600"><span class="bld-simple-only">Review &amp; create</span><span class="bld-adv-only">Preview</span></div>
           <div id="bld-preview-summary" style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:10px"></div>
+          <!-- Friendly outline of the entities & connections (simple mode). -->
+          <div id="bld-preview-outline" class="bld-simple-only" style="margin-bottom:14px"></div>
           <!-- Lint findings — computed on the in-memory TTL so the operator can
                see issues BEFORE clicking Create. They're informational only —
                clicking Create proceeds regardless. -->
           <div id="bld-preview-lint" style="margin-bottom:14px"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-            <div>
-              <div style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-bottom:4px">manifest.yaml</div>
-              <pre id="bld-preview-manifest" class="uc-diff-pre" style="max-height:380px"></pre>
-            </div>
-            <div>
-              <div style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-bottom:4px">ontology.ttl</div>
-              <pre id="bld-preview-ontology" class="uc-diff-pre" style="max-height:380px"></pre>
+          <!-- Raw generated files — advanced mode only. -->
+          <div class="bld-adv-only">
+            <div style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-bottom:6px">Generated files</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <div style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-bottom:4px">manifest.yaml</div>
+                <pre id="bld-preview-manifest" class="uc-diff-pre" style="max-height:380px"></pre>
+              </div>
+              <div>
+                <div style="font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;margin-bottom:4px">ontology.ttl</div>
+                <pre id="bld-preview-ontology" class="uc-diff-pre" style="max-height:380px"></pre>
+              </div>
             </div>
           </div>
         </div>
@@ -4268,17 +4314,78 @@ const _builderState = {
 };
 const _BUILDER_STEPS = ['source','provide','inspect','meta','preview'];
 
+// ── Beginner / Advanced mode ────────────────────────────────────────────────
+// One persistent toggle for the whole wizard (default = beginner). Beginner
+// hides RDF/OWL jargon and shows friendly labels; Advanced reveals every field
+// the wizard has always had. Persisted like kf_api_key.
+function _builderAdvanced(){ return localStorage.getItem('kf_builder_advanced') === '1'; }
+function _setBuilderAdvanced(on){
+  // Capture any in-progress Step-3 edits before re-rendering in the other mode,
+  // or the swap would discard them.
+  if(_builderState.schema && _builderState.step === 'inspect') _builderHarvestSchemaEdits();
+  if(on) localStorage.setItem('kf_builder_advanced', '1');
+  else   localStorage.removeItem('kf_builder_advanced');
+  document.body.classList.toggle('bld-adv', on);
+  // Re-render the views that branch on mode so the switch is immediate.
+  if(_builderState.schema) _renderBuilderSchema();
+  if(_builderState.step === 'meta') _builderDeriveMeta();
+  if(_builderState.step === 'preview'){ _builderRenderPreviewSummary(); _builderRenderPreviewOutline(); }
+}
+
+// Friendly type words ↔ the xsd enum the backend expects. The <option> VALUE
+// stays the xsd type, so the existing harvest (reads el.value) is unchanged.
+const _BLD_TYPE_WORDS = [
+  ['string',   'Text'],
+  ['integer',  'Whole number'],
+  ['decimal',  'Decimal'],
+  ['boolean',  'Yes / No'],
+  ['date',     'Date'],
+  ['dateTime', 'Date & time'],
+];
+function _bldTypeWord(xsd){ const m = _BLD_TYPE_WORDS.find(p => p[0] === xsd); return m ? m[1] : 'Text'; }
+function _bldTypeOptions(sel){
+  return _BLD_TYPE_WORDS.map(([v,w]) => `<option value="${v}"${v===sel?' selected':''}>${w}</option>`).join('');
+}
+
+// Name helpers — let users type "Work Order" while we keep WorkOrder/workOrder
+// behind the scenes. The backend re-normalizes too, so these just need to be
+// close enough to produce a valid, readable name.
+function _bldWords(s){
+  return String(s || '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')   // split camelCase
+    .split(/[^A-Za-z0-9]+/).filter(Boolean);
+}
+function humanize(s){
+  const w = _bldWords(s);
+  if(!w.length) return '';
+  return w.map(x => x.toLowerCase()).join(' ').replace(/^./, c => c.toUpperCase());
+}
+function pascalCase(s){
+  return _bldWords(s).map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('');
+}
+function camelCase(s){
+  const w = _bldWords(s);
+  if(!w.length) return '';
+  return w[0].toLowerCase() + w.slice(1).map(x => x.charAt(0).toUpperCase() + x.slice(1).toLowerCase()).join('');
+}
+
 function showBuilderStep(step){
   _builderState.step = step;
+  // Keep the body mode class in sync (cheap; avoids first-paint flicker).
+  document.body.classList.toggle('bld-adv', _builderAdvanced());
   // Step indicator
   const stepper = document.getElementById('builder-stepper');
   if(stepper){
-    const labels = {source:'1. Source', provide:'2. Provide', inspect:'3. Inspect', meta:'4. Bundle metadata', preview:'5. Preview & create'};
+    const labels = _builderAdvanced()
+      ? {source:'1. Source', provide:'2. Provide', inspect:'3. Inspect', meta:'4. Bundle metadata', preview:'5. Preview & create'}
+      : {source:'1. Start', provide:'2. Source', inspect:'3. Review', meta:'4. Name it', preview:'5. Create'};
     const curIdx = _BUILDER_STEPS.indexOf(step);
-    stepper.innerHTML = _BUILDER_STEPS.map((s,i) => {
+    const pills = _BUILDER_STEPS.map((s,i) => {
       const cls = i < curIdx ? 'done' : i === curIdx ? 'active' : '';
       return `<span class="bld-step-pill ${cls}">${labels[s]}</span>`;
     }).join('');
+    const toggle = `<label class="bld-adv-toggle" title="Show technical fields (class names, xsd types, namespace, raw files)"><input type="checkbox" ${_builderAdvanced()?'checked':''} onchange="_setBuilderAdvanced(this.checked)" />Advanced mode</label>`;
+    stepper.innerHTML = pills + toggle;
   }
   document.querySelectorAll('.builder-step').forEach(el => {
     el.style.display = el.dataset.step === step ? 'block' : 'none';
@@ -4296,10 +4403,44 @@ function showBuilderStep(step){
 function builderPickSource(src){
   _builderState.source = src;
   _builderState.schema = null;
-  document.getElementById('bld-provide-title').textContent = src === 'postgres' ? 'Postgres connection' : 'Upload CSVs';
-  document.getElementById('bld-provide-pg').style.display  = src === 'postgres' ? 'block' : 'none';
-  document.getElementById('bld-provide-csv').style.display = src === 'csv'      ? 'block' : 'none';
+  const titles = {postgres:'Connect a database', csv:'Upload spreadsheets', describe:'Describe your domain'};
+  document.getElementById('bld-provide-title').textContent = titles[src] || '';
+  document.getElementById('bld-provide-pg').style.display       = src === 'postgres' ? 'block' : 'none';
+  document.getElementById('bld-provide-csv').style.display      = src === 'csv'      ? 'block' : 'none';
+  document.getElementById('bld-provide-describe').style.display = src === 'describe' ? 'block' : 'none';
   showBuilderStep('provide');
+}
+
+// Plain-English → draft schema. Lands the result into _builderState.schema in
+// the exact shape the inspectors produce, then advances to the Review step.
+async function builderDescribe(){
+  const desc = document.getElementById('bld-describe-text').value.trim();
+  const status = document.getElementById('bld-describe-status');
+  if(!desc){ status.innerHTML = '<span style="color:var(--amber)">Type a description first.</span>'; return; }
+  const btn = document.getElementById('bld-describe-btn');
+  btn.disabled = true;
+  status.innerHTML = '<span style="color:var(--text3)">Drafting… this can take a few seconds.</span>';
+  try {
+    const res = await api('/builder/describe', {description: desc});
+    if(res.cap_hit){
+      status.innerHTML = `<span style="color:var(--amber)">${escapeHTML(res.cap_message || "The AI assistant has hit its daily limit. Try again later, or build from a spreadsheet / database instead.")}</span>`;
+      return;
+    }
+    if(!res.tables || !res.tables.length){
+      const note = (res.source_metadata && res.source_metadata.note) || res.error ||
+        'Could not draft a model from that. Try adding more detail about the main things you track and how they relate.';
+      status.innerHTML = `<span style="color:var(--amber)">${escapeHTML(note)}</span>`;
+      return;
+    }
+    _builderState.schema = res;
+    status.textContent = '';
+    _renderBuilderSchema();
+    showBuilderStep('inspect');
+  } catch(err){
+    status.innerHTML = `<span style="color:var(--red)">${escapeHTML(err.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 async function builderCheckEnv(){
@@ -4327,21 +4468,28 @@ async function builderNext(){
       if(!_builderState.source){ status.textContent = 'Pick a source first.'; return; }
       showBuilderStep('provide');
     } else if(step === 'provide'){
+      if(_builderState.source === 'describe'){
+        // The describe step has its own "Draft my ontology" button which
+        // advances on success; route the footer Next to it too.
+        status.textContent = '';
+        await builderDescribe();
+        return;
+      }
       await _builderInspect();
       showBuilderStep('inspect');
     } else if(step === 'inspect'){
       _builderHarvestSchemaEdits();
-      // Auto-suggest meta from the inspected schema if user hasn't filled it.
-      if(!document.getElementById('bld-meta-prefix').value.trim()){
-        const guess = (_builderState.schema.tables[0]?.class_name || 'kg').toLowerCase().slice(0,8);
-        document.getElementById('bld-meta-prefix').value = guess;
-        builderAutoNamespace();
+      // Pre-fill the Name from the first thing's friendly label if empty, then
+      // derive the technical identifiers (slug/prefix/namespace) from it.
+      const nameEl = document.getElementById('bld-meta-name');
+      if(!nameEl.value.trim()){
+        const t0 = _builderState.schema.tables[0];
+        nameEl.value = (t0 && (t0.class_label || humanize(t0.class_name))) || '';
       }
-      if(!document.getElementById('bld-meta-slug').value.trim()){
-        document.getElementById('bld-meta-slug').value = (document.getElementById('bld-meta-prefix').value || 'gen') + '-bundle';
-      }
+      _builderDeriveMeta();
       showBuilderStep('meta');
     } else if(step === 'meta'){
+      _builderDeriveMeta();   // ensure derived fields are current before harvest
       _builderHarvestMeta();
       await _builderPreview();
       showBuilderStep('preview');
@@ -4355,10 +4503,29 @@ async function builderNext(){
   }
 }
 
-function builderAutoNamespace(){
-  const p = document.getElementById('bld-meta-prefix').value.trim();
-  const ns = document.getElementById('bld-meta-ns');
-  if(!ns.value.trim() && p) ns.value = `http://example.org/${p}#`;
+// Derive slug / prefix / namespace from the friendly Name. Each derived field
+// is only overwritten while the user hasn't manually edited it (dataset.userEdited),
+// so an advanced user who sets one by hand keeps it.
+function _builderDeriveMeta(){
+  const name = document.getElementById('bld-meta-name').value.trim();
+  if(!name) return;
+  const slugEl = document.getElementById('bld-meta-slug');
+  const prefixEl = document.getElementById('bld-meta-prefix');
+  if(!slugEl.dataset.userEdited){
+    slugEl.value = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63) || 'bundle';
+  }
+  if(!prefixEl.dataset.userEdited){
+    const words = name.split(/\s+/).filter(Boolean);
+    let p = words.length > 1 ? words.map(w => w[0]).join('') : name;
+    prefixEl.value = p.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16) || 'kg';
+  }
+  _builderDeriveNs();
+}
+function _builderDeriveNs(){
+  const nsEl = document.getElementById('bld-meta-ns');
+  if(nsEl.dataset.userEdited) return;
+  const p = document.getElementById('bld-meta-prefix').value.trim() || 'kg';
+  nsEl.value = `http://example.org/${p}#`;
 }
 
 async function _builderInspect(){
@@ -4387,13 +4554,80 @@ function _renderBuilderSchema(){
   // Always render. Preserve existing class_label / class_description / per-column label
   // fields if the user already typed something, otherwise leave them blank
   // (generator falls back to humanised defaults).
-  root.innerHTML = s.tables.map((t, ti) => _renderBuilderTableCard(t, ti, s)).join('');
+  const render = _builderAdvanced() ? _renderBuilderTableCard : _renderBuilderTableCardSimple;
+  root.innerHTML = s.tables.map((t, ti) => render(t, ti, s)).join('');
 
   // Wire delete + add-relationship handlers (event delegation would be
   // fancier, but per-button handlers play nicely with re-render).
   root.querySelectorAll('[data-bld-action]').forEach(btn => {
     btn.onclick = (e) => _onBuilderSchemaAction(btn);
   });
+}
+
+// Friendly review/edit card (beginner mode). Edits the SAME schema fields as
+// the advanced card via the SAME data-bld attributes, so _builderHarvestSchemaEdits
+// is unchanged. Technical inputs (cls-name, col-name) are kept as hidden inputs
+// and auto-derived from the friendly labels — never removed, or harvest would
+// wipe the names.
+function _renderBuilderTableCardSimple(t, ti, s){
+  const label = t.class_label || humanize(t.class_name);
+  const attrs = t.columns.map((c, ci) => {
+    const friendly = c.label || humanize(c.name);
+    return `<div class="bld-attr-row">
+      <input data-bld="col-label" data-t="${ti}" data-c="${ci}" value="${escapeHTML(friendly)}" oninput="_bldSyncColName(${ti},${ci})" placeholder="Detail name" />
+      <select data-bld="col-xsd" data-t="${ti}" data-c="${ci}">${_bldTypeOptions(c.xsd_type)}</select>
+      <input type="hidden" data-bld="col-name" data-t="${ti}" data-c="${ci}" value="${escapeHTML(c.name)}" />
+      <button class="ds-btn ds-btn-danger" data-bld-action="del-col" data-t="${ti}" data-c="${ci}" title="Remove this detail">×</button>
+    </div>`;
+  }).join('');
+
+  const conns = (t.relationships || []).map((r, ri) => {
+    const classOpts = s.tables.map(o => `<option value="${escapeHTML(o.class_name)}"${o.class_name === r.range_class ? ' selected' : ''}>${escapeHTML(o.class_label || humanize(o.class_name))}</option>`).join('');
+    return `<div class="bld-conn-row">
+      <span class="bld-conn-from">${escapeHTML(label)}</span>
+      <input class="bld-conn-verb" value="${escapeHTML(humanize(r.name))}" oninput="_bldSyncRelName(this,${ti},${ri})" placeholder="relates to" />
+      <span class="bld-conn-arrow">→</span>
+      <select data-bld="rel-range" data-t="${ti}" data-r="${ri}">${classOpts}</select>
+      <input type="hidden" data-bld="rel-name" data-t="${ti}" data-r="${ri}" value="${escapeHTML(r.name || '')}" />
+      <input type="checkbox" data-bld="rel-functional" data-t="${ti}" data-r="${ri}" ${r.functional ? 'checked' : ''} style="display:none" />
+      <button class="ds-btn ds-btn-danger" data-bld-action="del-rel" data-t="${ti}" data-r="${ri}" title="Remove this connection">×</button>
+    </div>`;
+  }).join('');
+
+  return `<div class="bld-table-card">
+    <div class="bld-table-hdr">
+      <input class="bld-entity-name" data-bld="cls-label" data-t="${ti}" value="${escapeHTML(label)}" oninput="_bldSyncClassName(${ti})" placeholder="Name of this thing" />
+      <input type="hidden" data-bld="cls-name" data-t="${ti}" value="${escapeHTML(t.class_name)}" />
+      <span style="flex:1"></span>
+      <span class="bld-table-meta">${t.columns.length} detail${t.columns.length!==1?'s':''}</span>
+      <button class="ds-btn ds-btn-danger" data-bld-action="del-table" data-t="${ti}" title="Remove this thing entirely">Remove</button>
+    </div>
+    <div style="padding:6px 12px;border-bottom:1px dashed var(--border);background:var(--bg)">
+      <input data-bld="cls-desc" data-t="${ti}" value="${escapeHTML(t.class_description || '')}" placeholder="What is this? (optional)" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-size:10px;color:var(--text);font-family:'JetBrains Mono',monospace" />
+    </div>
+    ${attrs}
+    ${conns ? `<div class="bld-table-rels-hdr">Connections</div>${conns}` : ''}
+    <div style="padding:5px 12px;border-top:1px dashed var(--border);text-align:right">
+      <button class="ds-btn" data-bld-action="add-rel" data-t="${ti}" title="Connect this thing to another">+ Connection</button>
+    </div>
+  </div>`;
+}
+
+// Sync hidden technical names from the friendly labels the user edits. Only
+// overwrite when the friendly field is non-empty so we never blank a name.
+function _bldSyncClassName(ti){
+  const label = document.querySelector(`[data-bld="cls-label"][data-t="${ti}"]`);
+  const name = document.querySelector(`input[data-bld="cls-name"][data-t="${ti}"]`);
+  if(label && name && label.value.trim()) name.value = pascalCase(label.value);
+}
+function _bldSyncColName(ti, ci){
+  const label = document.querySelector(`[data-bld="col-label"][data-t="${ti}"][data-c="${ci}"]`);
+  const name = document.querySelector(`input[data-bld="col-name"][data-t="${ti}"][data-c="${ci}"]`);
+  if(label && name && label.value.trim()) name.value = camelCase(label.value);
+}
+function _bldSyncRelName(verb, ti, ri){
+  const name = document.querySelector(`input[data-bld="rel-name"][data-t="${ti}"][data-r="${ri}"]`);
+  if(verb && name && verb.value.trim()) name.value = camelCase(verb.value);
 }
 
 function _renderBuilderTableCard(t, ti, s){
@@ -4538,14 +4772,54 @@ async function _builderPreview(){
   const out = await api('/builder/preview', {schema: _builderState.schema, bundle: _builderState.meta});
   document.getElementById('bld-preview-manifest').textContent = out.manifest_yaml;
   document.getElementById('bld-preview-ontology').textContent = out.ontology_ttl;
-  const sm = out.summary || {};
-  document.getElementById('bld-preview-summary').innerHTML =
-    `<b>${sm.classes}</b> classes &middot; <b>${sm.datatype_properties}</b> datatype properties &middot; ` +
-    `<b>${sm.object_properties}</b> object properties &middot; <b>${sm.data_triples}</b> seed triples`;
+  _builderState.previewSummary = out.summary || {};
+  _builderRenderPreviewSummary();
+  _builderRenderPreviewOutline();
   // Lint the in-memory TTL so the operator sees issues before clicking Create.
   // Findings are advisory — Create proceeds regardless. The full Refine UX
   // lives in Ontology Curation → Refine sub-tab once the bundle exists.
   await _renderBuilderPreviewLint(out.ontology_ttl);
+}
+
+function _builderRenderPreviewSummary(){
+  const sm = _builderState.previewSummary || {};
+  const el = document.getElementById('bld-preview-summary');
+  if(!el) return;
+  if(_builderAdvanced()){
+    el.innerHTML =
+      `<b>${sm.classes}</b> classes &middot; <b>${sm.datatype_properties}</b> datatype properties &middot; ` +
+      `<b>${sm.object_properties}</b> object properties &middot; <b>${sm.data_triples}</b> seed triples`;
+  } else {
+    const plural = (n, w) => `<b>${n}</b> ${w}${n!==1?'s':''}`;
+    el.innerHTML =
+      `${plural(sm.classes||0,'thing')} &middot; ${plural(sm.datatype_properties||0,'attribute')} &middot; ` +
+      `${plural(sm.object_properties||0,'connection')} &middot; <b>${sm.data_triples||0}</b> rows of starter data`;
+  }
+}
+
+// Human-readable outline of the entities & connections, rendered from the
+// (already-edited) schema — no extra API call. Shown in beginner mode.
+function _builderRenderPreviewOutline(){
+  const el = document.getElementById('bld-preview-outline');
+  if(!el) return;
+  const s = _builderState.schema;
+  if(!s || !s.tables){ el.innerHTML = ''; return; }
+  el.innerHTML = s.tables.map(t => {
+    const label = t.class_label || humanize(t.class_name);
+    const attrs = (t.columns || []).map(c =>
+      `<span class="bld-outline-attr">${escapeHTML(c.label || humanize(c.name))} <span style="color:var(--text3)">${escapeHTML(_bldTypeWord(c.xsd_type))}</span></span>`
+    ).join('');
+    const conns = (t.relationships || []).map(r => {
+      const tgt = s.tables.find(o => o.class_name === r.range_class);
+      const tgtLabel = tgt ? (tgt.class_label || humanize(tgt.class_name)) : humanize(r.range_class);
+      return `<div class="bld-outline-conn">${escapeHTML(label)} <span class="bld-conn-arrow">—${escapeHTML(humanize(r.name) || 'relates to')}→</span> ${escapeHTML(tgtLabel)}</div>`;
+    }).join('');
+    return `<div class="bld-outline-card">
+      <div class="bld-outline-title">${escapeHTML(label)}</div>
+      <div class="bld-outline-attrs">${attrs || '<span style="color:var(--text3);font-size:9.5px">no details yet</span>'}</div>
+      ${conns}
+    </div>`;
+  }).join('');
 }
 
 async function _renderBuilderPreviewLint(ttl){
@@ -4563,24 +4837,30 @@ async function _renderBuilderPreviewLint(ttl){
     });
     const c = res.counts || {error:0, warn:0, info:0};
     const total = res.total || 0;
+    const adv = _builderAdvanced();
     if(total === 0){
-      root.innerHTML = '<div style="font-size:10px;color:#7eea9e;padding:6px 10px;background:rgba(126,234,158,.08);border:1px solid rgba(126,234,158,.4);border-radius:4px">✓ Linter found no issues. Click Create when ready.</div>';
+      const okMsg = adv ? '✓ Linter found no issues. Click Create when ready.'
+                        : '✓ Looks good — nothing to fix. Click Create when ready.';
+      root.innerHTML = `<div style="font-size:10px;color:#7eea9e;padding:6px 10px;background:rgba(126,234,158,.08);border:1px solid rgba(126,234,158,.4);border-radius:4px">${okMsg}</div>`;
       return;
     }
     const all = res.findings || [];
     const fixable = all.filter(f => f.fix?.kind && f.fix.kind !== 'noop');
+    const header = adv
+      ? `${c.error ? `<span class="ref-summary-chip ref-chip-error">${c.error} ERROR${c.error!==1?'S':''}</span>` : ''}
+         ${c.warn  ? `<span class="ref-summary-chip ref-chip-warn">${c.warn} WARN${c.warn!==1?'S':''}</span>` : ''}
+         ${c.info  ? `<span class="ref-summary-chip ref-chip-info">${c.info} INFO</span>` : ''}`
+      : `<span style="font-size:10.5px;color:var(--text2)">💡 <b>${total}</b> suggestion${total!==1?'s':''} to improve this</span>`;
     root.innerHTML = `
       <div style="display:flex;gap:6px;margin-bottom:9px;align-items:center">
-        ${c.error ? `<span class="ref-summary-chip ref-chip-error">${c.error} ERROR${c.error!==1?'S':''}</span>` : ''}
-        ${c.warn  ? `<span class="ref-summary-chip ref-chip-warn">${c.warn} WARN${c.warn!==1?'S':''}</span>` : ''}
-        ${c.info  ? `<span class="ref-summary-chip ref-chip-info">${c.info} INFO</span>` : ''}
+        ${header}
         <span style="flex:1"></span>
-        ${fixable.length ? `<button class="ds-btn" onclick="_builderApplyAllFixable()">Apply all ${fixable.length} auto-fixable</button>` : ''}
+        ${fixable.length ? `<button class="ds-btn" onclick="_builderApplyAllFixable()">Apply all ${fixable.length}${adv?' auto-fixable':''}</button>` : ''}
       </div>
       <div id="bld-preview-lint-list">
         ${all.map(_renderBuilderLintCard).join('')}
       </div>
-      <div style="font-size:9.5px;color:var(--text3);margin-top:6px">Findings here apply to the in-memory TTL. After Create the full Refine UI lives in <b>Ontology Curation → Refine</b>.</div>`;
+      <div class="bld-adv-only" style="font-size:9.5px;color:var(--text3);margin-top:6px">Findings here apply to the in-memory TTL. After Create the full Refine UI lives in <b>Ontology Curation → Refine</b>.</div>`;
     root.querySelectorAll('[data-bld-lint]').forEach(btn => {
       btn.onclick = () => _onBuilderLintAction(btn);
     });
@@ -4592,16 +4872,23 @@ async function _renderBuilderPreviewLint(ttl){
 function _renderBuilderLintCard(f){
   const sev = f.severity || 'info';
   const isAuto = f.fix?.kind && f.fix.kind !== 'noop';
+  const adv = _builderAdvanced();
+  const badge = adv
+    ? `<span class="ref-finding-sev ref-sev-${sev}" style="font-size:8px">${sev.toUpperCase()}</span>`
+    : `<span class="ref-finding-sev ref-sev-info" style="font-size:8px">SUGGESTION</span>`;
+  const manualMsg = adv
+    ? 'Manual fix only — apply via Refine sub-tab after Create'
+    : 'You can fine-tune this after creating, under Ontology Curation.';
   return `<div class="ref-finding" style="margin-bottom:7px;padding:8px 11px">
     <div class="ref-finding-hdr" style="margin-bottom:3px">
-      <span class="ref-finding-sev ref-sev-${sev}" style="font-size:8px">${sev.toUpperCase()}</span>
+      ${badge}
       <span class="ref-finding-title" style="font-size:10.5px">${escapeHTML(f.title || '')}</span>
     </div>
     ${f.fix?.preview ? `<div class="ref-finding-preview" style="font-size:9px;padding:3px 6px;margin-bottom:5px">${escapeHTML(f.fix.preview)}</div>` : ''}
     <div style="display:flex;gap:5px;justify-content:flex-end">
       ${isAuto
         ? `<button class="ref-action ref-action-apply" data-bld-lint="apply" data-fid="${escapeHTML(f.id)}" data-fix='${escapeHTML(JSON.stringify(f.fix))}' style="padding:3px 9px;font-size:9.5px">Apply</button>`
-        : `<span style="font-size:9px;color:var(--text3);font-style:italic;align-self:center">Manual fix only — apply via Refine sub-tab after Create</span>`}
+        : `<span style="font-size:9px;color:var(--text3);font-style:italic;align-self:center">${manualMsg}</span>`}
     </div>
   </div>`;
 }
@@ -4678,10 +4965,16 @@ async function _builderCreate(){
   _builderState.source = null;
   _builderState.schema = null;
   _builderState.previewTTL = null;
+  _builderState.previewSummary = null;
   _builderState.meta = {slug:'', name:'', prefix:'', namespace:'', description:''};
-  ['bld-pg-env','bld-meta-slug','bld-meta-name','bld-meta-prefix','bld-meta-ns','bld-meta-desc'].forEach(id => {
+  ['bld-pg-env','bld-meta-slug','bld-meta-name','bld-meta-prefix','bld-meta-ns','bld-meta-desc','bld-describe-text'].forEach(id => {
     const el = document.getElementById(id); if(el) el.value = '';
   });
+  // Clear the auto-derive guards so the next bundle re-derives from its name.
+  ['bld-meta-slug','bld-meta-prefix','bld-meta-ns'].forEach(id => {
+    const el = document.getElementById(id); if(el) delete el.dataset.userEdited;
+  });
+  const dstatus = document.getElementById('bld-describe-status'); if(dstatus) dstatus.textContent = '';
   _invalidateUseCasesCache();
   switchPipeTab('uc');
 }

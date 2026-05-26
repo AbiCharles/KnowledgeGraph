@@ -133,3 +133,66 @@ def test_preview_route_returns_generated_files(stub_db):
     assert "data_ttl" in body
     assert body["summary"]["classes"] == 1
     assert "Alice" in body["data_ttl"]
+
+
+# ── /builder/describe ─────────────────────────────────────────────────────────
+
+def test_describe_route_400_on_empty_description(stub_db):
+    r = _client().post("/builder/describe", json={})
+    assert r.status_code == 400
+    assert "description" in r.json()["detail"]
+
+
+def test_describe_route_returns_schema_dict(stub_db, monkeypatch):
+    """Stub the LLM inspector so the route is exercised offline."""
+    canned = {
+        "source_kind": "description",
+        "source_metadata": {"description": "orders"},
+        "tables": [{
+            "name": "Order", "class_name": "Order", "primary_key": "orderId",
+            "columns": [{"name": "orderId", "xsd_type": "string", "is_pk": True}],
+            "relationships": [],
+        }],
+    }
+    from pipeline.builder import nl_inspector
+    monkeypatch.setattr(nl_inspector, "describe", lambda desc, hints=None: canned)
+    r = _client().post("/builder/describe", json={"description": "track orders"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source_kind"] == "description"
+    assert body["tables"][0]["class_name"] == "Order"
+
+
+def test_describe_then_preview_round_trips(stub_db, monkeypatch):
+    """The describe output must feed /builder/preview unchanged — proves the
+    'zero downstream change' claim."""
+    canned = {
+        "source_kind": "description",
+        "source_metadata": {"description": "orders + customers"},
+        "tables": [
+            {"name": "Order", "class_name": "Order", "primary_key": "orderId",
+             "columns": [
+                 {"name": "orderId", "xsd_type": "string", "is_pk": True},
+                 {"name": "total", "xsd_type": "decimal"},
+             ],
+             "relationships": [{"name": "placedBy", "range_class": "Customer",
+                                "functional": True}]},
+            {"name": "Customer", "class_name": "Customer", "primary_key": "customerId",
+             "columns": [{"name": "customerId", "xsd_type": "string", "is_pk": True}],
+             "relationships": []},
+        ],
+    }
+    from pipeline.builder import nl_inspector
+    monkeypatch.setattr(nl_inspector, "describe", lambda desc, hints=None: canned)
+
+    client = _client()
+    drafted = client.post("/builder/describe", json={"description": "orders"}).json()
+    bundle = {"slug": "nl-round-trip", "name": "NL Round Trip",
+              "prefix": "nrt", "namespace": "http://example.org/nrt#"}
+    r = client.post("/builder/preview", json={"schema": drafted, "bundle": bundle})
+    assert r.status_code == 200
+    body = r.json()
+    assert "ontology_ttl" in body and "manifest_yaml" in body and "data_ttl" in body
+    assert body["summary"]["classes"] == 2
+    assert body["summary"]["object_properties"] == 1   # placedBy
+    assert body["data_ttl"].strip()                     # synthetic seed present

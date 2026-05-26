@@ -140,9 +140,10 @@ def _validate_schema(schema: dict) -> dict:
     surfacing the root cause here."""
     if not isinstance(schema, dict):
         raise ValueError("schema must be a dict")
-    if schema.get("source_kind") not in ("postgres", "csv"):
+    if schema.get("source_kind") not in ("postgres", "csv", "description"):
         raise ValueError(
-            f"source_kind must be 'postgres' or 'csv', got {schema.get('source_kind')!r}"
+            f"source_kind must be 'postgres', 'csv', or 'description', "
+            f"got {schema.get('source_kind')!r}"
         )
     tables = schema.get("tables") or []
     if not tables:
@@ -281,8 +282,10 @@ def generate(schema: dict, bundle_meta: dict) -> dict[str, Any]:
     Manifest(**manifest_dict)
 
     # 4. Build data.ttl. Postgres → empty (pulls handle loading);
-    #    CSV → seed with one node per row.
-    data_ttl, data_triples = _build_data_ttl(schema, meta)
+    #    CSV → seed with one node per row; description → synthetic seed data
+    #    generated from the ontology (no datasource to pull from). The latter
+    #    needs the just-built ontology TTL, so pass it through.
+    data_ttl, data_triples = _build_data_ttl(schema, meta, onto)
 
     # 5. Final sanity check — re-parse the ontology to confirm rdflib
     #    still accepts it after all our mutations.
@@ -505,11 +508,21 @@ def _build_pull_adapter(datasource_id: str, table: dict, index: int) -> dict:
     }
 
 
-def _build_data_ttl(schema: dict, meta: dict) -> tuple[str, int]:
+def _build_data_ttl(schema: dict, meta: dict, onto: str | None = None) -> tuple[str, int]:
     """For Postgres → empty (pull adapters do the loading).
-    For CSV → emit one node per sample row that the inspector cached."""
+    For CSV → emit one node per sample row that the inspector cached.
+    For description → synthesize plausible seed data from the ontology, since
+    there's no datasource to pull from and no sample rows; an empty graph would
+    leave the Query Console dead on a freshly-built bundle."""
     if schema["source_kind"] == "postgres":
         return "# empty — datasource pull adapters populate at hydration time\n", 0
+
+    if schema["source_kind"] == "description":
+        if not onto:
+            return "# empty — no ontology available for synthetic seed\n", 0
+        from pipeline.data_generator import generate_data
+        ttl, summ = generate_data(onto, meta["namespace"], count=10, seed=42)
+        return (ttl or "# no classes — empty data.ttl\n"), int(summ.get("total_nodes", 0) or 0)
 
     # CSV: bundled rows live under each table's `sample_rows` field.
     lines = [

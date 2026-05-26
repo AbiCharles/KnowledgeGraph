@@ -446,3 +446,67 @@ def test_examples_validate_against_manifest_pydantic_model():
     # example were unsafe Cypher, generate() would have raised. But pin
     # it explicitly here so a regression breaks loud.
     Manifest(**yaml.safe_load(out["manifest_yaml"]))
+
+
+# ── Description-source generation ────────────────────────────────────────────
+
+def _description_schema():
+    """Schema dict as the NL inspector emits it: PascalCase classes, camelCase
+    columns, explicit relationships, no foreign_keys, no sample_rows."""
+    return {
+        "source_kind": "description",
+        "source_metadata": {"description": "work orders and technicians"},
+        "tables": [
+            {
+                "name": "WorkOrder",
+                "class_name": "WorkOrder",
+                "class_label": "Work Order",
+                "class_description": "A maintenance job.",
+                "primary_key": "workOrderId",
+                "columns": [
+                    {"name": "workOrderId", "xsd_type": "string", "is_pk": True},
+                    {"name": "priority", "xsd_type": "string"},
+                    {"name": "dueDate", "xsd_type": "date"},
+                ],
+                "relationships": [
+                    {"name": "assignedTechnician", "range_class": "Technician",
+                     "functional": True},
+                ],
+            },
+            {
+                "name": "Technician",
+                "class_name": "Technician",
+                "primary_key": "technicianId",
+                "columns": [{"name": "technicianId", "xsd_type": "string", "is_pk": True}],
+            },
+        ],
+    }
+
+
+def test_generate_accepts_source_kind_description():
+    out = generate(_description_schema(), _META)
+    g = Graph()
+    g.parse(data=out["ontology_ttl"], format="turtle")   # must re-parse
+    assert "WorkOrder" in out["ontology_ttl"]
+    assert "Technician" in out["ontology_ttl"]
+    # The explicit relationship became an object property.
+    assert out["summary"]["object_properties"] == 1
+    assert "assignedTechnician" in out["ontology_ttl"]
+    Manifest(**yaml.safe_load(out["manifest_yaml"]))
+
+
+def test_description_source_generates_synthetic_data_ttl():
+    """No datasource + no sample rows → synthetic seed so the graph isn't dead."""
+    out = generate(_description_schema(), _META)
+    assert out["data_ttl"].strip()
+    g = Graph()
+    g.parse(data=out["data_ttl"], format="turtle")
+    assert len(g) > 0
+    assert out["summary"]["data_triples"] > 0
+
+
+def test_description_source_skips_postgres_datasources():
+    out = generate(_description_schema(), _META)
+    manifest = yaml.safe_load(out["manifest_yaml"])
+    assert not manifest.get("datasources")
+    assert not manifest.get("stage4_adapters")
