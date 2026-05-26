@@ -50,6 +50,22 @@ def test_bytes_to_hex():
     assert _to_jsonable(b"\x00\xff") == "00ff"
 
 
+def test_mapping_node_becomes_property_dict():
+    # neo4j.graph.Node is a Mapping (not a dict) over its properties. A bare
+    # `RETURN n` query returns one; it must serialize to its property map, not
+    # a str() repr. Emulate with a non-dict Mapping.
+    from collections.abc import Mapping
+
+    class _FakeNode(Mapping):
+        def __init__(self, props): self._p = props
+        def __getitem__(self, k): return self._p[k]
+        def __iter__(self): return iter(self._p)
+        def __len__(self): return len(self._p)
+
+    out = _to_jsonable(_FakeNode({"name": "Vehicle 10", "mileage": 740}))
+    assert out == {"name": "Vehicle 10", "mileage": 740}
+
+
 def test_records_to_dicts_is_json_serializable():
     from neo4j.time import DateTime
 

@@ -13,6 +13,7 @@ behaviour).
 from __future__ import annotations
 import logging
 import re
+from collections.abc import Mapping
 from functools import lru_cache
 
 from neo4j import Driver, GraphDatabase
@@ -188,7 +189,11 @@ def _to_jsonable(v):
                 return m()
             except Exception:
                 break
-    if isinstance(v, dict):
+    # Mapping (not just dict) so neo4j.graph.Node / Relationship — which are
+    # Mappings over their properties — serialize to their property maps, the
+    # way FastAPI's jsonable_encoder did before this coercion existed. A bare
+    # `RETURN n` query relies on this.
+    if isinstance(v, Mapping):
         return {k: _to_jsonable(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
         return [_to_jsonable(x) for x in v]
