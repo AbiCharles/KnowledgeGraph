@@ -91,7 +91,7 @@ def test_class_names_forced_pascal_singular(monkeypatch):
         {"class_name": "technicians", "columns": [{"name": "id", "xsd_type": "string"}]},
     ]})
     from pipeline.builder.nl_inspector import describe
-    names = {t["class_name"] for t in describe("x")["tables"]}
+    names = {t["class_name"] for t in describe("a sample domain description with enough detail")["tables"]}
     assert names == {"WorkOrder", "Technician"}
 
 
@@ -103,7 +103,7 @@ def test_column_names_forced_camel(monkeypatch):
         ]},
     ]})
     from pipeline.builder.nl_inspector import describe, _NAME_RE
-    cols = describe("x")["tables"][0]["columns"]
+    cols = describe("a sample domain description with enough detail")["tables"][0]["columns"]
     col_names = {c["name"] for c in cols}
     assert "dueDate" in col_names
     assert all(_NAME_RE.match(c["name"]) for c in cols)
@@ -114,7 +114,7 @@ def test_invalid_xsd_type_coerced_to_string(monkeypatch):
         {"class_name": "Thing", "columns": [{"name": "weird", "xsd_type": "blarg"}]},
     ]})
     from pipeline.builder.nl_inspector import describe
-    col = describe("x")["tables"][0]["columns"][0]
+    col = describe("a sample domain description with enough detail")["tables"][0]["columns"][0]
     assert col["xsd_type"] == "string"
 
 
@@ -128,7 +128,7 @@ def test_xsd_synonyms_mapped(monkeypatch):
         ]},
     ]})
     from pipeline.builder.nl_inspector import describe
-    by = {c["name"]: c["xsd_type"] for c in describe("x")["tables"][0]["columns"]}
+    by = {c["name"]: c["xsd_type"] for c in describe("a sample domain description with enough detail")["tables"][0]["columns"]}
     assert by["a"] == "integer"
     assert by["b"] == "dateTime"
     assert by["c"] == "boolean"
@@ -141,7 +141,7 @@ def test_duplicate_class_names_deduped(monkeypatch):
         {"class_name": "orders", "columns": [{"name": "id", "xsd_type": "string"}]},
     ]})
     from pipeline.builder.nl_inspector import describe
-    names = [t["class_name"] for t in describe("x")["tables"]]
+    names = [t["class_name"] for t in describe("a sample domain description with enough detail")["tables"]]
     assert names == ["Order", "Order_2"]
 
 
@@ -155,7 +155,7 @@ def test_relationship_with_unknown_range_class_dropped(monkeypatch):
         {"class_name": "Product", "columns": [{"name": "id", "xsd_type": "string"}]},
     ]})
     from pipeline.builder.nl_inspector import describe
-    res = describe("x")
+    res = describe("a sample domain description with enough detail")
     order = next(t for t in res["tables"] if t["class_name"] == "Order")
     rel_names = {r["name"] for r in order["relationships"]}
     assert rel_names == {"contains"}             # placedBy → Customer dropped
@@ -172,7 +172,7 @@ def test_malformed_entries_dropped_not_fatal(monkeypatch):
         ]},
     ]})
     from pipeline.builder.nl_inspector import describe
-    res = describe("x")
+    res = describe("a sample domain description with enough detail")
     assert [t["class_name"] for t in res["tables"]] == ["Good"]
     good = res["tables"][0]
     assert {c["name"] for c in good["columns"]} == {"realField"}
@@ -191,6 +191,29 @@ def test_overlong_description_raises_valueerror(monkeypatch):
         describe("x" * (_MAX_DESCRIPTION_CHARS + 1))
 
 
+def test_too_short_description_raises_valueerror(monkeypatch):
+    from pipeline.builder.nl_inspector import describe, _MIN_DESCRIPTION_CHARS
+    # Non-empty but under the minimum → rejected before any LLM call.
+    with pytest.raises(ValueError):
+        describe("x" * (_MIN_DESCRIPTION_CHARS - 1))
+
+
+def test_too_many_relationships_dropped(monkeypatch):
+    from pipeline.builder import nl_inspector as ni
+    # Many distinctly-named relationships all pointing at one valid class —
+    # exceeds the per-class relationship cap.
+    rels = [{"name": f"rel{i}", "range_class": "Target"}
+            for i in range(ni._MAX_RELS_PER_CLASS + 5)]
+    _stub_llm(monkeypatch, {"tables": [
+        {"class_name": "Hub", "columns": [{"name": "id", "xsd_type": "string"}], "relationships": rels},
+        {"class_name": "Target", "columns": [{"name": "id", "xsd_type": "string"}]},
+    ]})
+    res = ni.describe("a description that is comfortably over the minimum length")
+    hub = next(t for t in res["tables"] if t["class_name"] == "Hub")
+    assert len(hub["relationships"]) == ni._MAX_RELS_PER_CLASS
+    assert res["source_metadata"]["dropped"]["relationships"] == 5
+
+
 def test_cap_hit_returns_degraded_shape(monkeypatch):
     from pipeline.builder import nl_inspector as ni
     from fastapi import HTTPException
@@ -204,7 +227,7 @@ def test_cap_hit_returns_degraded_shape(monkeypatch):
         raise AssertionError("LLM should not be invoked when cap is hit")
     monkeypatch.setattr(ni, "ChatOpenAI", explode)
 
-    res = ni.describe("anything")
+    res = ni.describe("a description that is comfortably over the minimum length")
     assert res["cap_hit"] is True
     assert res["tables"] == []
     assert "Daily cap" in res["cap_message"]
@@ -214,14 +237,14 @@ def test_invalid_json_repair_retry(monkeypatch):
     # First call returns junk, second returns valid JSON → one repair retry.
     _stub_llm_sequence(monkeypatch, ["this is not json", _GOOD_PAYLOAD])
     from pipeline.builder.nl_inspector import describe
-    res = describe("x")
+    res = describe("a sample domain description with enough detail")
     assert {t["class_name"] for t in res["tables"]} == {"WorkOrder", "Technician"}
 
 
 def test_invalid_json_twice_returns_error(monkeypatch):
     _stub_llm_sequence(monkeypatch, ["nope", "still nope"])
     from pipeline.builder.nl_inspector import describe
-    res = describe("x")
+    res = describe("a sample domain description with enough detail")
     assert res["tables"] == []
     assert "JSON" in res["error"]
 
@@ -229,7 +252,7 @@ def test_invalid_json_twice_returns_error(monkeypatch):
 def test_llm_exception_retried_then_error(monkeypatch):
     _stub_llm_sequence(monkeypatch, [RuntimeError("timeout"), RuntimeError("timeout")])
     from pipeline.builder.nl_inspector import describe
-    res = describe("x")
+    res = describe("a sample domain description with enough detail")
     assert res["tables"] == []
     assert "error" in res
 
@@ -240,5 +263,5 @@ def test_record_call_invoked_with_builder_kind(monkeypatch):
     seen = {}
     monkeypatch.setattr(ni, "record_call",
                         lambda model, i, o, kind="llm": seen.update(kind=kind))
-    ni.describe("x")
+    ni.describe("a sample domain description with enough detail")
     assert seen.get("kind") == "builder"

@@ -34,10 +34,13 @@ from api.llm_usage import (
 log = logging.getLogger(__name__)
 
 # Bound the prompt so a pasted document can't blow up token spend; drop
-# overflow entities rather than failing the whole draft.
+# overflow entities rather than failing the whole draft. Too-short input is
+# rejected before we spend an LLM call (it can't produce a useful model).
+_MIN_DESCRIPTION_CHARS = 20
 _MAX_DESCRIPTION_CHARS = 4000
-_MAX_CLASSES = 25
-_MAX_COLS_PER_CLASS = 40
+_MAX_CLASSES = 15
+_MAX_COLS_PER_CLASS = 30
+_MAX_RELS_PER_CLASS = 15
 
 # Common LLM type names → our xsd enum. Anything not mapped and not already a
 # valid xsd type falls back to "string" (never raises).
@@ -119,6 +122,11 @@ def describe(description: str, hints: dict | None = None) -> dict:
     text = (description or "").strip()
     if not text:
         raise ValueError("description is required")
+    if len(text) < _MIN_DESCRIPTION_CHARS:
+        raise ValueError(
+            f"description is too short — add a bit more detail "
+            f"(at least {_MIN_DESCRIPTION_CHARS} characters)"
+        )
     if len(text) > _MAX_DESCRIPTION_CHARS:
         raise ValueError(
             f"description is too long ({len(text)} chars; max {_MAX_DESCRIPTION_CHARS})"
@@ -332,6 +340,9 @@ def _coerce_relationships(table: dict, valid_classes: set[str], idx_start: int) 
     taken: set[str] = set()
     dropped = 0
     for i, raw in enumerate(table.pop("_raw_relationships", []), start=idx_start):
+        if len(rels) >= _MAX_RELS_PER_CLASS:
+            dropped += 1
+            continue
         if not isinstance(raw, dict):
             dropped += 1
             continue

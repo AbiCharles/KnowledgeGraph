@@ -458,6 +458,12 @@ body.bld-adv .bld-simple-only{display:none}
 .bld-adv-toggle{margin-left:auto;display:flex;align-items:center;gap:5px;color:var(--text3);cursor:pointer;font-size:9.5px;font-family:'JetBrains Mono',monospace;user-select:none}
 .bld-adv-toggle input{cursor:pointer;margin:0}
 .bld-adv-toggle:hover{color:var(--text2)}
+/* Builder: describe-path rules, PII warning, character counter */
+.bld-rules{margin:0 0 10px;padding:8px 12px 8px 26px;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg3);border:1px solid var(--border);border-radius:5px}
+.bld-rules li{margin-bottom:1px}
+.bld-pii-warn{font-size:9.5px;color:var(--amber);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);border-radius:4px;padding:6px 10px;margin-bottom:11px;line-height:1.5}
+.bld-charcount{font-size:9.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+.uc-modal-submit:disabled{opacity:.45;cursor:not-allowed}
 /* Builder simple-mode friendly rows */
 .bld-entity-name{background:var(--bg)!important;border:1px solid var(--border)!important;border-radius:3px;padding:4px 9px!important;font-size:11.5px!important;color:var(--text)!important;font-family:'JetBrains Mono',monospace;width:240px!important;font-weight:600}
 .bld-attr-row{display:grid;grid-template-columns:1fr 150px 32px;gap:8px;padding:5px 12px;border-bottom:1px dashed var(--border);align-items:center;font-size:10.5px;font-family:'JetBrains Mono',monospace;color:var(--text2)}
@@ -761,10 +767,18 @@ body.bld-adv .bld-simple-only{display:none}
         <div class="builder-step" data-step="provide" style="display:none">
           <div style="font-size:13px;color:var(--text);margin-bottom:6px;font-weight:600" id="bld-provide-title"></div>
           <div id="bld-provide-describe" style="display:none">
-            <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:12px">Describe what you want to track, in your own words. Mention the main things, what you record about each, and how they relate. The more detail, the better the draft.</div>
-            <textarea class="uc-form-input" id="bld-describe-text" rows="7" style="resize:vertical;line-height:1.55" placeholder="e.g. We track work orders assigned to technicians. Each work order is for one piece of equipment, has a priority (high / medium / low), a status, and a due date. Technicians have a name and a specialty. Equipment has a serial number and a location."></textarea>
+            <div style="font-size:10.5px;color:var(--text2);line-height:1.55;margin-bottom:12px">Describe what you want to track, in your own words. The more detail, the better the draft.</div>
+            <ul class="bld-rules">
+              <li>Stick to <b>one subject area</b> at a time.</li>
+              <li>Mention the main <b>things</b> you track, <b>what you record</b> about each, and <b>how they relate</b>.</li>
+              <li>Plain English is fine — no technical terms needed.</li>
+              <li>Keep it to roughly <b>1–12 things</b>; for larger or exact models, use the spreadsheet or database option.</li>
+            </ul>
+            <div class="bld-pii-warn">&#9888; Don't paste real or sensitive data, passwords, or personal information. Describe the <b>shape</b> of your data, not its actual contents.</div>
+            <textarea class="uc-form-input" id="bld-describe-text" rows="7" maxlength="4000" oninput="_bldDescribeInput()" style="resize:vertical;line-height:1.55" placeholder="e.g. We track work orders assigned to technicians. Each work order is for one piece of equipment, has a priority (high / medium / low), a status, and a due date. Technicians have a name and a specialty. Equipment has a serial number and a location."></textarea>
             <div style="margin-top:11px;display:flex;align-items:center;gap:11px">
-              <button class="uc-modal-submit" id="bld-describe-btn" onclick="builderDescribe()">&#10024; Draft my ontology</button>
+              <button class="uc-modal-submit" id="bld-describe-btn" onclick="builderDescribe()" disabled>&#10024; Draft my ontology</button>
+              <span id="bld-describe-count" class="bld-charcount">0 / 4000</span>
               <span id="bld-describe-status" style="font-size:10px;font-family:'JetBrains Mono',monospace"></span>
             </div>
           </div>
@@ -4408,7 +4422,30 @@ function builderPickSource(src){
   document.getElementById('bld-provide-pg').style.display       = src === 'postgres' ? 'block' : 'none';
   document.getElementById('bld-provide-csv').style.display      = src === 'csv'      ? 'block' : 'none';
   document.getElementById('bld-provide-describe').style.display = src === 'describe' ? 'block' : 'none';
+  if(src === 'describe') _bldDescribeInput();   // sync counter + button state
   showBuilderStep('provide');
+}
+
+// Describe-path input limits — kept in sync with nl_inspector.py
+// (_MIN_DESCRIPTION_CHARS / _MAX_DESCRIPTION_CHARS).
+const _BLD_DESC_MIN = 20, _BLD_DESC_MAX = 4000;
+
+// Live counter + enable/disable the Draft button. Blocks too-short/empty input
+// before it can spend an LLM call.
+function _bldDescribeInput(){
+  const el = document.getElementById('bld-describe-text');
+  const count = document.getElementById('bld-describe-count');
+  const btn = document.getElementById('bld-describe-btn');
+  if(!el) return;
+  const n = el.value.trim().length;
+  const ok = n >= _BLD_DESC_MIN && n <= _BLD_DESC_MAX;
+  if(btn) btn.disabled = !ok;
+  if(count){
+    let msg = `${n} / ${_BLD_DESC_MAX}`;
+    if(n > 0 && n < _BLD_DESC_MIN) msg += ` · add ${_BLD_DESC_MIN - n} more`;
+    count.textContent = msg;
+    count.style.color = (n > 0 && n < _BLD_DESC_MIN) ? 'var(--amber)' : 'var(--text3)';
+  }
 }
 
 // Plain-English → draft schema. Lands the result into _builderState.schema in
@@ -4416,7 +4453,10 @@ function builderPickSource(src){
 async function builderDescribe(){
   const desc = document.getElementById('bld-describe-text').value.trim();
   const status = document.getElementById('bld-describe-status');
-  if(!desc){ status.innerHTML = '<span style="color:var(--amber)">Type a description first.</span>'; return; }
+  if(desc.length < _BLD_DESC_MIN){
+    status.innerHTML = `<span style="color:var(--amber)">Add a bit more detail (at least ${_BLD_DESC_MIN} characters).</span>`;
+    return;
+  }
   const btn = document.getElementById('bld-describe-btn');
   btn.disabled = true;
   status.innerHTML = '<span style="color:var(--text3)">Drafting… this can take a few seconds.</span>';
