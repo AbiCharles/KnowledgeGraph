@@ -165,6 +165,43 @@ def _session(driver):
     return driver.session()
 
 
+def _to_jsonable(v):
+    """Coerce a Cypher value into something JSON-serializable.
+
+    Neo4j returns its own temporal types (neo4j.time.Date / Time / DateTime /
+    Duration) and spatial Points for date/datetime/point properties. These
+    aren't JSON-serializable, so the strict pydantic response_model on /query
+    raises a 500 when a bundle has e.g. a dateTime attribute. Convert them to
+    ISO strings here, at the DB boundary, so every caller is safe. Recurse into
+    maps (properties(n)/objects) and lists (collect()) since temporal values
+    hide inside those too.
+    """
+    if v is None or isinstance(v, (str, int, float, bool)):
+        return v
+    # Temporal types FIRST — neo4j.time.Duration is a tuple subclass, so the
+    # container check below would otherwise turn it into a list of components.
+    # neo4j.time.* expose iso_format(); stdlib datetime/date/time use isoformat().
+    for attr in ("iso_format", "isoformat"):
+        m = getattr(v, attr, None)
+        if callable(m):
+            try:
+                return m()
+            except Exception:
+                break
+    if isinstance(v, dict):
+        return {k: _to_jsonable(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_to_jsonable(x) for x in v]
+    if isinstance(v, (bytes, bytearray)):
+        return v.hex()
+    return str(v)
+
+
+def _records_to_dicts(result) -> list[dict]:
+    """Materialize a Neo4j result as JSON-safe plain dicts."""
+    return [{k: _to_jsonable(v) for k, v in record.items()} for record in result]
+
+
 @_retry_transient
 def run_on_database(db_name: str | None, cypher: str, params: dict = None) -> list[dict]:
     """One-shot query against a specific database without mutating module state.
@@ -178,10 +215,10 @@ def run_on_database(db_name: str | None, cypher: str, params: dict = None) -> li
     if db_name and supports_multi_db():
         with driver.session(database=db_name) as session:
             result = session.run(cypher, params or {})
-            return [dict(record) for record in result]
+            return _records_to_dicts(result)
     with _session(driver) as session:
         result = session.run(cypher, params or {})
-        return [dict(record) for record in result]
+        return _records_to_dicts(result)
 
 
 # ── Query helpers ─────────────────────────────────────────────────────────────
@@ -198,7 +235,7 @@ def run_query(cypher: str, params: dict = None) -> list[dict]:
     driver = get_driver()
     with _session(driver) as session:
         result = session.run(cypher, params or {})
-        return [dict(record) for record in result]
+        return _records_to_dicts(result)
 
 
 @_retry_transient
