@@ -1189,13 +1189,23 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 // =============================================================================
 const API = "";
 // API key sent on every API call when the backend is configured with one
-// (Settings.api_key). Stored in sessionStorage so it survives reloads in
-// the same tab but not across browser restarts — operators paste it once
-// per session via the inline prompt below.
-function _getApiKey(){ return sessionStorage.getItem('kf_api_key') || ''; }
+// (Settings.api_key). Stored in localStorage so it persists across browser
+// restarts — operators paste it once via the inline prompt below and don't
+// have to re-enter it each session. Clear it with _setApiKey(null) (or wipe
+// the 'kf_api_key' localStorage entry) on a shared machine.
+function _getApiKey(){
+  // One-time migration: older builds kept the key in sessionStorage, which
+  // didn't survive closing the tab. Promote it to localStorage if present.
+  const legacy = sessionStorage.getItem('kf_api_key');
+  if(legacy && !localStorage.getItem('kf_api_key')){
+    localStorage.setItem('kf_api_key', legacy);
+    sessionStorage.removeItem('kf_api_key');
+  }
+  return localStorage.getItem('kf_api_key') || '';
+}
 function _setApiKey(k){
-  if(k) sessionStorage.setItem('kf_api_key', k);
-  else  sessionStorage.removeItem('kf_api_key');
+  if(k) localStorage.setItem('kf_api_key', k);
+  else  localStorage.removeItem('kf_api_key');
 }
 function _withAuth(headers){
   const k = _getApiKey();
@@ -1239,8 +1249,8 @@ function promptApiKey(){
   return new Promise(resolve => {
     const k = window.prompt(
       'API key required\n\nThe server is configured with an API key. ' +
-      'Paste yours below — it stays in this browser tab\'s sessionStorage ' +
-      'and is sent as the X-API-Key header on every request.'
+      'Paste yours below — it\'s saved in this browser (localStorage) so you ' +
+      'won\'t be asked again, and is sent as the X-API-Key header on every request.'
     );
     resolve(k ? k.trim() : null);
   });
