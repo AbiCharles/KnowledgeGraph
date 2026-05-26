@@ -39,6 +39,13 @@ COPY --chown=kf:kf . .
 # bind-mount or the seeded files inside the image are usable.
 RUN chown -R kf:kf /app/use_cases
 
+# Stash a read-only copy of the seeded bundles OUTSIDE the volume mount point.
+# When a fresh volume mounts (empty) over /app/use_cases at runtime it shadows
+# the baked-in bundles; the entrypoint restores them from here so the
+# dashboard always has its demo use cases. See scripts/docker-entrypoint.sh.
+RUN cp -a /app/use_cases /app/use_cases_seed && chown -R kf:kf /app/use_cases_seed
+RUN chmod +x /app/scripts/docker-entrypoint.sh
+
 USER kf
 
 # Healthcheck hits /health which intentionally bypasses auth. Returns 200
@@ -48,6 +55,10 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
                    sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health',timeout=2).status==200 else 1)"
 
 EXPOSE 8000
+
+# Entrypoint seeds the use_cases volume (see scripts/docker-entrypoint.sh)
+# then execs the CMD below.
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 
 # --workers 1 by default — the in-process locks (pipeline_lock, curation_lock,
 # active_lock) and rate-limit bucket aren't shared across workers. Bump

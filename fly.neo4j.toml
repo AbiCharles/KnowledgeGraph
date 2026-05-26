@@ -1,0 +1,39 @@
+# Fly config for the Neo4j backing store. Private-only (no public IP) — the
+# API app reaches it over Fly's 6PN private network at kf-neo4j.internal:7687.
+#
+# Deploy with:  flyctl deploy --config fly.neo4j.toml --app kf-neo4j
+app = "kf-neo4j"
+primary_region = "ord"
+
+[build]
+  # Enterprise eval matches docker-compose.yml — needed for multi-database
+  # (one DB per bundle). Pinned to 5.26.0 to stay in sync with the n10s plugin.
+  image = "neo4j:5.26.0-enterprise"
+
+[env]
+  NEO4J_ACCEPT_LICENSE_AGREEMENT = "eval"
+  # apoc + n10s (neosemantics) — same plugin set the app expects locally.
+  NEO4J_PLUGINS = "[\"apoc\",\"n10s\"]"
+  NEO4J_dbms_security_procedures_unrestricted = "apoc.*,n10s.*"
+  NEO4J_dbms_security_procedures_allowlist = "apoc.*,n10s.*"
+  # Bind on all interfaces. Must be "::" (IPv6 any) — Fly's private 6PN
+  # network is IPv6-only, so kf-neo4j.internal resolves to an AAAA record.
+  # "0.0.0.0" would bind IPv4 only and be unreachable from the API app.
+  NEO4J_server_default__listen__address = "::"
+  # NEO4J_AUTH (neo4j/<password>) comes in as a Fly secret so the password
+  # isn't baked into the repo. It only takes effect on first boot with an
+  # empty data volume; ignored thereafter.
+
+[mounts]
+  source = "neo4j_data"
+  destination = "/data"
+
+[[vm]]
+  # Neo4j wants real heap + page cache. 2 GB is the practical floor for the
+  # enterprise image under light pilot load.
+  size = "shared-cpu-2x"
+  memory = "2048"
+
+# No [http_service] / [[services]] block on purpose: this app gets no public
+# IP. Bolt (7687) and HTTP (7474) are reachable only inside the org's private
+# network, which is exactly what we want for a database.

@@ -12,3 +12,4 @@ build/
 
 # Use-case registry runtime state (which bundle is currently active)
 use_cases/.active
+.fly-secrets.local

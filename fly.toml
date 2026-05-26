@@ -1,0 +1,46 @@
+# Fly config for the KF Knowledge Graph API (FastAPI + bundled dashboard).
+# Talks to the kf-neo4j app over Fly's private 6PN network.
+#
+# Deploy with:  flyctl deploy
+app = "kf-knowledge-graph"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  OPENAI_MODEL = "gpt-4o-mini"
+  LLM_DAILY_USD_CAP = "5.0"
+  RATE_LIMIT_PER_MINUTE = "120"
+  LOG_FORMAT = "json"
+  # Dashboard is served same-origin from this process, so the only origin
+  # that needs to call the API is the app's own public hostname.
+  CORS_ORIGINS = "https://kf-knowledge-graph.fly.dev"
+  # NEO4J_URI / NEO4J_PASSWORD / OPENAI_API_KEY / API_KEY come in as secrets
+  # (flyctl secrets set), never committed here.
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Cost-efficient single-machine pilot: stop when idle, wake on request.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    # /health bypasses auth and doesn't touch Neo4j — fast and safe to poll.
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "30s"
+    method = "get"
+    path = "/health"
+
+[mounts]
+  source = "kf_use_cases"
+  destination = "/app/use_cases"
+
+[[vm]]
+  # LangChain + rdflib + pyshacl have a sizeable resident footprint; 1 GB
+  # gives headroom for a pipeline run without OOM.
+  size = "shared-cpu-1x"
+  memory = "1024"

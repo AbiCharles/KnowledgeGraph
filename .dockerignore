@@ -25,6 +25,8 @@ README.md
 LICENSE
 .github/
 scripts/
+# …but the container entrypoint (seed-on-boot) must ship in the image.
+!scripts/docker-entrypoint.sh
 
 # Runtime state from local dev. Bind-mount or volume in prod.
 use_cases/.active

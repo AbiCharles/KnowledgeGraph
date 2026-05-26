@@ -28,8 +28,17 @@ def _discover_slugs() -> list[str]:
     for child in sorted(USE_CASES_DIR.iterdir()):
         if not child.is_dir() or child.name.startswith("."):
             continue
-        if (child / "manifest.yaml").exists():
-            slugs.append(child.name)
+        # Only well-formed slugs are bundles. This also skips the root-owned
+        # `lost+found` directory that ext4 volume mounts (e.g. Fly volumes)
+        # create at their root — its `+` fails SLUG_RE, and we couldn't even
+        # stat into it as a non-root user.
+        if not SLUG_RE.match(child.name):
+            continue
+        try:
+            if (child / "manifest.yaml").exists():
+                slugs.append(child.name)
+        except OSError as exc:
+            log.warning("Skipping unreadable dir %s: %s", child.name, exc)
     return slugs
 
 
