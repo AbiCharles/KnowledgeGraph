@@ -173,14 +173,23 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
         prop_str = ", ".join(f"`{pfx}{p}`" for p in props) if props else "no properties"
         lines.append(f"- `{pfx}{cls}`  ({prop_str})")
     lines.append("")
-    lines.append("Relationship types — direction is fixed (a directed edge in Neo4j). "
-                 "Each is shown as the exact Cypher pattern; copy it as-is. "
-                 "Reversing the arrow returns zero rows because the edge doesn't exist "
-                 "in the other direction.")
+    lines.append("Relationship types — each is a DIRECTED edge stored only in the "
+                 "FROM → TO direction. Copy the exact Cypher pattern; reversing the "
+                 "arrow returns zero rows. The English gloss in italics tells you "
+                 "which class does the acting and which is acted on.")
     for name, dom, rng in obj_props:
         dom_s = f"`{pfx}{dom}`" if dom != "?" else "?"
         rng_s = f"`{pfx}{rng}`" if rng != "?" else "?"
-        lines.append(f"- `(:{dom_s})-[:`{pfx}{name}`]->(:{rng_s})`")
+        # Humanise the relationship name to a verb phrase; strip a trailing
+        # class-name suffix when it matches the range, since the Lumen-style
+        # 'capturesDecision' embeds the range and reads better as 'captures'.
+        verb_src = name
+        if rng != "?" and name.lower().endswith(rng.lower()) and len(name) > len(rng):
+            verb_src = name[:-len(rng)]
+        verb = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", verb_src).lower().strip()
+        gloss = f'"{dom} {verb} {rng}"' if dom != "?" and rng != "?" else ""
+        suffix = f"  — {gloss} (from left → right)" if gloss else ""
+        lines.append(f"- `(:{dom_s})-[:`{pfx}{name}`]->(:{rng_s})`{suffix}")
 
     samples = _sample_enum_values(use_case, classes, dt_props)
     if samples:
