@@ -192,8 +192,17 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
     lines.append(f"- Every label, property, and relationship type MUST be backtick-quoted "
                  f"and prefixed with `{pfx}` exactly as listed above — e.g. "
                  f"`(n:`{pfx}SomeClass`) RETURN n.`{pfx}someProperty``.")
-    lines.append(f"- Relationship patterns MUST include the direction arrow. Use "
-                 f"`(a:`{pfx}A`)-[:`{pfx}rel`]->(b:`{pfx}B`)` — never `(a)-[:`{pfx}rel`](b)`.")
+    lines.append("- Use ONLY the relationship types listed above, in the direction shown "
+                 "(`domain -> range`). NEVER invent a relationship or use one where the "
+                 "domain/range classes don't match. If two classes aren't directly connected, "
+                 "traverse through intermediate classes via multiple hops — e.g. "
+                 f"`(a:`{pfx}A`)-[:`{pfx}r1`]->(:`{pfx}B`)-[:`{pfx}r2`]->(c:`{pfx}C`)`.")
+    lines.append("- Relationship patterns MUST include the direction arrow AND a trailing "
+                 "dash on both sides. Forward: `(a)-[:`rel`]->(b)`. Reverse: "
+                 "`(a)<-[:`rel`]-(b)`. The patterns `(a)-[:`rel`](b)` and "
+                 "`(a)<-[:`rel`](b)` are invalid Cypher.")
+    lines.append("- When counting via multi-hop paths, use `COUNT(DISTINCT x)` to avoid "
+                 "double-counting (a meeting reaches the same owner along several paths).")
     lines.append(f"- To enable the graph visualisation, prefer returning the node itself "
                  f"alongside scalars: `RETURN n.`{pfx}someProperty` AS x, n` instead of just `x`.")
     lines.append("- Always alias RETURN columns with AS.")
