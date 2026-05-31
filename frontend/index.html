@@ -2531,46 +2531,62 @@ async function runQuery(){
 function extractSubgraphFromRows(rows){
   const ids = new Set();
   const idLookup = new Set(NODES.map(n => n.id));
-  // Normalise candidate values to strings so an integer noteId/orderId returned
-  // by a query still matches its stringified twin in the NODES index. The
-  // backend already JSON-coerces node-shaped values into plain dicts, so a
-  // returned node object's properties are reachable too.
-  const candidates = (v) => {
-    if(v == null) return [];
-    if(typeof v === 'string' || typeof v === 'number') return [String(v)];
-    if(Array.isArray(v)) return v.flatMap(candidates);
-    if(typeof v === 'object') return Object.values(v).flatMap(candidates);
-    return [];
+  // The backend gives every node a globally-unique `uri` property — use that as
+  // the primary lookup so a query like `RETURN n` matches exactly the node it
+  // returned, with no chance of an unrelated class colliding on an integer id.
+  const uriLookup = new Map();
+  NODES.forEach(n => { if(n.p && typeof n.p.uri === 'string') uriLookup.set(n.p.uri, n.id); });
+
+  // Walk row values recursively, collecting elementIds (strings returned via
+  // elementId(n)) and uris (strings or the `uri` field of returned node maps).
+  // Numbers are NOT matched here — bare integer ids would collide across classes
+  // (mt__meetingId vs mt__actionItemId are both random ints in synthetic data).
+  const collect = (v) => {
+    if(v == null) return;
+    if(typeof v === 'string'){
+      if(idLookup.has(v)) ids.add(v);
+      const m = uriLookup.get(v);
+      if(m !== undefined) ids.add(m);
+      return;
+    }
+    if(typeof v === 'number') return;
+    if(Array.isArray(v)){ v.forEach(collect); return; }
+    if(typeof v === 'object'){
+      // A returned node has a `uri` property — match it before recursing so
+      // we don't accidentally pull in other nodes whose random int ids
+      // happen to match one of this node's other property values.
+      const u = v.uri;
+      if(typeof u === 'string' && uriLookup.has(u)){ ids.add(uriLookup.get(u)); return; }
+      Object.values(v).forEach(collect);
+    }
   };
-  rows.forEach(row => {
-    Object.values(row).forEach(v => {
-      candidates(v).forEach(s => { if(idLookup.has(s)) ids.add(s); });
-    });
-  });
-  // Property-based fallback for queries that return business identifiers
-  // (e.g. workOrderId, poId, equipment_id). Only consult identifier-shaped
-  // property names — matches both camelCase ("workOrderId") and snake_case
-  // ("work_order_id"). Number/string values match interchangeably (synthetic
-  // data often makes IDs integers). When a value really does belong to
-  // multiple nodes, include them all rather than silently dropping all but one.
+  rows.forEach(row => Object.values(row).forEach(collect));
+
+  // Last-resort fallback for queries that return ONLY scalar business ids
+  // (e.g. `RETURN o.mt__ownerId AS ownerId`). Scope by column name → property
+  // local name so the value 872 in column `ownerId` only matches a node whose
+  // property local-name is `ownerId`, never a milestoneId that coincidentally
+  // also equals 872.
   if(!ids.size){
     const ID_KEY = /(id|key|sku|code|guid|uri)$/i;
-    const propIndex = new Map(); // string-value -> [nodeId, ...]
+    const propIndex = new Map(); // "localName::valueString" -> [nodeId, ...]
     NODES.forEach(n => {
       Object.entries(n.p || {}).forEach(([k, v]) => {
         if(v == null || (typeof v !== 'string' && typeof v !== 'number')) return;
-        if(k.length < 3 || !ID_KEY.test(k)) return;
-        const s = String(v);
-        if(!s) return;
-        if(!propIndex.has(s)) propIndex.set(s, []);
-        propIndex.get(s).push(n.id);
+        const local = k.includes('__') ? k.split('__').pop() : k;
+        if(!local || local.length < 3 || !ID_KEY.test(local)) return;
+        const key = local + '::' + String(v);
+        if(!propIndex.has(key)) propIndex.set(key, []);
+        propIndex.get(key).push(n.id);
       });
     });
     rows.forEach(row => {
-      Object.values(row).forEach(v => {
-        candidates(v).forEach(s => {
-          if(propIndex.has(s)) propIndex.get(s).forEach(nid => ids.add(nid));
-        });
+      Object.entries(row).forEach(([col, val]) => {
+        if(val == null || (typeof val !== 'string' && typeof val !== 'number')) return;
+        if(!col || col.length < 3 || !ID_KEY.test(col)) return;
+        const key = col + '::' + String(val);
+        const hits = propIndex.get(key);
+        if(hits) hits.forEach(nid => ids.add(nid));
       });
     });
   }
