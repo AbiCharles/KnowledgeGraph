@@ -1,7 +1,7 @@
 """Pipeline analyser — LLM-driven analysis of pipeline runs.
 
-LLM call is fully stubbed (langchain ChatOpenAI patched to return a
-canned JSON response) so these tests run offline and don't burn credits.
+LLM is stubbed at the chat() seam (the analyser now goes through
+pipeline.llm.chat for multi-provider routing) so these run offline.
 The data-sample fetcher is exercised against db.run_query stubbed to
 return controlled rows so the PII redaction logic can be verified.
 """
@@ -11,25 +11,23 @@ from types import SimpleNamespace
 import pytest
 
 
-# Minimal fake response from langchain ChatOpenAI.invoke() — content
-# attribute carrying a JSON string the analyser will parse.
-class _FakeLLMResponse:
-    def __init__(self, payload, in_tokens=120, out_tokens=80):
-        self.content = payload if isinstance(payload, str) else json.dumps(payload)
-        self.response_metadata = {"token_usage": {"prompt_tokens": in_tokens, "completion_tokens": out_tokens}}
+def _fake_response(payload, in_tokens=120, out_tokens=80, model="stub-model"):
+    """Mimic the .content / .response_metadata / .model surface the analyser
+    reads — same shape that pipeline.llm.LlmResponse exposes."""
+    return SimpleNamespace(
+        content=payload if isinstance(payload, str) else json.dumps(payload),
+        response_metadata={
+            "token_usage": {"prompt_tokens": in_tokens, "completion_tokens": out_tokens}
+        },
+        model=model,
+        provider="stub",
+    )
 
 
 def _stub_llm(monkeypatch, payload):
-    """Replace langchain_openai.ChatOpenAI.invoke with one that returns
-    `payload` unchanged. Avoids real network + cost."""
+    """Make every chat() call from the analyser return `payload`."""
     from pipeline.refiner import pipeline_analyser as pa
-
-    class _FakeLLM:
-        def __init__(self, **kw): pass
-        def invoke(self, _msgs):
-            return _FakeLLMResponse(payload)
-
-    monkeypatch.setattr(pa, "ChatOpenAI", _FakeLLM)
+    monkeypatch.setattr(pa, "chat", lambda system, user, *, json_mode=True: _fake_response(payload))
 
 
 # ── PII redaction ────────────────────────────────────────────────────────────
@@ -199,15 +197,12 @@ def test_analyse_full_run_includes_pass_stages(tmp_use_cases_dir, monkeypatch):
     """When failed_only=False (manual button path), pass stages stay in
     the prompt so the LLM can suggest improvements even on green runs."""
     captured = {}
-    def _stub_invoke_capture(_msgs):
-        captured["body"] = _msgs[1][1] if len(_msgs) > 1 else ""
-        return _FakeLLMResponse({"findings": []})
+    def _stub_chat(system, user, *, json_mode=True):
+        captured["body"] = user
+        return _fake_response({"findings": []})
 
     from pipeline.refiner import pipeline_analyser as pa
-    class _CapturingLLM:
-        def __init__(self, **kw): pass
-        invoke = staticmethod(_stub_invoke_capture)
-    monkeypatch.setattr(pa, "ChatOpenAI", _CapturingLLM)
+    monkeypatch.setattr(pa, "chat", _stub_chat)
 
     uc = _seed_uc(tmp_use_cases_dir)
     pa.analyse(uc, [

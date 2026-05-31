@@ -15,11 +15,17 @@ neo4j==5.27.0
 # LangChain / LangGraph
 langchain==0.3.13
 langchain-openai==0.3.0
+# Anthropic provider for the chat() router (pipeline/llm.py). Default model
+# is Claude with an OpenAI fallback per request.
+langchain-anthropic==0.3.0
 langchain-community==0.3.13
 langgraph==0.2.60
 
 # OpenAI
 openai==1.59.6
+# Anthropic — accessed only through langchain-anthropic; listed explicitly
+# so the runtime pin is reproducible.
+anthropic==0.42.0
 
 # Ontology
 rdflib==7.1.1

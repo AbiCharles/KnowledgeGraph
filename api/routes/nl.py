@@ -12,10 +12,10 @@ import logging
 import re
 
 from fastapi import APIRouter, HTTPException
-from langchain_openai import ChatOpenAI
 
 from config import get_settings
 from pipeline import use_case_registry
+from pipeline.llm import chat
 from pipeline.schema_introspection import schema_description
 from pipeline.cypher_safety import assert_read_only, UnsafeCypherError
 from api.llm_usage import (
@@ -50,25 +50,14 @@ def nl_to_cypher(req: NLRequest):
     except RuntimeError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
-    llm = ChatOpenAI(
-        model=s.openai_model,
-        api_key=s.openai_api_key,
-        temperature=0,
-        timeout=s.openai_timeout_seconds,
-        model_kwargs={"response_format": {"type": "json_object"}},
-    )
-
     try:
-        response = llm.invoke([
-            ("system", system_prompt),
-            ("user", req.question),
-        ])
+        response = chat(system_prompt, req.question, json_mode=True)
     except Exception as exc:
         log.warning("LLM invocation failed: %s", exc)
         raise HTTPException(status_code=502, detail=f"LLM call failed: {exc}")
 
     in_t, out_t = extract_token_counts(response)
-    record_call(s.openai_model, in_t, out_t, kind="nl")
+    record_call(getattr(response, "model", None) or s.openai_model, in_t, out_t, kind="nl")
 
     try:
         payload = json.loads(response.content)

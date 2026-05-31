@@ -1,9 +1,9 @@
 """Plain-English → draft ontology inspector.
 
-The LLM call is fully stubbed (langchain ChatOpenAI patched to return a canned
-JSON response) so these run offline and burn no credits. The point of the
-module is the trust-nothing sanitizer, so most tests feed deliberately messy
-LLM output and assert it's cleaned rather than fatal.
+The LLM is fully stubbed at the `_invoke_llm` seam (which under the hood now
+routes through pipeline.llm.chat) so these run offline and burn no credits.
+The point of the module is the trust-nothing sanitizer, so most tests feed
+deliberately messy LLM output and assert it's cleaned rather than fatal.
 """
 import json
 from types import SimpleNamespace
@@ -11,41 +11,38 @@ from types import SimpleNamespace
 import pytest
 
 
-class _FakeLLMResponse:
-    def __init__(self, payload, in_tokens=120, out_tokens=80):
-        self.content = payload if isinstance(payload, str) else json.dumps(payload)
-        self.response_metadata = {
+def _fake_response(payload, in_tokens=120, out_tokens=80, model="stub-model"):
+    """Mimic the .content / .response_metadata / .model surface the call site
+    reads — same shape that pipeline.llm.LlmResponse exposes."""
+    return SimpleNamespace(
+        content=payload if isinstance(payload, str) else json.dumps(payload),
+        response_metadata={
             "token_usage": {"prompt_tokens": in_tokens, "completion_tokens": out_tokens}
-        }
+        },
+        model=model,
+        provider="stub",
+    )
 
 
 def _stub_llm(monkeypatch, payload):
-    """Replace nl_inspector.ChatOpenAI with one returning `payload`."""
+    """Make every nl_inspector._invoke_llm call return `payload`."""
     from pipeline.builder import nl_inspector as ni
-
-    class _FakeLLM:
-        def __init__(self, **kw): pass
-        def invoke(self, _msgs):
-            return _FakeLLMResponse(payload)
-
-    monkeypatch.setattr(ni, "ChatOpenAI", _FakeLLM)
+    monkeypatch.setattr(ni, "_invoke_llm", lambda system, user: _fake_response(payload))
 
 
 def _stub_llm_sequence(monkeypatch, payloads):
-    """Return payloads[0], payloads[1], ... on successive invoke() calls.
+    """Return payloads[0], payloads[1], ... on successive _invoke_llm calls.
     A payload that is an Exception instance is raised instead of returned."""
     from pipeline.builder import nl_inspector as ni
     seq = list(payloads)
 
-    class _FakeLLM:
-        def __init__(self, **kw): pass
-        def invoke(self, _msgs):
-            item = seq.pop(0)
-            if isinstance(item, Exception):
-                raise item
-            return _FakeLLMResponse(item)
+    def _fake(system, user):
+        item = seq.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return _fake_response(item)
 
-    monkeypatch.setattr(ni, "ChatOpenAI", _FakeLLM)
+    monkeypatch.setattr(ni, "_invoke_llm", _fake)
 
 
 _GOOD_PAYLOAD = {
@@ -223,9 +220,9 @@ def test_cap_hit_returns_degraded_shape(monkeypatch):
     monkeypatch.setattr(ni, "assert_within_daily_cap", boom)
 
     # If the LLM is reached this will explode — proves we never call it.
-    def explode(**kw):
+    def explode(*a, **kw):
         raise AssertionError("LLM should not be invoked when cap is hit")
-    monkeypatch.setattr(ni, "ChatOpenAI", explode)
+    monkeypatch.setattr(ni, "_invoke_llm", explode)
 
     res = ni.describe("a description that is comfortably over the minimum length")
     assert res["cap_hit"] is True

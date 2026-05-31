@@ -12,6 +12,20 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_model: str = "gpt-4o-mini"
 
+    # Anthropic — optional; required only if PRIMARY_MODEL or FALLBACK_MODEL is a
+    # Claude model (name starts with "claude-"). When unset, only OpenAI is used.
+    anthropic_api_key: str = ""
+
+    # Multi-provider LLM routing — pipeline/llm.py picks ChatAnthropic when the
+    # name starts with "claude-" and ChatOpenAI otherwise. Every chat() call
+    # tries PRIMARY_MODEL first; on any exception (network, rate limit, unknown
+    # model id, etc.) it transparently retries on FALLBACK_MODEL. Set
+    # FALLBACK_MODEL="" to disable fallback. If PRIMARY_MODEL is unset,
+    # OPENAI_MODEL above is used so existing single-provider deployments keep
+    # working unchanged.
+    primary_model: str = ""
+    fallback_model: str = ""
+
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8000

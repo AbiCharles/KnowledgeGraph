@@ -22,10 +22,9 @@ from __future__ import annotations
 import json
 import logging
 
-from langchain_openai import ChatOpenAI
-
 from config import get_settings
 from pipeline.use_case import UseCase
+from pipeline.llm import chat
 from pipeline.schema_introspection import schema_summary
 from api.llm_usage import (
     assert_within_daily_cap, record_call, extract_token_counts,
@@ -92,19 +91,8 @@ def suggest(use_case: UseCase) -> dict:
         "schema": summary,
     }, indent=2)
 
-    llm = ChatOpenAI(
-        model=s.openai_model,
-        api_key=s.openai_api_key,
-        temperature=0,
-        timeout=s.openai_timeout_seconds,
-        model_kwargs={"response_format": {"type": "json_object"}},
-    )
-
     try:
-        response = llm.invoke([
-            ("system", _SYSTEM_PROMPT),
-            ("user", f"Review this ontology:\n\n{prompt}"),
-        ])
+        response = chat(_SYSTEM_PROMPT, f"Review this ontology:\n\n{prompt}", json_mode=True)
     except Exception as exc:
         log.warning("LLM coach call failed: %s", exc)
         return {
@@ -116,7 +104,7 @@ def suggest(use_case: UseCase) -> dict:
         }
 
     in_t, out_t = extract_token_counts(response)
-    record_call(s.openai_model, in_t, out_t, kind="refiner")
+    record_call(getattr(response, "model", None) or s.openai_model, in_t, out_t, kind="refiner")
 
     raw = (response.content or "").strip()
     try:

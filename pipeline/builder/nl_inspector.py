@@ -21,9 +21,8 @@ import json
 import logging
 import re
 
-from langchain_openai import ChatOpenAI
-
 from config import get_settings
+from pipeline.llm import chat
 from pipeline.builder.generator import singularise_pascal, _humanise, _NAME_RE, _VALID_XSD
 from pipeline.builder.csv_inspector import _normalise_column_name
 from api.llm_usage import (
@@ -147,8 +146,9 @@ def describe(description: str, hints: dict | None = None) -> dict:
             "cap_message": str(exc.detail) if hasattr(exc, "detail") else str(exc),
         }
 
-    parsed, in_t, out_t, err = _invoke_with_repair(text, hints)
-    record_call(s.openai_model, in_t, out_t, kind="builder")
+    parsed, in_t, out_t, err, model_used = _invoke_with_repair(text, hints)
+    record_call(model_used or s.openai_model, in_t, out_t, kind="builder")
+    base_meta["model"] = model_used or s.openai_model
 
     if parsed is None:
         return {
@@ -183,30 +183,24 @@ def _build_user_prompt(description: str, hints: dict | None) -> str:
 
 
 def _invoke_llm(system_prompt: str, user_prompt: str):
-    """Single ChatOpenAI call. Split out so tests can monkeypatch ChatOpenAI."""
-    s = get_settings()
-    llm = ChatOpenAI(
-        model=s.openai_model,
-        api_key=s.openai_api_key,
-        temperature=0,
-        timeout=s.openai_timeout_seconds,
-        model_kwargs={"response_format": {"type": "json_object"}},
-    )
-    return llm.invoke([
-        ("system", system_prompt),
-        ("user", user_prompt),
-    ])
+    """Single LLM call through the multi-provider router. Split out as the
+    monkeypatch seam for unit tests (tests stub `nl_inspector._invoke_llm`)."""
+    return chat(system_prompt, user_prompt, json_mode=True)
 
 
 def _invoke_with_repair(description: str, hints: dict | None):
-    """Returns (parsed_dict_or_None, in_tokens, out_tokens, error_str_or_None).
+    """Returns (parsed_dict_or_None, in_tokens, out_tokens, error_str_or_None,
+    model_used).
 
     Retries once on LLM exception OR invalid JSON (with a repair instruction),
     so a single transient hiccup or stray markdown fence doesn't kill the draft.
+    `model_used` is the model that produced the successful reply (so the cost
+    cap attributes spend to the right provider when the router fell back).
     """
     user_prompt = _build_user_prompt(description, hints)
     in_total = out_total = 0
     last_err: str | None = None
+    last_model: str = ""
 
     for attempt in (1, 2):
         system = _SYSTEM_PROMPT
@@ -225,12 +219,13 @@ def _invoke_with_repair(description: str, hints: dict | None):
         in_t, out_t = extract_token_counts(response)
         in_total += in_t
         out_total += out_t
+        last_model = getattr(response, "model", "") or last_model
 
         raw = (response.content or "").strip()
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, dict):
-                return parsed, in_total, out_total, None
+                return parsed, in_total, out_total, None, last_model
             last_err = "json"
         except json.JSONDecodeError as exc:
             log.warning("Builder describe invalid JSON (attempt %d): %s. Body: %s",
@@ -238,7 +233,7 @@ def _invoke_with_repair(description: str, hints: dict | None):
             last_err = "json"
 
     msg = "LLM did not return valid JSON" if last_err == "json" else last_err
-    return None, in_total, out_total, msg
+    return None, in_total, out_total, msg, last_model
 
 
 # ── Trust-nothing sanitizer ─────────────────────────────────────────────────

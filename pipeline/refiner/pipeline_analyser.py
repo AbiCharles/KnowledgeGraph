@@ -23,12 +23,11 @@ import logging
 import re
 from typing import Any
 
-from langchain_openai import ChatOpenAI
-
 from api.llm_usage import (
     assert_within_daily_cap, record_call, extract_token_counts,
 )
 from config import get_settings
+from pipeline.llm import chat
 from pipeline.use_case import UseCase
 
 
@@ -141,26 +140,16 @@ def analyse(
     if include_data_sample:
         context["data_sample"] = _fetch_data_sample(use_case, max_per_class=max_per_class)
 
-    # Make the LLM call. Bounded JSON output via response_format.
-    llm = ChatOpenAI(
-        model=s.openai_model,
-        api_key=s.openai_api_key,
-        temperature=0,
-        timeout=s.openai_timeout_seconds,
-        model_kwargs={"response_format": {"type": "json_object"}},
-    )
+    # Make the LLM call through the multi-provider router (primary → fallback).
     try:
         prompt_body = json.dumps(context, indent=2, default=str)
-        response = llm.invoke([
-            ("system", _SYSTEM_PROMPT),
-            ("user", f"Analyse this pipeline run:\n\n{prompt_body}"),
-        ])
+        response = chat(_SYSTEM_PROMPT, f"Analyse this pipeline run:\n\n{prompt_body}", json_mode=True)
     except Exception as exc:
         log.warning("Pipeline analyser LLM call failed: %s", exc)
         return _empty(error=str(exc))
 
     in_t, out_t = extract_token_counts(response)
-    record_call(s.openai_model, in_t, out_t, kind="pipe-analyse")
+    record_call(getattr(response, "model", None) or s.openai_model, in_t, out_t, kind="pipe-analyse")
 
     # Parse + normalise.
     raw = (response.content or "").strip()
