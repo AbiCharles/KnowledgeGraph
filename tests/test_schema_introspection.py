@@ -52,8 +52,9 @@ def test_classes_properties_and_rels_are_prefixed_and_quoted(tmp_path, monkeypat
     out = schema_description(uc)
     # Class line uses the prefixed, backtick-quoted form on both class and props.
     assert "`dm__MeetingNote`  (`dm__noteId`, `dm__text`)" in out
-    # Relationship line uses prefixed names on the rel type AND on its domain/range.
-    assert "`dm__writtenBy`  `dm__MeetingNote` -> `dm__Author`" in out
+    # Relationship line is the literal Cypher pattern so the LLM copies it
+    # verbatim — direction is part of the value, not a separate descriptor.
+    assert "`(:`dm__MeetingNote`)-[:`dm__writtenBy`]->(:`dm__Author`)`" in out
     # No bare unprefixed identifier should appear in the class/prop rows — that's
     # what previously misled the LLM into emitting `n.noteId`.
     assert " noteId" not in out and "(noteId" not in out

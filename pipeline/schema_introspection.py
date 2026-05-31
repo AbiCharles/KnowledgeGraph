@@ -173,11 +173,14 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
         prop_str = ", ".join(f"`{pfx}{p}`" for p in props) if props else "no properties"
         lines.append(f"- `{pfx}{cls}`  ({prop_str})")
     lines.append("")
-    lines.append("Relationship types (always backtick-quote and prefix):")
+    lines.append("Relationship types — direction is fixed (a directed edge in Neo4j). "
+                 "Each is shown as the exact Cypher pattern; copy it as-is. "
+                 "Reversing the arrow returns zero rows because the edge doesn't exist "
+                 "in the other direction.")
     for name, dom, rng in obj_props:
         dom_s = f"`{pfx}{dom}`" if dom != "?" else "?"
         rng_s = f"`{pfx}{rng}`" if rng != "?" else "?"
-        lines.append(f"- `{pfx}{name}`  {dom_s} -> {rng_s}")
+        lines.append(f"- `(:{dom_s})-[:`{pfx}{name}`]->(:{rng_s})`")
 
     samples = _sample_enum_values(use_case, classes, dt_props)
     if samples:
