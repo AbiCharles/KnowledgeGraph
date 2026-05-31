@@ -158,4 +158,15 @@ def metrics():
 
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 if frontend_dir.is_dir():
-    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+    # The dashboard is a single self-contained index.html (no fingerprinted
+    # assets). FastAPI's StaticFiles emits no Cache-Control, so browsers can
+    # hold onto a stale copy for hours after a deploy. Wrap the mount to set
+    # `Cache-Control: no-store` on every response so a re-deploy lands as
+    # soon as the operator reloads — no cmd-shift-R required.
+    class _NoStoreStatic(StaticFiles):
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            resp.headers["Cache-Control"] = "no-store, must-revalidate"
+            return resp
+
+    app.mount("/", _NoStoreStatic(directory=frontend_dir, html=True), name="frontend")
