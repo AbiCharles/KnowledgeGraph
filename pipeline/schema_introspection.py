@@ -156,19 +156,28 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
         cls = _local(d) if d else "(unscoped)"
         dt_props.setdefault(cls, []).append(_local(p))
 
+    # Print prefixed names everywhere so the LLM can literally copy what it
+    # sees into Cypher. Telling it the rule once at the top and then listing
+    # unprefixed names ("noteId") used to make the model emit `n.noteId`,
+    # which is null in Neo4j because the real property is `mt__noteId`.
+    pfx = f"{prefix}__"
     lines = [
         f"Knowledge graph schema for use case: {use_case.manifest.name}",
-        f"All Neo4j labels and properties are prefixed with `{prefix}__`.",
+        f"All Neo4j labels, properties, and relationship types are prefixed "
+        f"with `{pfx}` — use the exact backtick-quoted names below.",
         "",
         "Node classes with their datatype properties:",
     ]
     for cls in classes:
         props = sorted(dt_props.get(cls, []))
-        lines.append(f"- {cls}  ({', '.join(props) if props else 'no properties'})")
+        prop_str = ", ".join(f"`{pfx}{p}`" for p in props) if props else "no properties"
+        lines.append(f"- `{pfx}{cls}`  ({prop_str})")
     lines.append("")
     lines.append("Relationship types (always backtick-quote and prefix):")
     for name, dom, rng in obj_props:
-        lines.append(f"- `{prefix}__{name}`  {dom} -> {rng}")
+        dom_s = f"`{pfx}{dom}`" if dom != "?" else "?"
+        rng_s = f"`{pfx}{rng}`" if rng != "?" else "?"
+        lines.append(f"- `{pfx}{name}`  {dom_s} -> {rng_s}")
 
     samples = _sample_enum_values(use_case, classes, dt_props)
     if samples:
@@ -176,12 +185,13 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
         lines.append("Known property values (sampled from live data — use these literals exactly, including case):")
         for (cls, prop), values in samples.items():
             shown = ", ".join(repr(v) for v in values)
-            lines.append(f"- {cls}.{prop}: {shown}")
+            lines.append(f"- `{pfx}{cls}`.`{pfx}{prop}`: {shown}")
 
     lines.append("")
     lines.append("Cypher rules for this graph:")
-    lines.append(f"- Backtick-quote labels, properties, and relationship types: `{prefix}__SomeClass`, `{prefix}__someProperty`.")
-    lines.append(f"- Relationship types MUST include the `{prefix}__` prefix.")
+    lines.append(f"- Every label, property, and relationship type MUST be backtick-quoted "
+                 f"and prefixed with `{pfx}` exactly as listed above — e.g. "
+                 f"`(n:`{pfx}SomeClass`) RETURN n.`{pfx}someProperty``.")
     lines.append("- Always alias RETURN columns with AS.")
     lines.append("- Read-only only: MATCH, OPTIONAL MATCH, WITH, WHERE, RETURN, ORDER BY, LIMIT.")
     lines.append("- Match enum-style property values literally (e.g. 'URGENT' not 'urgent').")
