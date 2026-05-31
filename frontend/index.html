@@ -130,6 +130,13 @@ li.CodeMirror-hint-active{background:var(--teal);color:#001a18}
 .rtable th{text-align:left;padding:5px 9px;background:var(--bg3);color:var(--text2);font-size:9px;letter-spacing:.4px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
 .rtable td{padding:5px 9px;border-bottom:1px solid rgba(42,49,72,.5);color:var(--text);vertical-align:top}
 .rtable tr:hover td{background:rgba(30,37,56,.6)}
+/* Object cells: render the property map as a tidy key:value block instead
+   of a wall of JSON. Wraps narrowly so wide tables still scroll cleanly. */
+.rtable .kv-block{display:flex;flex-direction:column;gap:2px;max-height:140px;overflow-y:auto;min-width:220px;max-width:320px}
+.rtable .kv-row{display:flex;gap:8px;line-height:1.4}
+.rtable .kv-key{color:var(--text3);font-size:9.5px;min-width:80px;flex-shrink:0}
+.rtable .kv-val{color:var(--text);font-size:10px;word-break:break-word}
+.rtable .kv-empty{color:var(--text3);font-style:italic;font-size:9.5px}
 .csap{color:#4da6ff}.cmes{color:#34d399}.copen{color:var(--green)}.cprog{color:var(--amber)}.cdone{color:var(--text3)}.curgent{color:var(--red)}.chigh{color:var(--amber)}.ctype{color:var(--purple)}.cmerge{color:var(--purple)}
 .exbl{margin-bottom:11px}
 .exlabel{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:4px}
@@ -2638,6 +2645,59 @@ function cellCls(col, val){
   return '';
 }
 
+// Strip bundle / system prefixes from property keys returned in Cypher rows
+// (e.g. `mt__title` → `title`, `rdfs__label` → `label`). Used to clean up
+// column headers and object-cell keys for human-readable display.
+function _humanProp(k){
+  if(typeof k !== 'string') return k;
+  // Active bundle prefix (e.g. mt__) first, then well-known system prefixes
+  // (rdf__, rdfs__, skos__, owl__, n4sch__, dcterms__, …).
+  return k
+    .replace(activePrefixRE(), '')
+    .replace(/^(rdf|rdfs|skos|owl|n4sch|dcterms|dc|xsd|sh)__/, '');
+}
+
+// Compact, human-readable rendering for a single cell value. Strings/numbers
+// are passed through; objects (e.g. a returned node) become a clean key:value
+// block with prefixes stripped, the internal `uri` hidden, and an
+// identifying label hoisted to the top when one is available.
+function _renderCellValue(v){
+  if(v == null || v === '') return '';
+  if(typeof v === 'number' || typeof v === 'boolean'){
+    return escapeHTML(String(v));
+  }
+  if(typeof v === 'string'){
+    const s = v;
+    return s.length > 58
+      ? `<span title="${escapeHTML(s)}">${escapeHTML(s.slice(0, 58))}…</span>`
+      : escapeHTML(s);
+  }
+  if(Array.isArray(v)){
+    return v.map(_renderCellValue).join('<br>');
+  }
+  // Object — typically a returned Node's property map.
+  const entries = Object.entries(v).filter(([k]) => k !== 'uri');
+  if(!entries.length) return '<span class="kv-empty">(no properties)</span>';
+  // Hoist an identifying field to the top so the cell reads at a glance:
+  // prefer rdfs__label, then any *Name / *Title / *Id, then the rest.
+  const score = ([k]) => {
+    const lk = k.toLowerCase();
+    if(lk === 'rdfs__label' || lk.endsWith('label')) return 0;
+    if(lk.endsWith('name') || lk.endsWith('title')) return 1;
+    if(lk.endsWith('id'))   return 2;
+    return 3;
+  };
+  entries.sort((a, b) => score(a) - score(b));
+  return '<div class="kv-block">' + entries.map(([k, val]) => {
+    const key  = escapeHTML(_humanProp(k));
+    const raw  = val == null ? '' : String(val);
+    const valHtml = raw.length > 50
+      ? `<span title="${escapeHTML(raw)}">${escapeHTML(raw.slice(0, 50))}…</span>`
+      : escapeHTML(raw);
+    return `<div class="kv-row"><span class="kv-key">${key}</span><span class="kv-val">${valHtml}</span></div>`;
+  }).join('') + '</div>';
+}
+
 function renderTable(res){
   const pane = document.getElementById('pane-table');
   if(!res.rows.length){
@@ -2653,13 +2713,18 @@ function renderTable(res){
         `<button class="qclr" style="font-size:9px;padding:3px 8px" onclick="exportResult('json')" title="Download JSON">JSON</button>` +
       `</span>` +
     `</div>` +
-    `<table class="rtable"><thead><tr>${res.cols.map(c => `<th>${escapeHTML(c)}</th>`).join('')}</tr></thead>` +
+    `<table class="rtable"><thead><tr>${res.cols.map(c => `<th title="${escapeHTML(c)}">${escapeHTML(_humanProp(c))}</th>`).join('')}</tr></thead>` +
     `<tbody>${res.rows.map(row => `<tr>${res.cols.map(c => {
       const v = row[c];
-      const s = (v == null || v === '') ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-      const cls = s ? cellCls(c, s) : '';
-      const d = s === '' ? '' : s.length > 58 ? `<span title="${escapeHTML(s)}">${escapeHTML(s.slice(0, 58))}…</span>` : escapeHTML(s);
-      return `<td>${cls ? `<span class="${cls}">${d}</span>` : d}</td>`;
+      const html = _renderCellValue(v);
+      // Apply colour-coded styling only for scalar string values (so status/
+      // priority pills still pop). Object cells render their own kv-block.
+      if(v != null && typeof v !== 'object' && typeof v !== 'boolean'){
+        const s = String(v);
+        const cls = s ? cellCls(c, s) : '';
+        return `<td>${cls ? `<span class="${cls}">${html}</span>` : html}</td>`;
+      }
+      return `<td>${html}</td>`;
     }).join('')}</tr>`).join('')}</tbody></table>`;
 }
 
@@ -4148,10 +4213,18 @@ async function resetToCleanState(){
     if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
     const deleted = (body.deleted || []);
     const kept = (body.kept || []);
+    const cleared = (body.cleared_graphs || []);
     const failures = (body.failures || []);
-    let msg = `✓ Reset complete.\n\nDeleted (${deleted.length}): ${deleted.join(', ') || 'none'}\nKept (${kept.length}): ${kept.join(', ')}`;
+    let msg = `✓ Reset complete.\n\nDeleted (${deleted.length}): ${deleted.join(', ') || 'none'}\nKept (${kept.length}): ${kept.join(', ')}\nGraphs cleared (${cleared.length}): ${cleared.join(', ') || 'none'}`;
     if(failures.length) msg += `\n\nFailures: ${failures.map(f => f.slug + ' (' + f.error + ')').join(', ')}`;
     alert(msg);
+    // Wipe in-session hydration flags so the graph view stays paused for
+    // every bundle until the user re-runs the Hydration Pipeline.
+    _hydratedSlugs.clear();
+    // Clear stale graph state too so a stale render doesn't leak through.
+    NODES = []; EDGES = []; NM = {};
+    window.GRAPH = {NODES, EDGES, NM};
+    try { updateSnapshotChips(); } catch(_){}
     _invalidateUseCasesCache();
     // The currently-active slug may have been wiped — fetch the new active
     // (the server falls back to whatever .active points to or the first bundle).

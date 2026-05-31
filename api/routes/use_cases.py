@@ -405,13 +405,36 @@ def reset_to_clean_state():
         except Exception as exc:
             failures.append({"slug": slug, "error": str(exc)})
 
+    # Wipe the Neo4j data for the bundles we KEPT, too. delete() already drops
+    # the per-bundle database for everything we removed; for the seeded bundles
+    # we have to drop their DBs separately so the operator gets a truly clean
+    # graph state — otherwise switching to kf-mfg-workorder after a reset still
+    # shows yesterday's hydrated data.
+    cleared_graphs: list[str] = []
+    try:
+        from db import db_name_for_slug, drop_database, ensure_database
+        for slug in sorted(seeded & set([p.name for p in use_case_registry.USE_CASES_DIR.iterdir() if p.is_dir()])):
+            db_name = db_name_for_slug(slug)
+            # Drop AND re-create so subsequent /pipeline/run hydrates into a
+            # fresh, empty database instead of having to lazily create it.
+            if drop_database(db_name):
+                ensure_database(db_name)
+                cleared_graphs.append(slug)
+    except Exception as exc:
+        log.warning("Could not wipe seeded bundle graphs: %s", exc)
+
     try:
         from pipeline.schema_introspection import invalidate_schema_cache
         invalidate_schema_cache()
     except Exception:
         pass
 
-    return {"deleted": deleted, "kept": sorted(seeded & set(candidate_slugs + list(seeded))), "failures": failures}
+    return {
+        "deleted": deleted,
+        "kept": sorted(seeded & set(candidate_slugs + list(seeded))),
+        "cleared_graphs": cleared_graphs,
+        "failures": failures,
+    }
 
 
 @router.delete("/{slug}")
