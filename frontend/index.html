@@ -4696,7 +4696,7 @@ function _bldDescribeInput(){
 // Plain-English → draft schema. Lands the result into _builderState.schema in
 // the exact shape the inspectors produce, then advances to the Review step.
 // Rotating-message thinking indicator for the AI draft. Keeps the user
-// engaged during the 10–25s Claude call — without it, the page looks frozen.
+// engaged during the 10–25s LLM call — without it, the page looks frozen.
 let _bldThinkTimer = null;
 function _bldDescribeThinkingOn(){
   const overlay = document.getElementById('bld-describe-thinking');
@@ -4707,7 +4707,7 @@ function _bldDescribeThinkingOn(){
   if(status) status.textContent = '';
   const msgs = [
     'Reading your description…',
-    'Asking Claude to draft the schema…',
+    'Asking the agent to draft the schema…',
     'Extracting things, attributes and connections…',
     'Sanitising names and types…',
     'Finalising the draft…',
