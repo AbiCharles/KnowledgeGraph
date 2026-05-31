@@ -86,6 +86,50 @@ def test_chat_skips_fallback_when_unset(monkeypatch):
         llm.chat("sys", "user")
 
 
+def test_is_temperature_error_recognizes_both_provider_messages():
+    from pipeline.llm import _is_temperature_error
+    # Anthropic-style: "`temperature` is deprecated for this model."
+    assert _is_temperature_error(RuntimeError("`temperature` is deprecated for this model."))
+    # OpenAI-style: "Unsupported value: 'temperature' does not support 0 with this model. Only the default (1) value is supported."
+    assert _is_temperature_error(RuntimeError(
+        "Unsupported value: 'temperature' does not support 0 with this model. "
+        "Only the default (1) value is supported."))
+    # Unrelated errors must not be classified as temperature errors.
+    assert not _is_temperature_error(RuntimeError("rate limit exceeded"))
+    assert not _is_temperature_error(RuntimeError("invalid api key"))
+
+
+def test_openai_retries_without_temperature_on_unsupported_error(monkeypatch):
+    """When a model rejects temperature, the wrapper retries once without it
+    AND caches that decision so subsequent calls skip the round-trip."""
+    from pipeline import llm
+
+    builds: list[bool] = []
+
+    class _FakeOAI:
+        def __init__(self, **kw):
+            builds.append("temperature" in kw)
+        def invoke(self, _msgs):
+            if builds[-1]:
+                raise RuntimeError("Unsupported value: 'temperature' does not support 0")
+            return _ok("gpt-5.5", "openai")
+
+    # Patch the langchain class the wrapper imports lazily.
+    import langchain_openai
+    monkeypatch.setattr(langchain_openai, "ChatOpenAI", _FakeOAI)
+    llm._NO_TEMPERATURE.discard("gpt-5.5")
+
+    res = llm._invoke_openai("gpt-5.5", "sys", "user", json_mode=False)
+    assert res.provider == "openai"
+    # First attempt sent temperature; retry skipped it.
+    assert builds == [True, False]
+    assert "gpt-5.5" in llm._NO_TEMPERATURE
+    # Next call should skip temperature on the first attempt thanks to the cache.
+    builds.clear()
+    llm._invoke_openai("gpt-5.5", "sys", "user", json_mode=False)
+    assert builds == [False]
+
+
 def test_chat_falls_through_to_openai_model_when_primary_unset(monkeypatch):
     """Backwards compat: a deployment that only configured OPENAI_MODEL keeps
     working through the chat() router."""

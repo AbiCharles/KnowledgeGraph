@@ -30,6 +30,20 @@ log = logging.getLogger(__name__)
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
 
 
+# Some newer models (e.g. claude-opus-4-8, gpt-5.5) reject `temperature` —
+# either flagged as "deprecated" or only the platform default is allowed.
+# We learn which models complain on first call and stop sending the param
+# to them. Process-local cache; no need to persist.
+_NO_TEMPERATURE: set[str] = set()
+
+
+def _is_temperature_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    if "temperature" not in msg:
+        return False
+    return any(tok in msg for tok in ("unsupported", "deprecated", "does not support", "only the default"))
+
+
 def _strip_fence(s: str) -> str:
     return _FENCE_RE.sub("", (s or "").strip()).strip()
 
@@ -79,31 +93,57 @@ def _invoke_anthropic(model: str, system: str, user: str, *, json_mode: bool) ->
             "\n\nIMPORTANT: respond with a single valid JSON object only. "
             "No prose, no explanation, no markdown code fences."
         )
-    llm = ChatAnthropic(
-        model=model,
-        api_key=s.anthropic_api_key,
-        temperature=0,
-        timeout=s.openai_timeout_seconds,
-        max_tokens=4096,
-    )
-    raw = llm.invoke([("system", sys_text), ("user", user)])
+
+    def _build(send_temperature: bool) -> ChatAnthropic:
+        kw: dict[str, Any] = {
+            "model": model,
+            "api_key": s.anthropic_api_key,
+            "timeout": s.openai_timeout_seconds,
+            "max_tokens": 4096,
+        }
+        if send_temperature:
+            kw["temperature"] = 0
+        return ChatAnthropic(**kw)
+
+    send_temp = model not in _NO_TEMPERATURE
+    try:
+        raw = _build(send_temp).invoke([("system", sys_text), ("user", user)])
+    except Exception as exc:
+        if send_temp and _is_temperature_error(exc):
+            log.info("Model %s rejects temperature param — retrying without it.", model)
+            _NO_TEMPERATURE.add(model)
+            raw = _build(False).invoke([("system", sys_text), ("user", user)])
+        else:
+            raise
     return LlmResponse(raw, model=model, provider="anthropic")
 
 
 def _invoke_openai(model: str, system: str, user: str, *, json_mode: bool) -> LlmResponse:
     from langchain_openai import ChatOpenAI
     s = get_settings()
-    kwargs: dict[str, Any] = {}
-    if json_mode:
-        kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
-    llm = ChatOpenAI(
-        model=model,
-        api_key=s.openai_api_key,
-        temperature=0,
-        timeout=s.openai_timeout_seconds,
-        **kwargs,
-    )
-    raw = llm.invoke([("system", system), ("user", user)])
+
+    def _build(send_temperature: bool) -> ChatOpenAI:
+        kw: dict[str, Any] = {
+            "model": model,
+            "api_key": s.openai_api_key,
+            "timeout": s.openai_timeout_seconds,
+        }
+        if send_temperature:
+            kw["temperature"] = 0
+        if json_mode:
+            kw["model_kwargs"] = {"response_format": {"type": "json_object"}}
+        return ChatOpenAI(**kw)
+
+    send_temp = model not in _NO_TEMPERATURE
+    try:
+        raw = _build(send_temp).invoke([("system", system), ("user", user)])
+    except Exception as exc:
+        if send_temp and _is_temperature_error(exc):
+            log.info("Model %s rejects temperature=0 — retrying without it.", model)
+            _NO_TEMPERATURE.add(model)
+            raw = _build(False).invoke([("system", system), ("user", user)])
+        else:
+            raise
     return LlmResponse(raw, model=model, provider="openai")
 
 
