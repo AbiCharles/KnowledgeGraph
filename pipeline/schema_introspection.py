@@ -213,6 +213,11 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
                  "dash on both sides. Forward: `(a)-[:`rel`]->(b)`. Reverse: "
                  "`(a)<-[:`rel`]-(b)`. The patterns `(a)-[:`rel`](b)` and "
                  "`(a)<-[:`rel`](b)` are invalid Cypher.")
+    lines.append("- STRONGLY PREFER forward arrows `-[:rel]->` and copy each step from the "
+                 "relationship list verbatim. Only use a reverse arrow `<-[:rel]-` when the "
+                 "path genuinely needs to traverse from range back to domain. Never reverse a "
+                 "step just to make the path connect — re-pick a path whose listed direction "
+                 "already matches the way you're walking.")
     lines.append("- When counting via multi-hop paths, use `COUNT(DISTINCT x)` to avoid "
                  "double-counting (a meeting reaches the same owner along several paths).")
     lines.append(f"- To enable the graph visualisation, prefer returning the node itself "
