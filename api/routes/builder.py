@@ -115,12 +115,36 @@ async def describe(req: dict):
             # Local import keeps langchain_openai out of module import time,
             # matching how refine.py lazily pulls in the LLM analyser.
             from pipeline.builder import nl_inspector
-            return nl_inspector.describe(description, hints)
+            res = nl_inspector.describe(description, hints)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
         except Exception as exc:
             log.exception("Builder describe failed")
             raise HTTPException(status_code=422, detail=f"Describe failed: {exc}")
+
+    # Best-effort: auto-run the rule-based linter on the drafted schema so the
+    # frontend Review step can surface findings inline (missing labels,
+    # orphan classes, hidden FKs, …) WITHOUT making the user click Preview.
+    # Failures here are advisory — the draft is still useful without lint.
+    if res.get("tables"):
+        try:
+            from pipeline.builder.generator import generate
+            from pipeline.refiner.linter import lint_text
+            preview_meta = {
+                "slug": "_preview_",
+                "name": (hints or {}).get("name") or "Preview",
+                "description": "",
+                "prefix": (hints or {}).get("prefix") or "x",
+                "namespace": (hints or {}).get("namespace") or "http://example.org/x#",
+            }
+            out = generate(res, preview_meta)
+            findings = lint_text(
+                out["ontology_ttl"], preview_meta["prefix"], preview_meta["namespace"]
+            )
+            res["lint_findings"] = findings
+        except Exception as exc:
+            log.warning("auto-lint after describe skipped: %s", exc)
+    return res
 
 
 # ── 3. Preview ──────────────────────────────────────────────────────────────

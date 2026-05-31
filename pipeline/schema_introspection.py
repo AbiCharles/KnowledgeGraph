@@ -228,6 +228,13 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
     return "\n".join(lines)
 
 
+def sample_enum_values_from_db(use_case: UseCase, classes: list[str], dt_props: dict[str, list[str]]):
+    """Public wrapper around the private enum sampler. Used by callers outside
+    this module (e.g. the example-query generator) that want the same live-Neo4j
+    sampling as the NL prompt sees, with the same privacy guards."""
+    return _sample_enum_values(use_case, classes, dt_props)
+
+
 def _sample_enum_values(use_case: UseCase, classes: list[str], dt_props: dict[str, list[str]]):
     """Query live Neo4j for the distinct values of properties whose names look
     like enums (Status, Type, Priority, etc.) so the LLM uses correct literals.

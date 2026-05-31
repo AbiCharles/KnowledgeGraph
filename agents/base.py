@@ -5,24 +5,19 @@ Each agent is a simple ReAct loop:
   Think → call cypher_query tool → observe result → reason → final answer
 """
 
-from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
-from config import get_settings
+from pipeline.llm import make_chat_model
 from agents.tools import cypher_query
 
 
-def build_agent(system_prompt: str):
-    """Return a compiled LangGraph ReAct agent with the Neo4j Cypher tool."""
-    s = get_settings()
-    llm = ChatOpenAI(
-        model=s.openai_model,
-        api_key=s.openai_api_key,
-        temperature=0,
-        # Cap each LLM round-trip; default of 600s would tie up a worker for
-        # 10 minutes on a hung request. Setting affects both /agents and the
-        # ReAct loop's tool-calling round-trips.
-        timeout=s.openai_timeout_seconds,
-    )
+def build_agent(system_prompt: str, *, model_id: str | None = None):
+    """Return a compiled LangGraph ReAct agent with the Neo4j Cypher tool.
+
+    `model_id` overrides PRIMARY_MODEL — callers that want per-run
+    primary→fallback retry should pass the model id explicitly so they can
+    rebuild the agent on the fallback model in their except branch.
+    """
+    llm = make_chat_model(model_id)
     return create_react_agent(
         model=llm,
         tools=[cypher_query],

@@ -354,6 +354,22 @@ def _build_manifest(schema: dict, meta: dict) -> dict:
                 adapters.append(_build_pull_adapter(ds_id, table, i))
             manifest["stage4_adapters"] = adapters
 
+    # Carry per-column enum hints into the manifest so data_generator picks
+    # class-appropriate values instead of the generic _STATUSES list. Hints
+    # come from the description-source nl_inspector (which extracts them
+    # from prose like "status (approved/rejected/pending)") and from any
+    # future inspector that wants to seed enum vocabularies. Absence keeps
+    # existing default-randomised behaviour intact.
+    enum_hints_by_class: dict[str, dict[str, list[str]]] = {}
+    for table in schema["tables"]:
+        cls = table["class_name"]
+        for col in table.get("columns", []) or []:
+            hints = col.get("enum_hints") or []
+            if hints:
+                enum_hints_by_class.setdefault(cls, {})[col["name"]] = list(hints)
+    if enum_hints_by_class:
+        manifest["sample_enum_values_hints"] = enum_hints_by_class
+
     # Starter examples — give every new bundle a Query Console that's
     # actually useful out of the box. Capped at MAX_EXAMPLES to keep the
     # chip strip manageable; per-class breadth wins over per-class depth.
@@ -370,85 +386,275 @@ def _build_manifest(schema: dict, meta: dict) -> dict:
 MAX_EXAMPLES = 12
 
 
+def _pk_of(table: dict) -> str | None:
+    """The bundle's chosen primary key for a class, falling back to the
+    first column when the inspector didn't pin one. Returns None only for
+    pathological classes with zero columns (which the schema validator
+    would already reject upstream, but we don't want to crash here)."""
+    pk = table.get("primary_key")
+    if pk:
+        return pk
+    cols = table.get("columns") or []
+    return cols[0]["name"] if cols else None
+
+
+def _relationships_from_schema(schema: dict) -> list[tuple[str, str, str]]:
+    """Flatten the schema's relationships into a list of
+    (domain_class, rel_local_name, range_class) tuples.
+
+    Pulls from both `relationships` (explicit, all source kinds) and
+    `foreign_keys` (Postgres). The traversal/multi-hop/count templates
+    don't care which side of that fence the link came from."""
+    rels: list[tuple[str, str, str]] = []
+    by_sql_name = {t["name"]: t["class_name"] for t in schema.get("tables", [])}
+    for table in schema.get("tables", []):
+        domain = table["class_name"]
+        for rel in table.get("relationships", []) or []:
+            name = (rel.get("name") or "").strip()
+            range_class = (rel.get("range_class") or "").strip()
+            if name and range_class and _NAME_RE.match(name):
+                rels.append((domain, name, range_class))
+        if schema.get("source_kind") == "postgres":
+            for fk in table.get("foreign_keys", []) or []:
+                ref_class = by_sql_name.get(fk.get("ref_table"))
+                if not ref_class:
+                    continue
+                rel_name = re.sub(r"[^A-Za-z0-9_]", "", _singular(fk["ref_table"]))
+                if not rel_name or not _NAME_RE.match(rel_name):
+                    continue
+                rels.append((domain, rel_name, ref_class))
+    return rels
+
+
+def _find_two_hop_chains(
+    rels: list[tuple[str, str, str]],
+) -> list[tuple[str, str, str, str, str]]:
+    """Find every directed 2-hop chain A-[r1]->B-[r2]->C in the
+    relationship list. Returns (A, r1, B, r2, C) tuples. Used by the
+    multi-hop example template — operators love these because they
+    answer 'what does X connect to via Y?' which is hard to discover
+    from the chip-strip otherwise.
+
+    BFS-equivalent for depth-2: we just enumerate adjacent pairs. Skips
+    pure self-loops (A→A→A) to keep examples diverse, but allows
+    A→B→A because that's often a meaningful 'round-trip' pattern."""
+    by_domain: dict[str, list[tuple[str, str]]] = {}
+    for d, r, rng in rels:
+        by_domain.setdefault(d, []).append((r, rng))
+    chains: list[tuple[str, str, str, str, str]] = []
+    for a, r1, b in rels:
+        for r2, c in by_domain.get(b, []):
+            if a == b == c:
+                continue
+            chains.append((a, r1, b, r2, c))
+    return chains
+
+
 def _build_examples(schema: dict, meta: dict) -> tuple[list[dict], list[dict]]:
-    """Generate a small set of starter Cypher examples + matching NL rules.
+    """Generate up to MAX_EXAMPLES starter Cypher examples + matching NL rules.
 
-    Per class:
-      1. "Show all <Class>"               → MATCH (n:<Cls>) RETURN n LIMIT 25
-      2. "Count <Class>"                  → MATCH (n:<Cls>) RETURN count(n)
-      3. "Top 10 <Class> by <PK>"         → if a primary key exists
-    Per object property (Postgres only):
-      4. "<Class> with their <Range>"     → MATCH (a)-[:rel]->(b) RETURN a, b LIMIT 25
+    Shape (matches the plan in docs/ontology-builder.md):
+      3 simple examples on the "main" class (most columns):
+        1. "Show all <plural>"     → MATCH (n:<Cls>) RETURN n LIMIT 25
+        2. "Count <plural>"        → MATCH (n:<Cls>) RETURN count(n) AS total
+        3. "Top 10 <plural> by <pk>" (no nl_rule — too narrow to match)
+      Up to (MAX_EXAMPLES - 3) complex examples, in priority order:
+        a. Relationship traversal per object property
+        b. Counts per related class (top-N aggregation)
+        c. Multi-hop A→B→C chains discovered by BFS over rels
+        d. Enum filter (one per property with enum_hints attached)
 
-    Each example gets a matching nl_rule so plain-English queries like
-    "show all orders" trigger the right Cypher chip.
+    Simple ones get matching nl_rules; complex ones are shown as Cypher
+    chips only (their query shape is too varied for useful regex hits).
     """
     prefix = meta["prefix"]
     examples: list[dict] = []
     nl_rules: list[dict] = []
 
-    def _add(label: str, cypher: str, nl_pattern: str | None):
-        """Append example + optional nl_rule. Indexes nl_rule to the
-        zero-based position the example takes in the final list."""
+    def _add(label: str, cypher: str, nl_pattern: str | None) -> bool:
+        """Append example + optional nl_rule. Returns False when the
+        cap is full so callers can stop building more candidates."""
         if len(examples) >= MAX_EXAMPLES:
-            return
+            return False
         idx = len(examples)
         examples.append({"label": label, "cypher": cypher})
         if nl_pattern:
             nl_rules.append({"pattern": nl_pattern, "example_index": idx})
+        return True
 
-    for table in schema.get("tables", []):
-        cls = table["class_name"]
-        label_n4j = f"`{prefix}__{cls}`"
-        cls_lower = cls.lower()
-        plural = _english_plural(cls_lower)
+    tables = schema.get("tables") or []
+    if not tables:
+        return examples, nl_rules
 
-        # 1. Show all
+    # ── 3 simple examples on the "main" class ──────────────────────────────
+    # "Main" = most columns; ties broken by table order so callers get a
+    # deterministic shape across runs of the same schema.
+    main = max(tables, key=lambda t: (len(t.get("columns") or []), -tables.index(t)))
+    main_cls = main["class_name"]
+    main_label_n4j = f"`{prefix}__{main_cls}`"
+    main_plural = _english_plural(main_cls.lower())
+
+    _add(
+        f"Show all {main_plural}",
+        f"MATCH (n:{main_label_n4j}) RETURN n LIMIT 25",
+        rf"\bshow\s+(?:me\s+)?(?:all\s+)?{main_plural}\b",
+    )
+    _add(
+        f"Count {main_plural}",
+        f"MATCH (n:{main_label_n4j}) RETURN count(n) AS total",
+        rf"\b(?:how\s+many|count(?:\s+the)?)\s+{main_plural}\b",
+    )
+    # Strict: only emit "Top 10 by <PK>" when a real PK was inspected — don't
+    # fake it from the first column or the example label is misleading.
+    main_pk = main.get("primary_key")
+    if main_pk:
+        pk_n4j = f"`{prefix}__{main_pk}`"
         _add(
-            f"Show all {plural}",
-            f"MATCH (n:{label_n4j}) RETURN n LIMIT 25",
-            rf"\bshow\s+(?:me\s+)?(?:all\s+)?{plural}\b",
+            f"Top 10 {main_plural} by {main_pk}",
+            f"MATCH (n:{main_label_n4j}) "
+            f"RETURN n.{pk_n4j} AS {main_pk}, n "
+            f"ORDER BY {main_pk} LIMIT 10",
+            None,
         )
-        # 2. Count
-        _add(
-            f"Count {plural}",
-            f"MATCH (n:{label_n4j}) RETURN count(n) AS total",
-            rf"\b(?:how\s+many|count(?:\s+the)?)\s+{plural}\b",
-        )
-        # 3. Top N by PK — only if a primary key was detected.
-        pk = table.get("primary_key")
-        if pk:
-            pk_n4j = f"`{prefix}__{pk}`"
-            _add(
-                f"Top 10 {plural} by {pk}",
-                f"MATCH (n:{label_n4j}) RETURN n.{pk_n4j} AS {pk}, n ORDER BY {pk} LIMIT 10",
-                None,   # too narrow for a useful NL match
-            )
 
-    # Per-relationship example (Postgres FKs only — CSVs don't have rels).
-    if schema.get("source_kind") == "postgres":
-        by_sql = {t["name"]: t for t in schema["tables"]}
-        for table in schema["tables"]:
-            for fk in table.get("foreign_keys", []) or []:
-                if len(examples) >= MAX_EXAMPLES:
-                    break
-                target = by_sql.get(fk.get("ref_table"))
-                if not target:
-                    continue
-                src_cls = table["class_name"]
-                tgt_cls = target["class_name"]
-                # Singularised ref-table name = relationship name in the generator.
-                from pipeline.builder.generator import _singular
-                rel = _singular(fk["ref_table"])
-                rel_n4j = f"`{prefix}__{rel}`"
-                src_n4j = f"`{prefix}__{src_cls}`"
-                tgt_n4j = f"`{prefix}__{tgt_cls}`"
-                _add(
-                    f"{src_cls} with their {tgt_cls}",
-                    f"MATCH (a:{src_n4j})-[:{rel_n4j}]->(b:{tgt_n4j}) RETURN a, b LIMIT 25",
-                    None,
-                )
+    # ── Complex examples ───────────────────────────────────────────────────
+    complex_specs = _complex_examples(schema, meta)
+    for label, cypher in complex_specs:
+        if not _add(label, cypher, None):
+            break
+
     return examples, nl_rules
+
+
+def _complex_examples(schema: dict, meta: dict) -> list[tuple[str, str]]:
+    """Build the complex example pool. Returns a list of
+    (label, cypher) tuples, longer than the caller's remaining budget;
+    caller takes from the front until full.
+
+    Priority groups (greedy concat — earlier groups always win the slot):
+      (a) Relationship traversal — one per object property
+      (b) Counts per related class — one per object property
+      (c) Multi-hop A→B→C chains — at most one per starting class
+      (d) Enum filter — one per (class, prop) that has enum_hints in the
+          schema dict (description source); skipped for csv/postgres for
+          now since their enum samples come from live Neo4j, which isn't
+          loaded at bundle-build time."""
+    prefix = meta["prefix"]
+    tables = schema.get("tables") or []
+    by_name = {t["class_name"]: t for t in tables}
+    rels = _relationships_from_schema(schema)
+
+    out: list[tuple[str, str]] = []
+
+    # (a) Relationship traversal — one per object property.
+    for domain, rel, rng in rels:
+        d_table = by_name.get(domain)
+        r_table = by_name.get(rng)
+        if not d_table or not r_table:
+            continue
+        d_pk = _pk_of(d_table)
+        r_pk = _pk_of(r_table)
+        if not d_pk or not r_pk:
+            continue
+        d_n4j = f"`{prefix}__{domain}`"
+        r_n4j = f"`{prefix}__{rng}`"
+        rel_n4j = f"`{prefix}__{rel}`"
+        d_pk_n4j = f"`{prefix}__{d_pk}`"
+        r_pk_n4j = f"`{prefix}__{r_pk}`"
+        # Return the nodes themselves alongside the keys so the graph
+        # view has something to render — scalar-only results draw an
+        # empty canvas.
+        cypher = (
+            f"MATCH (a:{d_n4j})-[:{rel_n4j}]->(b:{r_n4j}) "
+            f"RETURN a.{d_pk_n4j} AS {d_pk}, b.{r_pk_n4j} AS {r_pk}, a, b "
+            f"LIMIT 25"
+        )
+        label = f"{rng} with their {domain}"
+        out.append((label, cypher))
+
+    # (b) Counts per related class — answers "top X by Y".
+    for domain, rel, rng in rels:
+        d_table = by_name.get(domain)
+        r_table = by_name.get(rng)
+        if not d_table or not r_table:
+            continue
+        r_pk = _pk_of(r_table)
+        if not r_pk:
+            continue
+        d_n4j = f"`{prefix}__{domain}`"
+        r_n4j = f"`{prefix}__{rng}`"
+        rel_n4j = f"`{prefix}__{rel}`"
+        r_pk_n4j = f"`{prefix}__{r_pk}`"
+        d_plural = _english_plural(domain.lower())
+        alias_id = f"{rng.lower()}Id"
+        alias_total = d_plural
+        cypher = (
+            f"MATCH (a:{d_n4j})-[:{rel_n4j}]->(b:{r_n4j}) "
+            f"RETURN b.{r_pk_n4j} AS {alias_id}, count(a) AS {alias_total} "
+            f"ORDER BY {alias_total} DESC LIMIT 10"
+        )
+        label = f"Top {rng}s by number of {d_plural}"
+        out.append((label, cypher))
+
+    # (c) Multi-hop A→B→C chains — at most one per starting class so
+    # the chip strip doesn't fill up with near-identical paths off a
+    # single hub class.
+    seen_start: set[str] = set()
+    for a, r1, b, r2, c in _find_two_hop_chains(rels):
+        if a in seen_start:
+            continue
+        a_table = by_name.get(a)
+        c_table = by_name.get(c)
+        b_table = by_name.get(b)
+        if not a_table or not c_table or not b_table:
+            continue
+        a_pk = _pk_of(a_table)
+        c_pk = _pk_of(c_table)
+        if not a_pk or not c_pk:
+            continue
+        a_n4j = f"`{prefix}__{a}`"
+        b_n4j = f"`{prefix}__{b}`"
+        c_n4j = f"`{prefix}__{c}`"
+        r1_n4j = f"`{prefix}__{r1}`"
+        r2_n4j = f"`{prefix}__{r2}`"
+        a_pk_n4j = f"`{prefix}__{a_pk}`"
+        c_pk_n4j = f"`{prefix}__{c_pk}`"
+        cypher = (
+            f"MATCH (a:{a_n4j})-[:{r1_n4j}]->(:{b_n4j})-[:{r2_n4j}]->(c:{c_n4j}) "
+            f"RETURN a.{a_pk_n4j} AS {a_pk}, c.{c_pk_n4j} AS {c_pk}, a, c "
+            f"LIMIT 25"
+        )
+        label = f"{a} connected to {c} via {b}"
+        out.append((label, cypher))
+        seen_start.add(a)
+
+    # (d) Enum filter examples (description source only). For postgres/csv
+    # the enum values come from live Neo4j (see schema_introspection
+    # _sample_enum_values), which isn't running at bundle-build time —
+    # those bundles fall back to traversal examples instead.
+    if schema.get("source_kind") == "description":
+        for table in tables:
+            cls = table["class_name"]
+            cls_n4j = f"`{prefix}__{cls}`"
+            plural = _english_plural(cls.lower())
+            for col in table.get("columns") or []:
+                hints = col.get("enum_hints") or []
+                if not hints:
+                    continue
+                # Pick the first hint as the filter literal — deterministic
+                # across runs of the same schema. String-escape the value
+                # in case the hint carries a stray single quote.
+                literal = str(hints[0]).replace("\\", "\\\\").replace("'", "\\'")
+                prop = col["name"]
+                prop_n4j = f"`{prefix}__{prop}`"
+                cypher = (
+                    f"MATCH (n:{cls_n4j}) WHERE n.{prop_n4j} = '{literal}' "
+                    f"RETURN n LIMIT 25"
+                )
+                label = f"{plural.capitalize()} where {prop} is {literal}"
+                out.append((label, cypher))
+
+    return out
 
 
 def _humanise(camel_or_pascal: str) -> str:
@@ -521,7 +727,21 @@ def _build_data_ttl(schema: dict, meta: dict, onto: str | None = None) -> tuple[
         if not onto:
             return "# empty — no ontology available for synthetic seed\n", 0
         from pipeline.data_generator import generate_data
-        ttl, summ = generate_data(onto, meta["namespace"], count=10, seed=42)
+        # Re-collect enum hints by class so the data generator picks the
+        # user-supplied vocabulary (APPROVED/REJECTED/...) instead of the
+        # generic _STATUSES default. Mirrors the carry-through done in
+        # _build_manifest so the manifest and the data agree on values.
+        enum_hints_by_class: dict[str, dict[str, list[str]]] = {}
+        for table in schema["tables"]:
+            cls = table["class_name"]
+            for col in table.get("columns", []) or []:
+                hints = col.get("enum_hints") or []
+                if hints:
+                    enum_hints_by_class.setdefault(cls, {})[col["name"]] = list(hints)
+        ttl, summ = generate_data(
+            onto, meta["namespace"], count=10, seed=42,
+            enum_hints_by_class=enum_hints_by_class or None,
+        )
         return (ttl or "# no classes — empty data.ttl\n"), int(summ.get("total_nodes", 0) or 0)
 
     # CSV: bundled rows live under each table's `sample_rows` field.

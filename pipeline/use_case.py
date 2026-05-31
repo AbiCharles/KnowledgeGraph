@@ -263,6 +263,15 @@ class Manifest(BaseModel):
     # enum-named properties may carry PII.
     sample_enum_values: bool = True
 
+    # Optional enum-value hints supplied at bundle-creation time (e.g. by the
+    # AI describe path, when the user spelled out the legal values in prose).
+    # Shape: {class_local_name: {property_local_name: [allowed_value, ...]}}.
+    # Consumed by pipeline.data_generator.generate_data to produce sample
+    # data that matches the user's intended vocabulary instead of falling
+    # back to generic OPEN/IN_PROGRESS/CLOSED defaults. Purely advisory —
+    # absence keeps existing default behaviour intact.
+    sample_enum_values_hints: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+
     # Frontend customisation
     examples: list[ExampleSpec] = Field(default_factory=list)
     nl_rules: list[NLRuleSpec] = Field(default_factory=list)

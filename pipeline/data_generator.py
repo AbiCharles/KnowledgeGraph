@@ -37,6 +37,24 @@ _STATUSES = ["OPEN", "IN_PROGRESS", "CLOSED", "BLOCKED", "REVIEW"]
 _PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"]
 
 
+def _short_prefix_for(class_local: str) -> str:
+    """Derive a 2-3 letter prefix from a PascalCase class name.
+
+    Examples:
+      WorkOrder   -> WO
+      MeetingNote -> MN
+      Order       -> ORD
+      Trip        -> TR
+      ""          -> X    (defensive fallback so we never return empty)
+    """
+    if not class_local:
+        return "X"
+    uppers = "".join(c for c in class_local if c.isupper())
+    if len(uppers) >= 2:
+        return uppers[:3]
+    return class_local[:3].upper() or "X"
+
+
 def _local(uri: URIRef) -> str:
     s = str(uri)
     for sep in ("#", "/"):
@@ -45,10 +63,39 @@ def _local(uri: URIRef) -> str:
     return s
 
 
-def _datatype_value(prop_local: str, range_uri: URIRef | None, rng: random.Random) -> Literal:
+def _datatype_value(
+    prop_local: str,
+    range_uri: URIRef | None,
+    rng: random.Random,
+    class_local: str | None = None,
+    instance_index: int | None = None,
+    enum_hints: list[str] | None = None,
+) -> Literal:
     """Pick a value plausible for the property's range. Prop name is used as
-    a hint (e.g. anything ending in 'Status' picks from STATUSES)."""
+    a hint (e.g. anything ending in 'Status' picks from STATUSES).
+
+    When `class_local` and `instance_index` are supplied AND the property
+    looks like an identifier (name ends in 'id'), emit a class-prefixed
+    sequential string like 'WO-0001'. That gives readable, globally-unique
+    ids without the cross-class collisions a raw randint(1, 1000) used to
+    produce. Non-id integer properties keep the old randint behaviour.
+
+    When `enum_hints` is non-empty and the property's name looks enum-ish
+    (contains 'status', 'priority', or 'severity'), pick from the supplied
+    hints instead of the built-in defaults so the generated data matches
+    the user's intended vocabulary.
+    """
     name = prop_local.lower()
+    # ID-shaped string ids first — applies regardless of declared range so an
+    # LLM that declared an id as xsd:integer still gets a clean string id.
+    if (
+        name.endswith("id")
+        and class_local is not None
+        and instance_index is not None
+    ):
+        prefix = _short_prefix_for(class_local)
+        return Literal(f"{prefix}-{instance_index + 1:04d}", datatype=XSD.string)
+
     if range_uri == XSD.integer or range_uri == XSD.int or range_uri == XSD.long or range_uri == XSD.nonNegativeInteger:
         return Literal(rng.randint(1, 1000), datatype=XSD.integer)
     if range_uri == XSD.decimal or range_uri == XSD.double or range_uri == XSD.float:
@@ -64,15 +111,24 @@ def _datatype_value(prop_local: str, range_uri: URIRef | None, rng: random.Rando
     # String-ish — try to be cute about common property names so the demo
     # data reads naturally instead of being all "alpha-12 beta-3".
     if "status" in name:
+        if enum_hints:
+            return Literal(rng.choice(enum_hints))
         return Literal(rng.choice(_STATUSES))
     if "priority" in name or "severity" in name:
+        if enum_hints:
+            return Literal(rng.choice(enum_hints))
         return Literal(rng.choice(_PRIORITIES))
     if name.endswith("id"):
+        # Defensive fallback for callers that don't thread class/index through.
         return Literal(f"{prop_local[:-2].upper() or 'ID'}-{rng.randint(1000, 9999)}")
     if "name" in name or "label" in name or "title" in name:
         return Literal(" ".join(rng.choice(_WORDS) for _ in range(2)).title())
     if "description" in name or "comment" in name or "note" in name:
         return Literal(" ".join(rng.choice(_WORDS) for _ in range(rng.randint(4, 8))))
+    # Last resort: if enum_hints were supplied for an otherwise-generic string
+    # property, prefer them over the random "alpha-123" filler.
+    if enum_hints:
+        return Literal(rng.choice(enum_hints))
     return Literal(rng.choice(_WORDS) + "-" + str(rng.randint(1, 999)))
 
 
@@ -113,7 +169,13 @@ def _max_card(g: Graph, prop: URIRef) -> int | None:
     return None
 
 
-def generate_data(ontology_ttl: str, bundle_ns: str, count: int = 10, seed: int = 42) -> tuple[str, dict]:
+def generate_data(
+    ontology_ttl: str,
+    bundle_ns: str,
+    count: int = 10,
+    seed: int = 42,
+    enum_hints_by_class: dict[str, dict[str, list[str]]] | None = None,
+) -> tuple[str, dict]:
     """Generate instance TTL.
 
     Args:
@@ -124,6 +186,13 @@ def generate_data(ontology_ttl: str, bundle_ns: str, count: int = 10, seed: int 
       count: how many instances to emit per class.
       seed: deterministic by default so the same ontology produces the same
             data on repeat runs (operators can re-roll by changing the seed).
+      enum_hints_by_class: optional per-class, per-property allowed-value
+            lists, e.g. ``{"Decision": {"status": ["APPROVED", "CONDITIONAL"]}}``.
+            When the property name looks enum-ish (status/priority/severity)
+            the generator picks from these instead of the built-in defaults
+            so sample data matches the user's intended vocabulary. Caller
+            (generator._build_data_ttl) typically forwards this from the
+            manifest's ``sample_enum_values_hints`` field.
 
     Returns: (ttl_text, summary_dict). The summary lists per-class counts and
     total nodes/edges so the caller can surface it in the UI.
@@ -160,11 +229,14 @@ def generate_data(ontology_ttl: str, bundle_ns: str, count: int = 10, seed: int 
         key=str,
     )
 
+    hints_by_class = enum_hints_by_class or {}
+
     # Pass 1 — mint instances and attach datatype literals + label.
     instances_by_class: dict[URIRef, list[URIRef]] = {}
     summary_classes: list[dict] = []
     for cls in classes:
         local = _local(cls)
+        class_hints = hints_by_class.get(local) or {}
         instances = []
         for i in range(1, count + 1):
             inst = URIRef(f"{bundle_ns}{local}_{i:03d}")
@@ -173,7 +245,15 @@ def generate_data(ontology_ttl: str, bundle_ns: str, count: int = 10, seed: int 
             for p in _props_for(onto, OWL.DatatypeProperty, cls, dt_props):
                 ranges = list(onto.objects(p, RDFS.range))
                 rng_uri = ranges[0] if ranges else None
-                out.add((inst, p, _datatype_value(_local(p), rng_uri, rng)))
+                prop_local = _local(p)
+                out.add((inst, p, _datatype_value(
+                    prop_local,
+                    rng_uri,
+                    rng,
+                    class_local=local,
+                    instance_index=i - 1,
+                    enum_hints=class_hints.get(prop_local),
+                )))
             instances.append(inst)
         instances_by_class[cls] = instances
         summary_classes.append({"class": local, "count": len(instances)})

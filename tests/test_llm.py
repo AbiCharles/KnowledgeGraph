@@ -142,3 +142,46 @@ def test_chat_falls_through_to_openai_model_when_primary_unset(monkeypatch):
     monkeypatch.setattr(llm, "_invoke_openai", lambda m, s, u, *, json_mode: _ok(m, "openai"))
     res = llm.chat("sys", "user")
     assert res.model == "gpt-4o-mini"
+
+
+def test_make_chat_model_returns_anthropic_for_claude_prefix(monkeypatch):
+    monkeypatch.setenv("PRIMARY_MODEL", "claude-opus-4-8")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-stub")
+    from config import get_settings; get_settings.cache_clear()
+    from langchain_anthropic import ChatAnthropic
+    from pipeline.llm import make_chat_model
+    m = make_chat_model()
+    assert isinstance(m, ChatAnthropic)
+
+
+def test_make_chat_model_returns_openai_for_non_claude(monkeypatch):
+    monkeypatch.setenv("PRIMARY_MODEL", "gpt-4o-mini")
+    from config import get_settings; get_settings.cache_clear()
+    from langchain_openai import ChatOpenAI
+    from pipeline.llm import make_chat_model
+    m = make_chat_model()
+    assert isinstance(m, ChatOpenAI)
+
+
+def test_make_chat_model_omits_temperature_when_cached(monkeypatch):
+    monkeypatch.setenv("PRIMARY_MODEL", "gpt-5.5")
+    from config import get_settings; get_settings.cache_clear()
+    from pipeline import llm
+    llm._NO_TEMPERATURE.add("gpt-5.5")
+    try:
+        m = llm.make_chat_model()
+        # langchain ChatOpenAI exposes its config; temperature should be unset / default
+        # rather than 0. We just check that the instance was constructed without raising.
+        assert m is not None
+    finally:
+        llm._NO_TEMPERATURE.discard("gpt-5.5")
+
+
+def test_make_chat_model_explicit_model_id_overrides_settings(monkeypatch):
+    monkeypatch.setenv("PRIMARY_MODEL", "claude-opus-4-8")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-stub")
+    from config import get_settings; get_settings.cache_clear()
+    from langchain_openai import ChatOpenAI
+    from pipeline.llm import make_chat_model
+    m = make_chat_model("gpt-4o-mini")   # explicit override
+    assert isinstance(m, ChatOpenAI)

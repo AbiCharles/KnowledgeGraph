@@ -153,6 +153,49 @@ def _invoke(model: str, system: str, user: str, *, json_mode: bool) -> LlmRespon
     return _invoke_openai(model, system, user, json_mode=json_mode)
 
 
+def make_chat_model(model_id: str | None = None):
+    """Return a real langchain BaseChatModel for the resolved model id, ready
+    to plug into LangGraph's create_react_agent. Honours PRIMARY_MODEL /
+    FALLBACK_MODEL via _resolve_models(); routes claude-* → ChatAnthropic,
+    else → ChatOpenAI; omits `temperature` for models cached in _NO_TEMPERATURE
+    (so newer models like claude-opus-4-8 / gpt-5.5 work without 400s).
+
+    If `model_id` is given, that exact id is used (no fallback inside the
+    returned object — the caller wraps the .invoke() in their own retry).
+    Otherwise uses PRIMARY_MODEL (or OPENAI_MODEL backwards-compat).
+    """
+    s = get_settings()
+    m = (model_id or _resolve_models()[0] or "").strip()
+    if not m:
+        raise RuntimeError("No LLM configured — set PRIMARY_MODEL or OPENAI_MODEL")
+
+    send_temp = m not in _NO_TEMPERATURE
+
+    if m.lower().startswith("claude"):
+        if not s.anthropic_api_key:
+            raise RuntimeError("anthropic_api_key is not configured")
+        from langchain_anthropic import ChatAnthropic
+        kw: dict[str, Any] = {
+            "model": m,
+            "api_key": s.anthropic_api_key,
+            "timeout": s.openai_timeout_seconds,
+            "max_tokens": 4096,
+        }
+        if send_temp:
+            kw["temperature"] = 0
+        return ChatAnthropic(**kw)
+
+    from langchain_openai import ChatOpenAI
+    kw = {
+        "model": m,
+        "api_key": s.openai_api_key,
+        "timeout": s.openai_timeout_seconds,
+    }
+    if send_temp:
+        kw["temperature"] = 0
+    return ChatOpenAI(**kw)
+
+
 def chat(system: str, user: str, *, json_mode: bool = True) -> LlmResponse:
     """Send (system, user) to the primary model; on any error, transparently
     retry on the fallback. Returns an LlmResponse exposing .content,

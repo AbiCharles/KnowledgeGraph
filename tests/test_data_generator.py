@@ -91,3 +91,60 @@ def test_count_out_of_range_rejected():
         generate_data(SAMPLE_ONTOLOGY, NS, count=0)
     with pytest.raises(ValueError):
         generate_data(SAMPLE_ONTOLOGY, NS, count=10_000)
+
+
+# ── Part 3 changes: sequential ids + enum hints ───────────────────────────────
+
+def test_short_prefix_for_common_class_names():
+    from pipeline.data_generator import _short_prefix_for
+    assert _short_prefix_for("WorkOrder") == "WO"
+    assert _short_prefix_for("MeetingNote") == "MN"
+    assert _short_prefix_for("Trip") == "TRI"
+    assert _short_prefix_for("Order") == "ORD"
+
+
+def test_id_properties_are_class_prefixed_sequential_strings():
+    """`randint(1,1000)` for every integer id used to collide across classes
+    (e.g. workOrderId=472 == actionItemId=472). Now each id-shaped property is
+    a class-prefixed sequential string like 'WO-0001' — unique across the bundle."""
+    ontology = """
+@prefix ex:   <http://example.org/x#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Order a owl:Class .
+ex:Customer a owl:Class .
+
+ex:orderId    a owl:DatatypeProperty ; rdfs:domain ex:Order ;    rdfs:range xsd:string .
+ex:customerId a owl:DatatypeProperty ; rdfs:domain ex:Customer ; rdfs:range xsd:string .
+"""
+    ttl, _ = generate_data(ontology, "http://example.org/x#", count=5)
+    g = Graph(); g.parse(data=ttl, format="turtle")
+    order_ids   = sorted(str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#orderId"), None)))
+    cust_ids    = sorted(str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#customerId"), None)))
+    # Per-class, 1-indexed, zero-padded; no overlap between classes.
+    assert all(v.startswith("ORD-") for v in order_ids), f"orderId values: {order_ids}"
+    assert all(v.startswith("CUS-") for v in cust_ids),  f"customerId values: {cust_ids}"
+    assert set(order_ids).isdisjoint(cust_ids), "id values must be globally unique across classes"
+
+
+def test_enum_hints_override_default_statuses():
+    """When the bundle's manifest supplies enum hints, the generator uses them
+    instead of the generic _STATUSES list — so filtering by the user's
+    actual status values (e.g. 'APPROVED', 'CONDITIONAL') returns rows."""
+    ontology = """
+@prefix ex:   <http://example.org/x#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Decision a owl:Class .
+ex:status a owl:DatatypeProperty ; rdfs:domain ex:Decision ; rdfs:range xsd:string .
+"""
+    hints = {"Decision": {"status": ["APPROVED", "CONDITIONAL", "REJECTED"]}}
+    ttl, _ = generate_data(ontology, "http://example.org/x#", count=20, seed=1, enum_hints_by_class=hints)
+    g = Graph(); g.parse(data=ttl, format="turtle")
+    values = {str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#status"), None))}
+    assert values, "no status values generated"
+    assert values.issubset({"APPROVED", "CONDITIONAL", "REJECTED"}), f"got unexpected values: {values}"

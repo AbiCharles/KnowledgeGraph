@@ -79,7 +79,8 @@ Output shape:
       "class_description": "One sentence describing this entity.",
       "columns": [
         {"name": "camelCaseNoun", "label": "Human Label",
-         "xsd_type": "string|integer|decimal|boolean|date|dateTime"}
+         "xsd_type": "string|integer|decimal|boolean|date|dateTime",
+         "enum_hints": ["approved", "conditional", "rejected"]}
       ],
       "relationships": [
         {"name": "camelCaseVerbOrNoun", "range_class": "AnotherClassName",
@@ -98,6 +99,16 @@ Rules:
   dateTime. Use date for calendar dates, dateTime for timestamps, integer for
   whole numbers, decimal for money/measurements, boolean for yes/no, string
   otherwise.
+- Every class MUST have at least one descriptive attribute beyond its identifier
+  (e.g. a name, title, status, label, or other meaningful property). A class
+  with only an id is incomplete — don't ship it. When the description implies
+  obvious common attributes (Person.name, Task.title, Decision.status,
+  Issue.priority), include them even if not explicitly listed.
+- When the user mentions explicit enumerated values (e.g. "status: approved /
+  conditional / rejected", "priority: high, medium, low"), include them on the
+  corresponding column as an "enum_hints" array of lowercase strings. The
+  downstream data generator uses these to produce sensible sample values that
+  the user can filter on. Omit enum_hints entirely when no values are implied.
 - relationships model links BETWEEN classes. range_class MUST be the class_name
   of another class in this same output. functional=true means each instance
   points to at most one target (e.g. a WorkOrder has exactly one
@@ -158,11 +169,18 @@ def describe(description: str, hints: dict | None = None) -> dict:
             "error": err or "LLM did not return usable output",
         }
 
-    tables, dropped = _sanitise_schema(parsed)
+    tables, dropped, warnings = _sanitise_schema(parsed)
+    # Best-effort: also scan the user's prose for "(high / medium / low)"-style
+    # enum lists and attach them where the LLM forgot to emit enum_hints.
+    try:
+        _attach_enum_hints_from_prose(tables, text)
+    except Exception as exc:
+        log.warning("prose enum-hint extraction skipped: %s", exc)
     meta = {
         **base_meta,
         "tokens": {"input": in_t, "output": out_t},
         "dropped": dropped,
+        "warnings": warnings,
     }
     if not tables:
         meta["note"] = (
@@ -186,6 +204,94 @@ def _invoke_llm(system_prompt: str, user_prompt: str):
     """Single LLM call through the multi-provider router. Split out as the
     monkeypatch seam for unit tests (tests stub `nl_inspector._invoke_llm`)."""
     return chat(system_prompt, user_prompt, json_mode=True)
+
+
+# Property-name keywords that signal an enum-style column. Used by the
+# prose-extraction fallback to decide whether a candidate enum list found in
+# the description should attach to a particular column.
+_ENUM_PROPERTY_KEYWORDS = ("status", "priority", "severity", "type", "category", "level", "stage", "state")
+
+
+def _extract_enum_hints_from_prose(description: str) -> list[list[str]]:
+    """Best-effort regex scan for enum-shaped phrases in the user's text.
+
+    Catches patterns the LLM might overlook:
+      "(high / medium / low)"
+      "(approved, conditional, rejected)"
+      "status: planned / in progress / done"
+      "priority: high, medium, low"
+      "e.g. open, closed"
+
+    Returns a list of candidate enum sets (each is a list of lowercase
+    tokens). The caller decides which (if any) to attach to which column.
+    This is purely a safety net — the strengthened system prompt should
+    already make the LLM emit enum_hints itself.
+    """
+    if not description:
+        return []
+    text = description.lower()
+    candidates: list[list[str]] = []
+    seen_sets: set[tuple[str, ...]] = set()
+
+    def _consider(raw_inner: str) -> None:
+        # Split on either / or , and keep plain lowercase tokens 2-20 chars
+        # long. Reject any candidate that doesn't yield 2-10 tokens.
+        parts = re.split(r"[/,]", raw_inner)
+        tokens: list[str] = []
+        for p in parts:
+            t = p.strip()
+            # Allow internal spaces (e.g. "in progress") but require start/end
+            # to be word chars and the whole thing to be 2-20 chars of letters
+            # and spaces.
+            if 2 <= len(t) <= 20 and re.fullmatch(r"[a-z]+(?: [a-z]+)*", t):
+                tokens.append(t)
+        if 2 <= len(tokens) <= 10:
+            key = tuple(tokens)
+            if key not in seen_sets:
+                seen_sets.add(key)
+                candidates.append(tokens)
+
+    # Pattern 1: parenthesised list — "(a / b / c)" or "(a, b, c)"
+    for m in re.finditer(r"\(([a-z][a-z\s/,]+)\)", text):
+        _consider(m.group(1))
+
+    # Pattern 2: keyword introducer — "status: x / y / z", "e.g. a, b, c"
+    intro = r"(?:e\.g\.|status|priority|severity|type|category|level|stage|state)\s*[:=]?\s*"
+    for m in re.finditer(intro + r"([a-z][a-z\s/,]{3,80}?)(?=[.;)\n]|$)", text):
+        _consider(m.group(1))
+
+    return candidates
+
+
+def _attach_enum_hints_from_prose(tables: list[dict], description: str) -> None:
+    """Mutates `tables` in place: if a column looks enum-ish (name contains
+    one of _ENUM_PROPERTY_KEYWORDS) and has no enum_hints yet, attach the
+    first prose candidate that looks plausibly related.
+
+    Heuristic: for the first enum-shaped column we find without hints, attach
+    the first candidate list. This is intentionally simple — the LLM should
+    be doing the heavy lifting now; this is a fallback for the cases where
+    the LLM forgot but the prose was explicit."""
+    candidates = _extract_enum_hints_from_prose(description)
+    if not candidates:
+        return
+    # Track which prose candidates we've already consumed so the same set
+    # doesn't get attached to every enum-looking column in the bundle.
+    used: set[int] = set()
+    for table in tables:
+        for col in table.get("columns", []):
+            if col.get("enum_hints"):
+                continue
+            name = col["name"].lower()
+            if not any(k in name for k in _ENUM_PROPERTY_KEYWORDS):
+                continue
+            # Pick the first unused candidate.
+            for i, cand in enumerate(candidates):
+                if i in used:
+                    continue
+                col["enum_hints"] = list(cand)
+                used.add(i)
+                break
 
 
 def _invoke_with_repair(description: str, hints: dict | None):
@@ -258,6 +364,28 @@ def _coerce_xsd(raw: object) -> str:
     return "string"
 
 
+def _coerce_enum_hints(raw: object) -> list[str]:
+    """Normalise an LLM-supplied enum_hints list. Returns [] when the input
+    isn't a usable list. Strips whitespace, drops empties + non-strings,
+    dedupes preserving order, caps at 20 entries so a runaway LLM can't
+    bloat the manifest."""
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        v = item.strip()
+        if not v or v in seen:
+            continue
+        seen.add(v)
+        out.append(v)
+        if len(out) >= 20:
+            break
+    return out
+
+
 def _coerce_column(raw: dict, taken: set[str], idx: int) -> dict | None:
     if not isinstance(raw, dict):
         return None
@@ -278,6 +406,9 @@ def _coerce_column(raw: dict, taken: set[str], idx: int) -> dict | None:
     label = str(raw.get("label", "")).strip()
     if label:
         col["label"] = label
+    hints = _coerce_enum_hints(raw.get("enum_hints"))
+    if hints:
+        col["enum_hints"] = hints
     return col
 
 
@@ -359,12 +490,19 @@ def _coerce_relationships(table: dict, valid_classes: set[str], idx_start: int) 
     return dropped
 
 
-def _sanitise_schema(parsed: dict) -> tuple[list[dict], dict]:
+def _sanitise_schema(parsed: dict) -> tuple[list[dict], dict, dict]:
     """Turn the LLM's parsed JSON into a clean tables list. Returns
-    (tables, dropped_counts)."""
+    (tables, dropped_counts, warnings).
+
+    `warnings.incomplete_classes` lists classes whose only column looks like
+    an identifier (name ends in 'id'). These are flagged so the frontend can
+    surface them in the Review step — they typically mean the LLM omitted
+    obvious descriptive attributes (name, title, status) that the user
+    described but the model didn't echo back.
+    """
     raw_tables = parsed.get("tables")
     if not isinstance(raw_tables, list):
-        return [], {"classes": 0, "columns": 0, "relationships": 0}
+        return [], {"classes": 0, "columns": 0, "relationships": 0}, {"incomplete_classes": []}
 
     taken_classes: set[str] = set()
     tables: list[dict] = []
@@ -384,8 +522,16 @@ def _sanitise_schema(parsed: dict) -> tuple[list[dict], dict]:
     for t in tables:
         dropped_rels += _coerce_relationships(t, valid_classes, idx_start=1)
 
+    incomplete = []
+    for t in tables:
+        cols = t.get("columns") or []
+        non_id_cols = [c for c in cols if not c["name"].lower().endswith("id")]
+        if not non_id_cols:
+            incomplete.append(t["class_name"])
+
     dropped = {
         "classes": dropped_classes,
         "relationships": dropped_rels,
     }
-    return tables, dropped
+    warnings = {"incomplete_classes": incomplete}
+    return tables, dropped, warnings

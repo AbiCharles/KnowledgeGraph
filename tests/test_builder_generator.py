@@ -510,3 +510,95 @@ def test_description_source_skips_postgres_datasources():
     manifest = yaml.safe_load(out["manifest_yaml"])
     assert not manifest.get("datasources")
     assert not manifest.get("stage4_adapters")
+
+
+# ── Part 1 changes: richer example queries ───────────────────────────────────
+
+def _description_schema_with_rels(*, enum_hints=None):
+    """Two-class description schema with one relationship; enum_hints optional."""
+    cols_decision = [
+        {"name": "decisionId", "xsd_type": "string", "is_pk": True},
+        {"name": "status",     "xsd_type": "string"},
+    ]
+    if enum_hints:
+        cols_decision[1]["enum_hints"] = enum_hints
+    return {
+        "source_kind": "description",
+        "source_metadata": {"description": "x"},
+        "tables": [
+            {"name": "Meeting", "class_name": "Meeting", "primary_key": "meetingId",
+             "columns": [{"name": "meetingId", "xsd_type": "string", "is_pk": True},
+                         {"name": "title", "xsd_type": "string"}],
+             "relationships": [{"name": "leadsToDecision", "range_class": "Decision",
+                                "functional": True}]},
+            {"name": "Decision", "class_name": "Decision", "primary_key": "decisionId",
+             "columns": cols_decision},
+        ],
+    }
+
+
+def test_description_bundle_gets_relationship_traversal_example():
+    out = generate(_description_schema_with_rels(), _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    labels = [e["label"] for e in m["examples"]]
+    cyphers = [e["cypher"] for e in m["examples"]]
+    # At least one example must contain a relationship pattern with the prefix.
+    assert any("-[:" in c and "->" in c for c in cyphers), \
+        f"no traversal example among: {labels}"
+
+
+def test_three_simple_examples_always_present():
+    out = generate(_description_schema_with_rels(), _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    labels = [e["label"] for e in m["examples"]]
+    # Show all, Count, Top 10 — the three baseline examples.
+    assert any(l.startswith("Show all") for l in labels)
+    assert any(l.startswith("Count") for l in labels)
+    assert any(l.startswith("Top 10") for l in labels)
+
+
+def test_examples_capped_at_max():
+    from pipeline.builder.generator import MAX_EXAMPLES
+    # A bigger schema with many relationships should still cap.
+    big = {
+        "source_kind": "description",
+        "source_metadata": {"description": "x"},
+        "tables": [
+            {"name": f"C{i}", "class_name": f"C{i}", "primary_key": f"c{i}Id",
+             "columns": [{"name": f"c{i}Id", "xsd_type": "string", "is_pk": True}],
+             "relationships": [{"name": f"linksTo{(i+1)%6}", "range_class": f"C{(i+1)%6}",
+                                "functional": False}]}
+            for i in range(6)
+        ],
+    }
+    out = generate(big, _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    assert len(m["examples"]) <= MAX_EXAMPLES
+
+
+def test_enum_hints_carried_into_manifest():
+    """Schema dict carrying enum_hints on a column must propagate them into
+    manifest.sample_enum_values_hints so the data generator can use them."""
+    out = generate(_description_schema_with_rels(enum_hints=["APPROVED", "CONDITIONAL"]), _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    hints = m.get("sample_enum_values_hints") or {}
+    assert hints.get("Decision", {}).get("status") == ["APPROVED", "CONDITIONAL"]
+
+
+def test_enum_filter_example_uses_hint_literal():
+    """When enum_hints are present, at least one example should filter by
+    one of the hint values so the operator can immediately try it."""
+    out = generate(_description_schema_with_rels(enum_hints=["APPROVED", "CONDITIONAL"]), _META)
+    m = yaml.safe_load(out["manifest_yaml"])
+    cyphers = " | ".join(e["cypher"] for e in m["examples"])
+    assert "'APPROVED'" in cyphers or "'CONDITIONAL'" in cyphers, \
+        f"no enum-filter example with the hint literal among: {cyphers}"
+
+
+def test_description_bundle_data_uses_class_prefixed_ids():
+    """Sanity check that the new sequential-id generator output flows through
+    bundle creation: ids should be class-prefixed strings, not random ints."""
+    out = generate(_description_schema_with_rels(), _META)
+    # Decision.decisionId should appear as DEC-style strings in the data ttl.
+    assert "DEC-" in out["data_ttl"] or "Decision_" in out["data_ttl"], \
+        "expected class-prefixed ids in synthetic data, got: " + out["data_ttl"][:200]
