@@ -286,12 +286,16 @@ async def generate_test_data(slug: str, count: int = 10, seed: int = 42, replace
         raise HTTPException(status_code=422, detail=f"Could not load bundle: {exc}")
 
     ontology_text = (bundle_dir / "ontology.ttl").read_text(encoding="utf-8")
+    # Forward any enum hints captured at build time so e.g. Decision.status gets
+    # APPROVED/CONDITIONAL/REJECTED instead of the generic OPEN/CLOSED defaults.
+    enum_hints = uc.manifest.sample_enum_values_hints or None
     try:
         ttl, summary = generate_data(
             ontology_ttl=ontology_text,
             bundle_ns=uc.manifest.namespace,
             count=count,
             seed=seed,
+            enum_hints_by_class=enum_hints,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
