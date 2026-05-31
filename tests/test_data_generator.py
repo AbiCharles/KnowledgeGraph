@@ -148,3 +148,102 @@ ex:status a owl:DatatypeProperty ; rdfs:domain ex:Decision ; rdfs:range xsd:stri
     values = {str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#status"), None))}
     assert values, "no status values generated"
     assert values.issubset({"APPROVED", "CONDITIONAL", "REJECTED"}), f"got unexpected values: {values}"
+
+
+# ── Corporate vocab pools ────────────────────────────────────────────────────
+
+def test_owner_name_picks_a_realistic_person_name():
+    from pipeline.data_generator import _FIRST_NAMES, _LAST_NAMES
+    ontology = """
+@prefix ex:   <http://example.org/x#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Owner a owl:Class .
+ex:name a owl:DatatypeProperty ; rdfs:domain ex:Owner ; rdfs:range xsd:string .
+"""
+    ttl, _ = generate_data(ontology, "http://example.org/x#", count=12, seed=7)
+    g = Graph(); g.parse(data=ttl, format="turtle")
+    names = {str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#name"), None))}
+    # Every value should be "First Last" with first/last from the corporate pool.
+    for n in names:
+        parts = n.split(" ", 1)
+        assert len(parts) == 2, f"not a two-word name: {n!r}"
+        assert parts[0] in _FIRST_NAMES, f"first name not corporate: {parts[0]!r}"
+        assert parts[1] in _LAST_NAMES, f"last name not corporate: {parts[1]!r}"
+
+
+def test_decision_title_uses_corporate_decisions_pool():
+    from pipeline.data_generator import _DECISION_TITLES
+    ontology = """
+@prefix ex:   <http://example.org/x#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Decision a owl:Class .
+ex:title a owl:DatatypeProperty ; rdfs:domain ex:Decision ; rdfs:range xsd:string .
+"""
+    ttl, _ = generate_data(ontology, "http://example.org/x#", count=10)
+    g = Graph(); g.parse(data=ttl, format="turtle")
+    titles = {str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#title"), None))}
+    assert titles, "no decision titles emitted"
+    assert titles.issubset(set(_DECISION_TITLES)), f"unexpected decision titles: {titles}"
+
+
+def test_role_function_speaker_rationale_pick_corporate_pools():
+    from pipeline.data_generator import (_ROLES, _FUNCTIONS, _FIRST_NAMES,
+                                          _LAST_NAMES, _RATIONALES, _NOTE_TEXTS)
+    ontology = """
+@prefix ex:   <http://example.org/x#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Owner a owl:Class .
+ex:role     a owl:DatatypeProperty ; rdfs:domain ex:Owner ; rdfs:range xsd:string .
+ex:function a owl:DatatypeProperty ; rdfs:domain ex:Owner ; rdfs:range xsd:string .
+
+ex:MeetingNote a owl:Class .
+ex:speaker  a owl:DatatypeProperty ; rdfs:domain ex:MeetingNote ; rdfs:range xsd:string .
+ex:text     a owl:DatatypeProperty ; rdfs:domain ex:MeetingNote ; rdfs:range xsd:string .
+
+ex:Decision a owl:Class .
+ex:rationale a owl:DatatypeProperty ; rdfs:domain ex:Decision ; rdfs:range xsd:string .
+"""
+    ttl, _ = generate_data(ontology, "http://example.org/x#", count=8, seed=3)
+    g = Graph(); g.parse(data=ttl, format="turtle")
+    def vals(p): return {str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#" + p), None))}
+    assert vals("role").issubset(set(_ROLES))
+    assert vals("function").issubset(set(_FUNCTIONS))
+    speakers = vals("speaker")
+    for n in speakers:
+        first, _, last = n.partition(" ")
+        assert first in _FIRST_NAMES and last in _LAST_NAMES, f"non-person speaker: {n!r}"
+    assert vals("text").issubset(set(_NOTE_TEXTS))
+    assert vals("rationale").issubset(set(_RATIONALES))
+
+
+def test_unrelated_class_still_gets_generic_filler():
+    """Classes that don't match any corporate-kind keyword (e.g. a Book in a
+    library bundle) keep the existing generic-word fallback — no regression
+    for non-corporate bundles."""
+    ontology = """
+@prefix ex:   <http://example.org/x#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+ex:Book a owl:Class .
+ex:title a owl:DatatypeProperty ; rdfs:domain ex:Book ; rdfs:range xsd:string .
+"""
+    ttl, _ = generate_data(ontology, "http://example.org/x#", count=5)
+    g = Graph(); g.parse(data=ttl, format="turtle")
+    titles = {str(o) for _, _, o in g.triples((None, URIRef("http://example.org/x#title"), None))}
+    # Generic 2-word phrase like "Echo Foxtrot" — capitalised words from _WORDS.
+    from pipeline.data_generator import _WORDS
+    word_set = {w.capitalize() for w in _WORDS}
+    for t in titles:
+        for tok in t.split():
+            assert tok in word_set, f"unexpected token {tok!r} in title {t!r}"

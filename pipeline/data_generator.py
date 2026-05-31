@@ -36,6 +36,150 @@ _WORDS = [
 _STATUSES = ["OPEN", "IN_PROGRESS", "CLOSED", "BLOCKED", "REVIEW"]
 _PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"]
 
+# Corporate-themed pools. These activate when the class+property hints look
+# like a corporate-meetings shaped graph (Owner.name, Decision.title, …) so
+# demo data reads as real boardroom material instead of NATO phonetics. For
+# classes / properties that don't match, callers fall through to the generic
+# pools above so non-corporate bundles aren't affected.
+_FIRST_NAMES = [
+    "Sarah", "Marcus", "Priya", "James", "Aisha", "David", "Mei", "Olivia",
+    "Rajesh", "Emma", "Carlos", "Sophie", "Daniel", "Yuki", "Andre",
+    "Linnea", "Kofi", "Hannah", "Diego", "Mira", "Tomás", "Zara", "Felix",
+    "Noemi", "Ravi",
+]
+_LAST_NAMES = [
+    "Chen", "Johnson", "Patel", "Williams", "Rodriguez", "Kim", "Martin",
+    "Singh", "Anderson", "Garcia", "Brown", "Wong", "Khan", "Schmidt",
+    "Dubois", "Nakamura", "Okonkwo", "Reyes", "Hoffmann", "Lindgren",
+    "Murphy", "Lefebvre", "Park", "Bianchi", "Petrov",
+]
+_ROLES = [
+    "VP Finance", "VP Engineering", "VP Product", "VP Marketing",
+    "Head of Sales", "Head of Operations", "Head of Strategy", "Head of Legal",
+    "Director of Engineering", "Director of Product", "Director of Finance",
+    "Chief of Staff", "CTO", "CFO", "COO", "CRO",
+    "Senior Manager", "Principal Engineer", "Product Lead", "Finance Manager",
+    "Programme Director", "Regional GM",
+]
+_FUNCTIONS = [
+    "Finance", "Engineering", "Product", "Marketing", "Sales", "Operations",
+    "Strategy", "Legal", "People", "Customer Success", "Data", "Security",
+    "Design", "Procurement", "Corporate Development",
+]
+_TOPIC_NAMES = [
+    "Enterprise Edge Modernization", "Q4 Roadmap Review",
+    "Customer NPS Initiative", "Cost Optimization Programme",
+    "Cloud Migration Phase 2", "Pricing Strategy Refresh",
+    "Talent Retention Plan", "Compliance Readiness Audit",
+    "Data Platform Consolidation", "Partner Channel Expansion",
+    "Brand Refresh Programme", "Security Posture Uplift",
+    "Onboarding Funnel Overhaul", "Annual Budget Planning",
+    "M&A Integration Workstream", "APAC Market Entry",
+    "AI Capabilities Roadmap", "Vendor Rationalisation",
+    "ESG Reporting Programme", "Workforce Planning Refresh",
+]
+_DECISION_TITLES = [
+    "Approve Q4 budget envelope", "Defer cloud migration to FY26",
+    "Approve Edge pilot subject to margin", "Pause hiring in non-core",
+    "Accelerate APAC entry", "Sunset legacy reporting tool",
+    "Adopt new vendor for analytics", "Reduce on-prem footprint by 30%",
+    "Greenlight new product line", "Restructure regional teams",
+    "Conditional approval for partnership", "Reject expansion proposal",
+    "Move to quarterly review cadence", "Centralise procurement",
+    "Increase R&D allocation", "Tighten approvals over $1M",
+    "Adopt zero-trust security framework", "Spin out internal tools team",
+]
+_ACTION_TITLES = [
+    "Validate margin model", "Draft customer success metrics",
+    "Prepare risk register", "Build executive dashboard",
+    "Run vendor RFI", "Schedule legal review",
+    "Update revenue forecast", "Document migration plan",
+    "Interview shortlisted candidates", "Compile compliance evidence",
+    "Run sensitivity analysis", "Convene cross-functional task force",
+    "Publish updated pricing sheet", "Negotiate vendor contract",
+    "Pilot new onboarding flow", "Audit access controls",
+    "Draft board update", "Refresh competitive analysis",
+]
+_RATIONALES = [
+    "Margin pressure requires phased approach",
+    "Risk threshold not yet met for full rollout",
+    "Aligned with strategic priorities for the period",
+    "Customer feedback supports the change",
+    "Resource constraints in Q4",
+    "Regulatory deadline approaching",
+    "Competitive landscape shifting",
+    "Stakeholder consensus reached",
+    "Cost-benefit analysis favourable",
+    "Pilot results exceed expectations",
+    "Capacity needed elsewhere",
+    "Vendor commitments unblocked",
+]
+_NOTE_TEXTS = [
+    "Pilot in Q4 if margin clears 18%",
+    "Strong support from finance; ops pushback",
+    "Need legal sign-off before next step",
+    "Suggest splitting into two workstreams",
+    "Concerned about timing relative to launch",
+    "Aligned in principle, details to follow",
+    "Recommend tabling until next review",
+    "Customer interviews validate the direction",
+    "Risk register update required",
+    "Budget shortfall flagged by VP Finance",
+    "Action owner to circulate revised numbers",
+    "Steering committee to reconvene Friday",
+]
+_MILESTONE_NAMES = [
+    "Q4 launch", "Phase 1 GA", "Beta enrollment closed",
+    "Vendor contract signed", "First customer onboarded",
+    "Regulatory filing submitted", "Pilot results published",
+    "Steering committee sign-off", "Architecture review complete",
+    "Go/no-go decision date", "Soft launch", "Public announcement",
+    "Internal readiness review",
+]
+_CONDITIONS = [
+    "margin clears 18%", "budget remains under cap",
+    "legal sign-off obtained", "pilot exceeds 80% retention",
+    "vendor delivers Phase 1 on time", "no security findings",
+    "headcount within plan", "regulator approves filing",
+    "customer pilot reaches 5 logos",
+]
+
+# Class-name keyword → "kind" bucket. Drives which corporate vocab applies for
+# a given (class, property) pair. Class names are matched case-insensitively
+# as substrings, so e.g. 'AssignedOwner' and 'TaskOwner' both resolve to
+# 'person'. First match wins (order matters when classes might match more
+# than one bucket).
+_CLASS_KIND_KEYWORDS = [
+    # More-specific class names must come first so e.g. "MeetingNote" buckets
+    # as "note" rather than the broader "meeting".
+    ("note",      ["note", "minute", "comment", "remark"]),
+    ("decision",  ["decision", "resolution", "ruling"]),
+    ("action",    ["actionitem", "action", "task", "todo", "ticket"]),
+    ("milestone", ["milestone", "goal", "deliverable", "target"]),
+    ("topic",     ["topic", "initiative", "project", "programme", "program",
+                   "workstream", "theme", "epic"]),
+    ("meeting",   ["meeting", "session", "review", "standup"]),
+    ("person",    ["owner", "person", "people", "member", "author", "user",
+                   "employee", "customer", "manager", "assignee", "speaker",
+                   "attendee", "contact", "executive", "stakeholder"]),
+]
+
+
+def _class_kind(class_local: str | None) -> str:
+    """Bucket a class name into a corporate-vocab kind. Returns "" when no
+    keyword matches — caller falls through to the generic pools."""
+    if not class_local:
+        return ""
+    cl = class_local.lower()
+    for kind, keywords in _CLASS_KIND_KEYWORDS:
+        if any(k in cl for k in keywords):
+            return kind
+    return ""
+
+
+def _person_name(rng: random.Random) -> str:
+    return f"{rng.choice(_FIRST_NAMES)} {rng.choice(_LAST_NAMES)}"
+
 
 def _short_prefix_for(class_local: str) -> str:
     """Derive a 2-3 letter prefix from a PascalCase class name.
@@ -121,9 +265,37 @@ def _datatype_value(
     if name.endswith("id"):
         # Defensive fallback for callers that don't thread class/index through.
         return Literal(f"{prop_local[:-2].upper() or 'ID'}-{rng.randint(1000, 9999)}")
-    if "name" in name or "label" in name or "title" in name:
+
+    # Corporate vocab — class-aware so Owner.name is "Sarah Chen", Decision.title
+    # is "Approve Edge Q4 pilot", Topic.name is "Cost Optimization Programme",
+    # etc. Classes that don't bucket into a kind fall through to the generic
+    # pools below, so non-corporate bundles stay unaffected.
+    kind = _class_kind(class_local)
+    if name == "speaker" or (kind == "person" and "name" in name):
+        return Literal(_person_name(rng))
+    if name == "role":
+        return Literal(rng.choice(_ROLES))
+    if name == "function":
+        return Literal(rng.choice(_FUNCTIONS))
+    if name == "rationale":
+        return Literal(rng.choice(_RATIONALES))
+    if name == "condition":
+        return Literal(rng.choice(_CONDITIONS))
+    if name == "text" and kind == "note":
+        return Literal(rng.choice(_NOTE_TEXTS))
+    if "title" in name or "name" in name or "label" in name:
+        if kind == "decision":
+            return Literal(rng.choice(_DECISION_TITLES))
+        if kind == "action":
+            return Literal(rng.choice(_ACTION_TITLES))
+        if kind == "milestone":
+            return Literal(rng.choice(_MILESTONE_NAMES))
+        if kind == "topic":
+            return Literal(rng.choice(_TOPIC_NAMES))
         return Literal(" ".join(rng.choice(_WORDS) for _ in range(2)).title())
-    if "description" in name or "comment" in name or "note" in name:
+    if "description" in name or "comment" in name or "note" in name or "rationale" in name:
+        if kind == "decision":
+            return Literal(rng.choice(_RATIONALES))
         return Literal(" ".join(rng.choice(_WORDS) for _ in range(rng.randint(4, 8))))
     # Last resort: if enum_hints were supplied for an otherwise-generic string
     # property, prefer them over the random "alpha-123" filler.
