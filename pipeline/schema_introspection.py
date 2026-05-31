@@ -192,6 +192,10 @@ def _schema_description_cached(slug: str, ontology_mtime_ns: int, data_mtime_ns:
     lines.append(f"- Every label, property, and relationship type MUST be backtick-quoted "
                  f"and prefixed with `{pfx}` exactly as listed above — e.g. "
                  f"`(n:`{pfx}SomeClass`) RETURN n.`{pfx}someProperty``.")
+    lines.append(f"- Relationship patterns MUST include the direction arrow. Use "
+                 f"`(a:`{pfx}A`)-[:`{pfx}rel`]->(b:`{pfx}B`)` — never `(a)-[:`{pfx}rel`](b)`.")
+    lines.append(f"- To enable the graph visualisation, prefer returning the node itself "
+                 f"alongside scalars: `RETURN n.`{pfx}someProperty` AS x, n` instead of just `x`.")
     lines.append("- Always alias RETURN columns with AS.")
     lines.append("- Read-only only: MATCH, OPTIONAL MATCH, WITH, WHERE, RETURN, ORDER BY, LIMIT.")
     lines.append("- Match enum-style property values literally (e.g. 'URGENT' not 'urgent').")
