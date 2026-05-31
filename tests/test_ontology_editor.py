@@ -62,6 +62,32 @@ def test_add_datatype_property_rejects_unsupported_xsd():
         add_datatype_property(BASE_TTL, NS, "thing", "Person", "duration")
 
 
+def test_add_datatype_property_extends_domain_when_property_exists():
+    # Common LLM-drafted bundle case: a generic property like "title" was
+    # declared on one class, but the user has another class that needs it too.
+    ttl_with_company, _ = add_class(BASE_TTL, NS, "Company")
+    ttl_v1, _ = add_datatype_property(ttl_with_company, NS, "title", "Person", "string")
+    ttl_v2, summary = add_datatype_property(ttl_v1, NS, "title", "Company", "string")
+    assert summary["added"] == "datatype_property_domain"
+    g = _parse(ttl_v2)
+    title = URIRef(NS + "title")
+    domains = set(g.objects(title, RDFS.domain))
+    assert domains == {URIRef(NS + "Person"), URIRef(NS + "Company")}
+
+
+def test_add_datatype_property_rejects_redeclaring_same_domain():
+    ttl_v1, _ = add_datatype_property(BASE_TTL, NS, "name", "Person", "string")
+    with pytest.raises(ValueError):
+        add_datatype_property(ttl_v1, NS, "name", "Person", "string")
+
+
+def test_add_datatype_property_rejects_extending_with_different_range():
+    ttl_with_company, _ = add_class(BASE_TTL, NS, "Company")
+    ttl_v1, _ = add_datatype_property(ttl_with_company, NS, "size", "Person", "integer")
+    with pytest.raises(ValueError):
+        add_datatype_property(ttl_v1, NS, "size", "Company", "string")
+
+
 def test_add_object_property_links_two_classes():
     ttl_with_company, _ = add_class(BASE_TTL, NS, "Company")
     new_ttl, summary = add_object_property(ttl_with_company, NS, "worksAt", "Person", "Company", functional=True)

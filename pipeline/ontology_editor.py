@@ -68,14 +68,40 @@ def add_datatype_property(ontology_ttl: str, namespace: str, local_name: str,
     NS = Namespace(namespace)
     prop = NS[local_name]
     cls = NS[domain_class]
-    if (prop, RDF.type, OWL.DatatypeProperty) in g:
-        raise ValueError(f"Datatype property {local_name!r} already exists.")
     if (cls, RDF.type, OWL.Class) not in g:
         raise ValueError(f"Domain class {domain_class!r} not found — add the class first.")
+    range_uri = _XSD_RANGES[xsd_range]
+    if (prop, RDF.type, OWL.DatatypeProperty) in g:
+        # Property already declared somewhere — common when an LLM-drafted bundle
+        # used a generic name like "title"/"status"/"name" on multiple classes and
+        # only one ended up with it. Extend the existing property's rdfs:domain to
+        # cover this class too (data_generator and most tooling read domain as a
+        # set of allowed classes), as long as the range matches.
+        existing_ranges = list(g.objects(prop, RDFS.range))
+        if existing_ranges and range_uri not in existing_ranges:
+            existing = str(existing_ranges[0]).split("#")[-1]
+            raise ValueError(
+                f"Datatype property {local_name!r} already exists with range "
+                f"{existing!r}, which doesn't match {xsd_range!r}. "
+                "Pick a different name (e.g. prefix it with the class)."
+            )
+        if (prop, RDFS.domain, cls) in g:
+            raise ValueError(
+                f"Datatype property {local_name!r} is already declared on "
+                f"{domain_class!r}."
+            )
+        g.add((prop, RDFS.domain, cls))
+        return g.serialize(format="turtle"), {
+            "added": "datatype_property_domain",
+            "name": local_name,
+            "domain": domain_class,
+            "range": xsd_range,
+            "note": "extended existing property to also apply to this class",
+        }
     g.add((prop, RDF.type, OWL.DatatypeProperty))
     g.add((prop, RDFS.label, RDFLiteral(label or local_name)))
     g.add((prop, RDFS.domain, cls))
-    g.add((prop, RDFS.range, _XSD_RANGES[xsd_range]))
+    g.add((prop, RDFS.range, range_uri))
     return g.serialize(format="turtle"), {
         "added": "datatype_property",
         "name": local_name,
