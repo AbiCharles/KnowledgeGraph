@@ -345,6 +345,48 @@ async def restore_bundle_version(slug: str, stamp: str):
         return _summary(uc, use_case_registry.get_active_slug())
 
 
+@router.post("/reset")
+def reset_to_clean_state():
+    """Delete every user-created bundle so the app is back to the freshly-deployed
+    state, retaining only the bundles seeded with the container image
+    (kf-mfg-workorder / lint-demo / supply-chain — whatever ships in
+    /app/use_cases_seed). Useful between live demos to wipe scratch bundles
+    without redeploying the whole app.
+
+    Returns the slugs that were deleted plus the slugs that were preserved."""
+    from pathlib import Path
+    seed_dir = Path("/app/use_cases_seed")
+    if seed_dir.is_dir():
+        seeded = {p.name for p in seed_dir.iterdir() if p.is_dir()}
+    else:
+        # Dev / local fallback: treat the slugs baked into the repo as seeded.
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        repo_seed = repo_root / "use_cases"
+        seeded = {p.name for p in repo_seed.iterdir() if p.is_dir() and not p.name.startswith(".")} if repo_seed.is_dir() else set()
+
+    deleted: list[str] = []
+    kept: list[str] = []
+    failures: list[dict] = []
+    for slug in [s.name for s in use_case_registry.USE_CASES_DIR.iterdir()
+                 if s.is_dir() and not s.name.startswith(".")]:
+        if slug in seeded:
+            kept.append(slug)
+            continue
+        try:
+            use_case_registry.delete(slug)
+            deleted.append(slug)
+        except Exception as exc:
+            failures.append({"slug": slug, "error": str(exc)})
+
+    try:
+        from pipeline.schema_introspection import invalidate_schema_cache
+        invalidate_schema_cache()
+    except Exception:
+        pass
+
+    return {"deleted": deleted, "kept": kept, "failures": failures}
+
+
 @router.delete("/{slug}")
 def delete_use_case(slug: str):
     try:

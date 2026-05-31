@@ -570,6 +570,7 @@ body.bld-adv .bld-simple-only{display:none}
       <div id="uc-sub-bundles" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
         <div class="uc-toolbar">
           <button class="uc-upload-btn" onclick="openUploadModal()">&#8682; Upload bundle</button>
+          <button class="uc-upload-btn" onclick="resetToCleanState()" title="Delete every bundle except the seeded demo ones (kf-mfg-workorder, lint-demo, supply-chain). Useful between live demos to wipe scratch bundles." style="border-color:rgba(248,113,113,.35);color:var(--red,#f87171)">&#9851; Reset to clean state</button>
           <span style="margin-left:auto;font-size:9px;color:var(--text3);font-family:'JetBrains Mono',monospace" id="uc-toolbar-info"></span>
         </div>
         <div class="uc-list" id="uc-list">
@@ -1338,7 +1339,32 @@ function cleanProps(p){
   return out;
 }
 
-async function loadGraph(){
+// Session-scoped record of which bundles the user has actively hydrated in this
+// browsing session. The graph view stays paused (showing a "run hydration"
+// CTA instead of stale data from a prior session) until the user explicitly
+// runs the Hydration Pipeline for the active bundle. Cleared on page reload —
+// each session starts fresh so a demo always walks through hydration live.
+const _hydratedSlugs = new Set();
+function _markHydrated(slug){ if(slug) _hydratedSlugs.add(slug); }
+function _isGraphAllowedFor(slug){ return !!slug && _hydratedSlugs.has(slug); }
+
+async function loadGraph(opts){
+  opts = opts || {};
+  // Gate: until the user has opted into showing the graph for the active
+  // bundle in THIS session (typically by running Hydration), keep the canvas
+  // empty and surface a CTA. The post-hydration call passes {force:true}.
+  const activeSlug = (MANIFEST && MANIFEST.slug) ? MANIFEST.slug : null;
+  if(!opts.force && !_isGraphAllowedFor(activeSlug)){
+    NODES = []; EDGES = []; NM = {};
+    window.GRAPH = {NODES, EDGES, NM};
+    updateSnapshotChips();
+    if(MANIFEST){ _renderLegend(MANIFEST); }
+    showSnapshotBanner(
+      'Graph view paused — run the Ontology Curation + Hydration Pipeline tabs to populate this bundle, then the graph will appear here.'
+    );
+    return false;
+  }
+  if(activeSlug) _markHydrated(activeSlug);
   try{
     const prefix = (MANIFEST && MANIFEST.prefix) ? MANIFEST.prefix : 'kf-mfg';
     const labelMatch = `l STARTS WITH '${prefix}__' OR l = 'IngestionAdapter'`;
@@ -1630,7 +1656,10 @@ async function runPipeline(){
 
     if(overall === 'pass'){
       showValidationReport(allStages);
-      try { await loadGraph(); } catch(_){}
+      // Hydration just succeeded — unlock the graph view for this bundle in
+      // this session and force-load (bypasses the session gate).
+      if(MANIFEST && MANIFEST.slug) _markHydrated(MANIFEST.slug);
+      try { await loadGraph({force: true}); } catch(_){}
       document.getElementById('kgscrollhint').style.display = 'block';
       document.getElementById('kgpanel').classList.add('active');
       setTimeout(initKGCanvas, 250);
@@ -2883,6 +2912,11 @@ let kgFrame = null, kgZoom = 1, kgPanX = 0, kgPanY = 0;
 let kgDragging = null, kgPanning = false, kgPanStart = {x:0,y:0}, kgPanOrigin = {x:0,y:0};
 let kgSelected = null, kgHovered = null, kgSim = [], kgSimEdges = [], kgSimMap = {};
 let kgHiddenTypes = new Set();   // class names hidden by user toggle
+// Double-click focus mode: when set, ONLY the focused node + nodes within
+// kgFocusedHops (default 2) are drawn. Click empty canvas / Escape clears it.
+let kgFocused = null;
+let kgFocusedIds = new Set();
+const kgFocusedHops = 2;
 let kgSearchQ = '';              // current search filter (lowercased)
 
 function toggleKGFilters(){
@@ -3004,6 +3038,8 @@ function drawFullGraph(){
     kgSimEdges.forEach(e => {
       // Hide edges whose endpoints are filtered out — keeps the canvas clean.
       if(kgHiddenTypes.has(e.src.type) || kgHiddenTypes.has(e.tgt.type)) return;
+      // Double-click focus: hide everything outside the N-hop neighbourhood.
+      if(kgFocused && (!kgFocusedIds.has(e.src.id) || !kgFocusedIds.has(e.tgt.id))) return;
       const focused = hf && (fids[e.src.id] || fids[e.tgt.id]);
       const dim = hf && !focused;
       ctx.beginPath(); ctx.moveTo(e.src.x, e.src.y); ctx.lineTo(e.tgt.x, e.tgt.y);
@@ -3031,6 +3067,7 @@ function drawFullGraph(){
     });
     kgSim.forEach(n => {
       if(kgHiddenTypes.has(n.type)) return;   // class toggle off
+      if(kgFocused && !kgFocusedIds.has(n.id)) return;   // focus-mode hide
       const visible = _kgNodeVisible(n);
       const isSel = n === kgSelected, isHov = n === kgHovered;
       // Combine focus-dim and search-dim so the search just shrinks emphasis
@@ -3078,9 +3115,50 @@ function setupKGCanvas(cv){
   function nAt(wx, wy){ for(let i = kgSim.length - 1; i >= 0; i--){ const n = kgSim[i]; if(Math.hypot(n.x - wx, n.y - wy) <= n.r/kgZoom * 1.6) return n; } return null; }
   cv.addEventListener('mousedown', e => { const w = wXY(e), n = nAt(w.x, w.y); if(n){ kgDragging = n; } else { kgPanning = true; kgPanStart = {x:e.clientX, y:e.clientY}; kgPanOrigin = {x:kgPanX, y:kgPanY}; } });
   cv.addEventListener('mousemove', e => { const w = wXY(e); if(kgDragging){ kgDragging.x = w.x; kgDragging.y = w.y; kgDragging.vx = 0; kgDragging.vy = 0; return; } if(kgPanning){ kgPanX = kgPanOrigin.x + (e.clientX - kgPanStart.x); kgPanY = kgPanOrigin.y + (e.clientY - kgPanStart.y); return; } const n = nAt(w.x, w.y); kgHovered = n; cv.style.cursor = n ? 'pointer' : 'grab'; });
-  cv.addEventListener('mouseup', e => { const w = wXY(e); if(kgDragging && Math.hypot(kgDragging.x - w.x, kgDragging.y - w.y) < 4){ if(kgSelected === kgDragging){ kgSelected = null; closeKGDetail(); } else { kgSelected = kgDragging; showKGDetail(kgDragging); } } kgDragging = null; kgPanning = false; });
+  cv.addEventListener('mouseup', e => {
+    const w = wXY(e);
+    if(kgDragging && Math.hypot(kgDragging.x - w.x, kgDragging.y - w.y) < 4){
+      // click on a node — toggle selection (and clear focus mode incidentally
+      // only if the user clicks the same focused node twice).
+      if(kgSelected === kgDragging){ kgSelected = null; closeKGDetail(); }
+      else { kgSelected = kgDragging; showKGDetail(kgDragging); }
+    } else if(kgPanning && Math.hypot(e.clientX - kgPanStart.x, e.clientY - kgPanStart.y) < 4){
+      // small/no pan = empty-canvas click → exit focus mode.
+      if(kgFocused){ kgFocused = null; kgFocusedIds = new Set(); }
+    }
+    kgDragging = null; kgPanning = false;
+  });
   cv.addEventListener('mouseleave', () => { kgDragging = null; kgPanning = false; kgHovered = null; });
   cv.addEventListener('wheel', e => { e.preventDefault(); const factor = e.deltaY < 0 ? 1.12 : 0.89; const rect = cv.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top; kgPanX = mx - (mx - kgPanX) * factor; kgPanY = my - (my - kgPanY) * factor; kgZoom = Math.max(0.15, Math.min(4, kgZoom * factor)); }, {passive:false});
+  // Double-click a node → focus on that node + its N-hop neighbourhood.
+  // Click anywhere else (empty canvas) or hit Escape to restore the full graph.
+  cv.addEventListener('dblclick', e => {
+    e.preventDefault();
+    const w = wXY(e), n = nAt(w.x, w.y);
+    if(!n) return;
+    const seen = new Set([n.id]);
+    let frontier = [n.id];
+    for(let depth = 0; depth < kgFocusedHops; depth++){
+      const next = [];
+      const frontierSet = new Set(frontier);
+      kgSimEdges.forEach(ed => {
+        if(frontierSet.has(ed.src.id) && !seen.has(ed.tgt.id)){ next.push(ed.tgt.id); seen.add(ed.tgt.id); }
+        if(frontierSet.has(ed.tgt.id) && !seen.has(ed.src.id)){ next.push(ed.src.id); seen.add(ed.src.id); }
+      });
+      frontier = next;
+      if(!frontier.length) break;
+    }
+    kgFocused = n; kgFocusedIds = seen;
+  });
+  // Escape exits focus mode. Attach once globally; cheap.
+  if(!window._kgEscHooked){
+    window._kgEscHooked = true;
+    window.addEventListener('keydown', e => {
+      if(e.key === 'Escape' && kgFocused){
+        kgFocused = null; kgFocusedIds = new Set();
+      }
+    });
+  }
 }
 
 function resetKGView(){ kgZoom = 1; kgPanX = 0; kgPanY = 0; }
@@ -3095,7 +3173,9 @@ async function refreshKGCanvas(){
   if(stats) stats.textContent = 'Refreshing…';
   try {
     await loadManifest();   // updates window.MANIFEST + GCOL/GSZ/etc.
-    const ok = await loadGraph();
+    // User clicked Refresh explicitly — opt them into the graph for this bundle.
+    if(MANIFEST && MANIFEST.slug) _markHydrated(MANIFEST.slug);
+    const ok = await loadGraph({force: true});
     if(ok){
       document.getElementById('kgpanel').classList.add('active');
       // Defer initKGCanvas so the panel layout settles first.
@@ -4024,6 +4104,31 @@ async function activateUseCase(slug){
     window.location.reload();
   } catch(err){
     alert('Activate failed: ' + err.message);
+  }
+}
+
+// Wipe every user-created bundle and keep only the demo bundles seeded with
+// the container image. Useful between live demos to clear scratch work.
+async function resetToCleanState(){
+  // Two-step confirmation because the action is irreversible and slug-blind.
+  if(!confirm('Reset to clean state?\n\nThis deletes every bundle you\'ve created in this app and keeps only the seeded demo bundles (kf-mfg-workorder, lint-demo, supply-chain).\n\nThis cannot be undone.')) return;
+  if(!confirm('Are you sure? Click OK to permanently delete your custom bundles.')) return;
+  try {
+    const res = await fetch('/use_cases/reset', {method: 'POST', headers: _withAuth({})});
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    const deleted = (body.deleted || []);
+    const kept = (body.kept || []);
+    const failures = (body.failures || []);
+    let msg = `✓ Reset complete.\n\nDeleted (${deleted.length}): ${deleted.join(', ') || 'none'}\nKept (${kept.length}): ${kept.join(', ')}`;
+    if(failures.length) msg += `\n\nFailures: ${failures.map(f => f.slug + ' (' + f.error + ')').join(', ')}`;
+    alert(msg);
+    _invalidateUseCasesCache();
+    // The currently-active slug may have been wiped — fetch the new active
+    // (the server falls back to whatever .active points to or the first bundle).
+    await renderUseCases(true);
+  } catch(err){
+    alert('Reset failed: ' + err.message);
   }
 }
 
