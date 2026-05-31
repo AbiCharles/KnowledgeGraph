@@ -364,11 +364,38 @@ def reset_to_clean_state():
         repo_seed = repo_root / "use_cases"
         seeded = {p.name for p in repo_seed.iterdir() if p.is_dir() and not p.name.startswith(".")} if repo_seed.is_dir() else set()
 
+    # Discover what's a real bundle vs noise:
+    #  - skip dotfiles / dotdirs (.active, .llm_usage.json, .versions)
+    #  - skip the SLUG_RE-failing ext4 lost+found dir at the volume root
+    #  - skip per-bundle sidecar dirs (.versions / .staging / .old / .backup)
+    SIDECAR_SUFFIXES = (".versions", ".staging", ".old", ".backup")
+    candidate_slugs: list[str] = []
+    for entry in use_case_registry.USE_CASES_DIR.iterdir():
+        if not entry.is_dir() or entry.name.startswith("."):
+            continue
+        if not use_case_registry.SLUG_RE.match(entry.name):
+            continue                                          # lost+found etc.
+        if any(entry.name.endswith(sfx) for sfx in SIDECAR_SUFFIXES):
+            continue                                          # version archives
+        candidate_slugs.append(entry.name)
+
+    # If the currently-active bundle is one we'd delete, switch to a seeded
+    # one first (or deactivate) so use_case_registry.delete doesn't refuse it.
+    active_slug = use_case_registry.get_active_slug()
+    if active_slug and active_slug not in seeded and active_slug in candidate_slugs:
+        target = next(iter(sorted(seeded)), None)
+        try:
+            if target:
+                use_case_registry.set_active(target)
+            else:
+                use_case_registry.deactivate()
+        except Exception as exc:
+            log.warning("Could not switch active off %s before reset: %s", active_slug, exc)
+
     deleted: list[str] = []
     kept: list[str] = []
     failures: list[dict] = []
-    for slug in [s.name for s in use_case_registry.USE_CASES_DIR.iterdir()
-                 if s.is_dir() and not s.name.startswith(".")]:
+    for slug in candidate_slugs:
         if slug in seeded:
             kept.append(slug)
             continue
@@ -384,7 +411,7 @@ def reset_to_clean_state():
     except Exception:
         pass
 
-    return {"deleted": deleted, "kept": kept, "failures": failures}
+    return {"deleted": deleted, "kept": sorted(seeded & set(candidate_slugs + list(seeded))), "failures": failures}
 
 
 @router.delete("/{slug}")
