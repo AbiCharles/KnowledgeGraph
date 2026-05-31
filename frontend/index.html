@@ -3102,6 +3102,23 @@ function drawFullGraph(){
       }
     });
     ctx.restore();
+    // Focus-mode banner — drawn in screen space (after restore) so it stays
+    // pinned to the top of the canvas regardless of zoom/pan. Click anywhere
+    // on this banner to exit focus.
+    if(kgFocused){
+      const label = pickLabel(kgFocused.node);
+      const txt = `Focus: ${label}  ·  ${kgFocusedHops}-hop neighbourhood  ·  click anywhere empty or press Esc to exit`;
+      ctx.font = '11px Inter,sans-serif';
+      const tw = ctx.measureText(txt).width;
+      const bx = (W - tw) / 2 - 12, by = 12, bw = tw + 24, bh = 26;
+      ctx.fillStyle = 'rgba(0,196,184,.18)';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = 'rgba(0,196,184,.55)'; ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = '#00c4b8';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(txt, bx + 12, by + bh / 2);
+    }
     kgFrame = requestAnimationFrame(tick);
   }
   tick();
@@ -3112,7 +3129,19 @@ function setupKGCanvas(cv){
   if(cv._kgReady) return;
   cv._kgReady = true;
   function wXY(e){ const rect = cv.getBoundingClientRect(); return {x:(e.clientX - rect.left - kgPanX)/kgZoom, y:(e.clientY - rect.top - kgPanY)/kgZoom}; }
-  function nAt(wx, wy){ for(let i = kgSim.length - 1; i >= 0; i--){ const n = kgSim[i]; if(Math.hypot(n.x - wx, n.y - wy) <= n.r/kgZoom * 1.6) return n; } return null; }
+  function nAt(wx, wy){
+    // Hit-test must ignore nodes the user can't see: the focus-mode hidden
+    // set, plus class-filter toggles. Otherwise a click on what looks like
+    // empty space lands on an invisible node, kgDragging gets set to it, and
+    // the "click empty to exit focus" branch never runs.
+    for(let i = kgSim.length - 1; i >= 0; i--){
+      const n = kgSim[i];
+      if(kgHiddenTypes.has(n.type)) continue;
+      if(kgFocused && !kgFocusedIds.has(n.id)) continue;
+      if(Math.hypot(n.x - wx, n.y - wy) <= n.r/kgZoom * 1.6) return n;
+    }
+    return null;
+  }
   cv.addEventListener('mousedown', e => { const w = wXY(e), n = nAt(w.x, w.y); if(n){ kgDragging = n; } else { kgPanning = true; kgPanStart = {x:e.clientX, y:e.clientY}; kgPanOrigin = {x:kgPanX, y:kgPanY}; } });
   cv.addEventListener('mousemove', e => { const w = wXY(e); if(kgDragging){ kgDragging.x = w.x; kgDragging.y = w.y; kgDragging.vx = 0; kgDragging.vy = 0; return; } if(kgPanning){ kgPanX = kgPanOrigin.x + (e.clientX - kgPanStart.x); kgPanY = kgPanOrigin.y + (e.clientY - kgPanStart.y); return; } const n = nAt(w.x, w.y); kgHovered = n; cv.style.cursor = n ? 'pointer' : 'grab'; });
   cv.addEventListener('mouseup', e => {
