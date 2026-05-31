@@ -784,10 +784,18 @@ body.bld-adv .bld-simple-only{display:none}
             </ul>
             <div class="bld-pii-warn">&#9888; Don't paste real or sensitive data, passwords, or personal information. Describe the <b>shape</b> of your data, not its actual contents.</div>
             <textarea class="uc-form-input" id="bld-describe-text" rows="7" maxlength="4000" oninput="_bldDescribeInput()" style="resize:vertical;line-height:1.55" placeholder="e.g. We track work orders assigned to technicians. Each work order is for one piece of equipment, has a priority (high / medium / low), a status, and a due date. Technicians have a name and a specialty. Equipment has a serial number and a location."></textarea>
-            <div style="margin-top:11px;display:flex;align-items:center;gap:11px">
+            <div id="bld-describe-controls" style="margin-top:11px;display:flex;align-items:center;gap:11px">
               <button class="uc-modal-submit" id="bld-describe-btn" onclick="builderDescribe()" disabled>&#10024; Draft my ontology</button>
               <span id="bld-describe-count" class="bld-charcount">0 / 4000</span>
               <span id="bld-describe-status" style="font-size:10px;font-family:'JetBrains Mono',monospace"></span>
+            </div>
+            <!-- Thinking overlay shown while the LLM is drafting. Reuses the
+                 .q-thinking/.q-think-* styles from the Query Console so the
+                 spinner + rotating messages have the same look. -->
+            <div id="bld-describe-thinking" class="q-thinking" style="display:none;margin-top:14px;min-height:120px">
+              <div class="q-think-spinner"></div>
+              <div class="q-think-msg" id="bld-describe-think-msg">Reading your description…</div>
+              <div class="q-think-sub">Drafting your ontology with the AI assistant — this usually takes 10–25s</div>
             </div>
           </div>
           <div id="bld-provide-pg" style="display:none">
@@ -4687,6 +4695,37 @@ function _bldDescribeInput(){
 
 // Plain-English → draft schema. Lands the result into _builderState.schema in
 // the exact shape the inspectors produce, then advances to the Review step.
+// Rotating-message thinking indicator for the AI draft. Keeps the user
+// engaged during the 10–25s Claude call — without it, the page looks frozen.
+let _bldThinkTimer = null;
+function _bldDescribeThinkingOn(){
+  const overlay = document.getElementById('bld-describe-thinking');
+  const msgEl = document.getElementById('bld-describe-think-msg');
+  const status = document.getElementById('bld-describe-status');
+  if(!overlay || !msgEl) return;
+  overlay.style.display = 'flex';
+  if(status) status.textContent = '';
+  const msgs = [
+    'Reading your description…',
+    'Asking Claude to draft the schema…',
+    'Extracting things, attributes and connections…',
+    'Sanitising names and types…',
+    'Finalising the draft…',
+  ];
+  let i = 0;
+  msgEl.textContent = msgs[0];
+  _bldDescribeThinkingOff();   // clear any prior timer just in case
+  _bldThinkTimer = setInterval(() => {
+    i = (i + 1) % msgs.length;
+    msgEl.textContent = msgs[i];
+  }, 2400);
+}
+function _bldDescribeThinkingOff(){
+  if(_bldThinkTimer){ clearInterval(_bldThinkTimer); _bldThinkTimer = null; }
+  const overlay = document.getElementById('bld-describe-thinking');
+  if(overlay) overlay.style.display = 'none';
+}
+
 async function builderDescribe(){
   const desc = document.getElementById('bld-describe-text').value.trim();
   const status = document.getElementById('bld-describe-status');
@@ -4696,7 +4735,7 @@ async function builderDescribe(){
   }
   const btn = document.getElementById('bld-describe-btn');
   btn.disabled = true;
-  status.innerHTML = '<span style="color:var(--text3)">Drafting… this can take a few seconds.</span>';
+  _bldDescribeThinkingOn();
   try {
     const res = await api('/builder/describe', {description: desc});
     if(res.cap_hit){
@@ -4716,6 +4755,7 @@ async function builderDescribe(){
   } catch(err){
     status.innerHTML = `<span style="color:var(--red)">${escapeHTML(err.message)}</span>`;
   } finally {
+    _bldDescribeThinkingOff();
     btn.disabled = false;
   }
 }
