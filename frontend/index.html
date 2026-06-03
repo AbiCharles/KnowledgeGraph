@@ -1283,6 +1283,27 @@ function _setApiKey(k){
   if(k) localStorage.setItem('kf_api_key', k);
   else  localStorage.removeItem('kf_api_key');
 }
+
+// One-shot bootstrap: if the URL carries the API key in its fragment
+// (e.g. `…/#apikey=abc123`), capture it into localStorage and strip it
+// from the address bar. Lets the operator bookmark a single magic link
+// that primes any browser / device / fresh-incognito session without
+// re-prompting. The URL fragment is never sent to the server (RFC 3986
+// §3.5), so the key stays out of access logs and proxy traces.
+(function _bootstrapApiKeyFromUrl(){
+  try {
+    const hash = (window.location.hash || '').replace(/^#/, '');
+    if(!hash || hash.indexOf('=') < 0) return;
+    const params = new URLSearchParams(hash);
+    const k = (params.get('apikey') || params.get('api_key') || '').trim();
+    if(!k) return;
+    localStorage.setItem('kf_api_key', k);
+    params.delete('apikey'); params.delete('api_key');
+    const rest = params.toString();
+    history.replaceState(null, '',
+      window.location.pathname + window.location.search + (rest ? '#' + rest : ''));
+  } catch(_){ /* fall through to the usual prompt */ }
+})();
 function _withAuth(headers){
   const k = _getApiKey();
   return k ? {...headers, 'X-API-Key': k} : headers;
