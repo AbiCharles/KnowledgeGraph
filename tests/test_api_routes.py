@@ -103,6 +103,26 @@ def test_diff_route_404_on_unknown_stamp(stub_db):
     assert r.status_code == 404
 
 
+def test_download_bundle_404_on_unknown_slug(stub_db):
+    r = _client().get("/use_cases/no-such-bundle/download")
+    assert r.status_code == 404
+
+
+def test_download_bundle_returns_zip_with_three_files(stub_db):
+    import io, zipfile
+    r = _client().get("/use_cases/kf-mfg-workorder/download")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    assert 'attachment; filename="kf-mfg-workorder.zip"' in r.headers["content-disposition"]
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    names = set(zf.namelist())
+    # All three core files present; nothing extraneous.
+    assert names == {"ontology.ttl", "data.ttl", "manifest.yaml"}
+    # The contents are the actual on-disk bundle files.
+    assert b"owl:Class" in zf.read("ontology.ttl")
+    assert b"slug" in zf.read("manifest.yaml")
+
+
 def test_generate_data_preview_returns_ttl_and_summary(stub_db):
     r = _client().post("/use_cases/kf-mfg-workorder/generate-data?count=3")
     assert r.status_code == 200

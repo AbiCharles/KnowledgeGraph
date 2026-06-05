@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 
 from config import get_settings
 from pipeline import use_case_registry
@@ -180,6 +181,32 @@ async def upload_bundle(
         pass
 
     return _summary(uc, use_case_registry.get_active_slug())
+
+
+@router.get("/{slug}/download")
+def download_bundle(slug: str):
+    """Return the bundle's three files (ontology.ttl + data.ttl + manifest.yaml)
+    as a single ZIP. The same archive can be fed back into POST /use_cases/upload
+    later to recreate the bundle elsewhere."""
+    import io, zipfile
+    bundle_dir = use_case_registry.USE_CASES_DIR / slug
+    if not bundle_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No bundle {slug!r}")
+
+    buf = io.BytesIO()
+    # Deterministic timestamp + ZIP_DEFLATED so the same bundle bytes produce
+    # the same archive bytes across runs — handy for diffs and caching.
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+        for name in ("ontology.ttl", "data.ttl", "manifest.yaml"):
+            p = bundle_dir / name
+            if p.exists():
+                z.writestr(name, p.read_bytes())
+    buf.seek(0)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{slug}.zip"'},
+    )
 
 
 @router.get("/{slug}/versions")

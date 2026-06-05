@@ -1586,6 +1586,29 @@ function addDiv(area, txt, cls){
   const d = document.createElement('div'); d.className = cls; d.textContent = txt;
   area.appendChild(d);
 }
+
+// Drop a "Download bundle" CTA into a pipeline log area after a successful
+// curation or hydration run. Re-using downloadBundle() defined below so we
+// inherit the X-API-Key header + correct filename handling.
+function addDownloadBundleCta(area){
+  const slug = (window.MANIFEST && MANIFEST.slug) || '';
+  if(!slug || !area) return;
+  const row = document.createElement('div');
+  row.className = 'ldiv';
+  row.style.cssText = 'display:flex;align-items:center;gap:9px;margin-top:6px;color:var(--teal)';
+  const label = document.createElement('span');
+  label.textContent = '↓ Bundle ready —';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = `Download ${slug}.zip`;
+  btn.style.cssText = 'font-size:10px;padding:3px 9px;border:1px solid var(--teal);background:transparent;color:var(--teal);border-radius:4px;cursor:pointer';
+  btn.onclick = () => downloadBundle(slug);
+  const hint = document.createElement('span');
+  hint.style.cssText = 'color:var(--text3);font-size:9.5px';
+  hint.textContent = 'ontology.ttl + data.ttl + manifest.yaml';
+  row.appendChild(label); row.appendChild(btn); row.appendChild(hint);
+  area.appendChild(row);
+}
 function inferLevel(line){
   if(/^PASS\b/.test(line)) return 'PASS';
   if(/^WARN\b/.test(line)) return 'WARN';
@@ -1691,6 +1714,7 @@ async function runPipeline(){
     _lastPipelineStages = allStages.slice();
 
     if(overall === 'pass'){
+      addDownloadBundleCta(la);
       showValidationReport(allStages);
       // Hydration just succeeded — unlock the graph view for this bundle in
       // this session and force-load (bypasses the session gate).
@@ -1849,6 +1873,7 @@ async function runCuration(){
     // Stash the curation steps for the LLM analyser (manual + auto paths).
     _lastCurationStages = (data.stages || []).slice();
     if(data.overall === 'pass'){
+      addDownloadBundleCta(la);
       setTimeout(startTransfer, 600);
     } else {
       try { await _autoAnalyseOnFail('curation', _lastCurationStages); } catch(_){}
@@ -3730,6 +3755,7 @@ function _renderUcCards(data){
           <button class="uc-btn uc-btn-versions" data-action="edit-ontology" data-slug="" title="Add a class, datatype property, or relationship to this bundle's ontology">Edit ontology</button>
           <button class="uc-btn uc-btn-versions" data-action="compare" data-slug="" title="Compare this bundle's graph side-by-side with another">Compare</button>
           <button class="uc-btn uc-btn-versions" data-action="gen" data-slug="" title="Synthesise plausible instance data from the bundle's ontology">Generate data</button>
+          <button class="uc-btn uc-btn-versions" data-action="download" data-slug="" title="Download ontology.ttl + data.ttl + manifest.yaml as a ZIP">&#8595; Download</button>
           <button class="uc-btn uc-btn-versions" data-action="versions" data-slug="" title="View prior uploads of this bundle">Versions</button>
           <button class="uc-btn uc-btn-delete" data-action="delete" data-slug="" data-active="${b.is_active}"${b.is_active ? ' title="Switch active to another bundle before deleting this one"' : ''}>Delete</button>
           ${b.is_active ? '<button class="uc-btn uc-btn-versions" data-action="deactivate" data-slug="" title="Stop showing this bundle in the dashboard (with optional database drop)">Deactivate</button>' : '<button class="uc-btn uc-btn-activate" data-action="activate" data-slug="">Activate</button>'}
@@ -3760,7 +3786,30 @@ document.addEventListener('click', (e) => {
   else if(btn.dataset.action === 'compare') openCompareModal(slug);
   else if(btn.dataset.action === 'edit-ontology') openOntologyEditor(slug);
   else if(btn.dataset.action === 'deactivate') deactivateBundle(slug);
+  else if(btn.dataset.action === 'download') downloadBundle(slug);
 });
+
+// Stream the bundle ZIP from the API and trigger a save dialog. We can't
+// use a plain <a href="…/download"> because the endpoint requires the
+// X-API-Key header that anchor navigation doesn't carry.
+async function downloadBundle(slug){
+  try {
+    const res = await fetch(`/use_cases/${encodeURIComponent(slug)}/download`,
+      {headers: _withAuth({})});
+    if(!res.ok){
+      const detail = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}${detail ? ' — ' + detail.slice(0, 200) : ''}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${slug}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  } catch(err){
+    alert(`Download failed: ${err.message}`);
+  }
+}
 
 async function deactivateBundle(slug){
   // Three-way confirm so the operator picks the right scope explicitly:
