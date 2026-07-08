@@ -783,6 +783,10 @@ body.bld-adv .bld-simple-only{display:none}
               <li>Keep it to roughly <b>1–12 things</b>; for larger or exact models, use the spreadsheet or database option.</li>
             </ul>
             <div class="bld-pii-warn">&#9888; Don't paste real or sensitive data, passwords, or personal information. Describe the <b>shape</b> of your data, not its actual contents.</div>
+            <div style="margin:12px 0 4px;display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+              <button type="button" onclick="bldUseExample()" style="font-size:10px;font-weight:600;color:var(--purple);background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.4);border-radius:20px;padding:5px 12px;cursor:pointer">&#10024; Use the manufacturing-maintenance demo example</button>
+              <span style="font-size:9px;color:var(--text3)">fills the box with a ready-made description</span>
+            </div>
             <textarea class="uc-form-input" id="bld-describe-text" rows="7" maxlength="4000" oninput="_bldDescribeInput()" style="resize:vertical;line-height:1.55" placeholder="e.g. We track work orders assigned to technicians. Each work order is for one piece of equipment, has a priority (high / medium / low), a status, and a due date. Technicians have a name and a specialty. Equipment has a serial number and a location."></textarea>
             <div id="bld-describe-controls" style="margin-top:11px;display:flex;align-items:center;gap:11px">
               <button class="uc-modal-submit" id="bld-describe-btn" onclick="builderDescribe()" disabled>&#10024; Draft my ontology</button>
@@ -4777,6 +4781,30 @@ function _bldDescribeInput(){
     count.textContent = msg;
     count.style.color = (n > 0 && n < _BLD_DESC_MIN) ? 'var(--amber)' : 'var(--text3)';
   }
+}
+
+// Demo helper — one click fills the describe box with a rich manufacturing-
+// maintenance description so a presenter can go straight to "Draft my ontology".
+// Names 5 things (WorkOrder, Equipment, ProductionLine, Technician,
+// CompliancePolicy), varied property types (string/int/decimal/date/dateTime/
+// boolean), enums, and 4 relationships — enough for the AI to draft a graph.
+const _BLD_DEMO_EXAMPLE = `We track maintenance work orders for a manufacturing plant. Each work order has a work order number, a type (preventive, corrective, or inspection), a priority (urgent, high, medium, or low), a status (open, scheduled, in progress, or completed), a short description, a scheduled start date and time, the estimated labour hours, and the repair cost in dollars.
+
+Every work order is for one piece of equipment and is carried out by one technician. A work order may also be governed by a compliance policy.
+
+Equipment has an asset tag, a name, a manufacturer, an installation date, and an operational status (operational, under maintenance, or retired). Each piece of equipment sits on one production line.
+
+A production line has a line code, a name, and a target throughput per hour.
+
+A technician has an employee id, a name, a specialisation (mechanical, electrical, or hydraulic), a grade (junior, mid, or senior), and a flag for whether they are safety certified.
+
+A compliance policy has a policy code, a title, the regulatory standard it enforces (such as OSHA or ISO 55000), and whether an audit is required.`;
+function bldUseExample(){
+  const el = document.getElementById('bld-describe-text');
+  if(!el) return;
+  el.value = _BLD_DEMO_EXAMPLE;
+  _bldDescribeInput();   // enable the Draft button + refresh the char counter
+  el.focus();
 }
 
 // Plain-English → draft schema. Lands the result into _builderState.schema in
