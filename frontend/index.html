@@ -2653,30 +2653,46 @@ function extractSubgraphFromRows(rows){
   rows.forEach(row => Object.values(row).forEach(collect));
 
   // Last-resort fallback for queries that return ONLY scalar business ids
-  // (e.g. `RETURN o.mt__ownerId AS ownerId`). Scope by column name → property
-  // local name so the value 872 in column `ownerId` only matches a node whose
-  // property local-name is `ownerId`, never a milestoneId that coincidentally
-  // also equals 872.
+  // (e.g. `RETURN wo.kf-mfg__workOrderId AS id`). Build two indexes:
+  //   byLocal — "localName::value" → nodeIds, matched when the column alias
+  //             equals an id-like property local-name (the precise path).
+  //   byValue — a DISTINCTIVE (non-numeric) value → nodeIds, matched on value
+  //             alone so a flat projection still lights up its nodes no matter
+  //             how the column was aliased (`AS id`, `AS workOrder`, …).
+  // A bare integer id is NOT eligible for value-only matching, so it still only
+  // matches via its own aliased column — 872 in `ownerId` never pulls in a
+  // milestoneId that coincidentally also equals 872.
   if(!ids.size){
     const ID_KEY = /(id|key|sku|code|guid|uri)$/i;
-    const propIndex = new Map(); // "localName::valueString" -> [nodeId, ...]
+    const isDistinctive = v => typeof v === 'string' && /\D/.test(v) && v.length >= 3;
+    const byLocal = new Map(); // "localName::value" -> [nodeId, ...]
+    const byValue = new Map(); // distinctive "value" -> [nodeId, ...]
+    const push = (map, key, id) => { (map.get(key) || map.set(key, []).get(key)).push(id); };
     NODES.forEach(n => {
       Object.entries(n.p || {}).forEach(([k, v]) => {
         if(v == null || (typeof v !== 'string' && typeof v !== 'number')) return;
         const local = k.includes('__') ? k.split('__').pop() : k;
         if(!local || local.length < 3 || !ID_KEY.test(local)) return;
-        const key = local + '::' + String(v);
-        if(!propIndex.has(key)) propIndex.set(key, []);
-        propIndex.get(key).push(n.id);
+        const sv = String(v);
+        push(byLocal, local + '::' + sv, n.id);
+        if(isDistinctive(v)) push(byValue, sv, n.id);
       });
     });
     rows.forEach(row => {
       Object.entries(row).forEach(([col, val]) => {
         if(val == null || (typeof val !== 'string' && typeof val !== 'number')) return;
-        if(!col || col.length < 3 || !ID_KEY.test(col)) return;
-        const key = col + '::' + String(val);
-        const hits = propIndex.get(key);
-        if(hits) hits.forEach(nid => ids.add(nid));
+        const sv = String(val);
+        // 1) Precise: column alias equals an id-like property local-name.
+        if(col && col.length >= 3 && ID_KEY.test(col)){
+          const hits = byLocal.get(col + '::' + sv);
+          if(hits){ hits.forEach(nid => ids.add(nid)); return; }
+        }
+        // 2) Alias-agnostic: a distinctive value matches an id-like property
+        //    regardless of the (possibly renamed) column.
+        if(isDistinctive(val)){
+          const hits = byValue.get(sv);
+          if(hits) hits.forEach(nid => ids.add(nid));
+        }
       });
     });
   }
